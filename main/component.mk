@@ -1,0 +1,3 @@
+CXXFLAGS += -fpermissive 
+COMPONENT_SRCDIRS = . src 
+COMPONENT_ADD_INCLUDEDIRS = . inc
