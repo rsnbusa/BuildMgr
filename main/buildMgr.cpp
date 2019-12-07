@@ -3,6 +3,7 @@
 #include "projTypes.h"
 #include "globals.h"
 #include <inttypes.h>
+#include "esp_sntp.h"
 
 void drawString(int x, int y, string que, int fsize, int align,displayType showit,overType erase);
 void submode(void * pArg);
@@ -460,7 +461,7 @@ static void getMessage(const int sock)
     cmdType comando;
 
 
-    	to.tv_sec = 2;
+    	to.tv_sec = 3;
         to.tv_usec = 0;
 
         if (setsockopt(sock,SOL_SOCKET,SO_RCVTIMEO,&to,sizeof(to)) < 0)
@@ -474,20 +475,30 @@ static void getMessage(const int sock)
         len = recv(sock, comando.mensaje, sizeof(comando.mensaje) - 1, 0);
 
         if (len < 0) {
-            ESP_LOGE(TAG, "Error occurred during receiving: errno %d", errno);
+    		shutdown(sock, 0);
+        	close(sock);
+            printf("Error occurred during receiving: errno %d\n", errno);
+            break;
         } else if (len == 0) {
-            ESP_LOGW(TAG, "Connection closed: errno %d", errno);
+    		shutdown(sock, 0);
+        	close(sock);
+           printf( "Connection closed: errno %d\n", errno);
+           break;
         } else {
         	comando.mensaje[len] = 0;
         	comando.cmd=0;
         	comando.fd=sock;
+        	printf("Add queue\n");
         	if(mqttR)
         		xQueueSend(mqttR,&comando,0);
-        	break;
+        //	break;
         }
     } while (len > 0);
-    shutdown(sock, 0);
-    close(sock);
+    printf("Leaving\n");
+
+//    delay(10000);
+//    shutdown(sock, 0);
+//    close(sock);
 }
 
 static void buildMgr(void *pvParameters)
@@ -554,6 +565,7 @@ static void buildMgr(void *pvParameters)
 
 //#endif
             getMessage(sock);
+            printf("done getmessage\n");
         }
     }
     vTaskDelete(NULL);
@@ -616,17 +628,17 @@ void add_new_mac(uint32_t esteMac)
 		vanadd=0;
 		vanvueltas++;
 		memset(&losMacs,0,sizeof(losMacs));
-	//	memset(&losMacsT,0,sizeof(losMacsT));
 		vanMacs=0;
 	}
 	for (int a=0;a<vanMacs;a++)
 	{
-		if(losMacs[a]==esteMac){
-			losMacsT[a]++;
+		if(losMacs[a].macAdd==esteMac){
+			losMacs[a].trans++;
+			time(&losMacs[a].lastUpdate);
 			return;
 		}
 	}
-	losMacs[vanMacs++]=esteMac;
+	losMacs[vanMacs++].macAdd=esteMac;
 }
 static void wifi_event_handler(void* arg, esp_event_base_t event_base,
                                 int32_t event_id, void* event_data)
@@ -672,6 +684,49 @@ static void wifi_event_handler(void* arg, esp_event_base_t event_base,
     return;
 }
 
+void time_sync_notification_cb(struct timeval *tv)
+{
+    ESP_LOGI(TAG, "Notification of a time synchronization event");
+}
+
+static void initialize_sntp(void)
+{
+    ESP_LOGI(TAG, "Initializing SNTP");
+    sntp_setoperatingmode(SNTP_OPMODE_POLL);
+    sntp_setservername(0, "pool.ntp.org");
+    sntp_set_time_sync_notification_cb(time_sync_notification_cb);
+    sntp_init();
+}
+
+void sntpget(void *pArgs)
+{
+    char strftime_buf[64];
+    time_t now;
+    struct tm timeinfo;
+    time(&now);
+    localtime_r(&now, &timeinfo);
+    // Is time set? If not, tm_year will be (1970 - 1900).
+    if (timeinfo.tm_year < (2016 - 1900)) {
+  //      printf("Time is not set yet. Connecting to WiFi and getting time over NTP.");
+
+	initialize_sntp();
+	struct tm timeinfo = { 0 };
+	int retry = 0;
+	const int retry_count = 10;
+	while (sntp_get_sync_status() == SNTP_SYNC_STATUS_RESET && ++retry < retry_count) {
+		vTaskDelay(2000 / portTICK_PERIOD_MS);
+	}
+	time(&now);
+	setenv("TZ", LOCALTIME, 1);
+	tzset();
+	localtime_r(&now, &timeinfo);
+	strftime(strftime_buf, sizeof(strftime_buf), "%c", &timeinfo);
+	//printf( "The current date/time in %s is: %s\n", LOCALTIME,strftime_buf);
+
+    }
+    vTaskDelete(NULL);
+}
+
 static void ip_event_handler(void* arg, esp_event_base_t event_base,
                                 int32_t event_id, void* event_data)
 {
@@ -695,6 +750,8 @@ static void ip_event_handler(void* arg, esp_event_base_t event_base,
 
         	wifif=true;
             xEventGroupSetBits(wifi_event_group, WIFI_BIT);
+        	xTaskCreate(&sntpget,"sntp",2048,NULL, 4, NULL);
+
             break;
         default:
             break;
@@ -825,26 +882,18 @@ static esp_err_t mqtt_event_handler(esp_mqtt_event_handle_t event)
 
 void sendStatusNow(meterType* meter)
 {
-
 	cJSON *root=cJSON_CreateObject();
 	if(root==NULL)
 	{
 		printf("cannot create root\n");
 		return;
 	}
-//	cJSON_AddStringToObject(rroot,"Name",			"name");
-//	cJSON_AddNumberToObject(rroot,"Trans",			1);
-//	cJSON_AddNumberToObject(rroot,"KwH",			2);
-//	cJSON_AddNumberToObject(rroot,"BBBB",			3);
-//	cJSON_AddNumberToObject(rroot,"PPPP",			4);
-//	cJSON_AddNumberToObject(rroot,"CONN",			5);
-//	cJSON_AddNumberToObject(rroot,"Temp",			22.1);
 
-		cJSON_AddStringToObject(root,"MeterPin",		meter->name);
-		cJSON_AddNumberToObject(root,"Transactions",	++meter->vanMqtt);
-		cJSON_AddNumberToObject(root,"KwH",				meter->currentKwH);
-		cJSON_AddNumberToObject(root,"Beats",			meter->currentBeat);
-		cJSON_AddNumberToObject(root,"Pulse",			meter->pulse);
+	cJSON_AddStringToObject(root,"MeterPin",		meter->name);
+	cJSON_AddNumberToObject(root,"Transactions",	++meter->vanMqtt);
+	cJSON_AddNumberToObject(root,"KwH",				meter->currentKwH);
+	cJSON_AddNumberToObject(root,"Beats",			meter->currentBeat);
+	cJSON_AddNumberToObject(root,"Pulse",			meter->pulse);
 #ifdef TEMP
 		cJSON_AddNumberToObject(root,"Temp",			ttemp);
 #endif
@@ -959,14 +1008,12 @@ static void mqtt_app_start(void)
 	     esp_mqtt_client_config_t mqtt_cfg;
 	     memset((void*)&mqtt_cfg,0,sizeof(mqtt_cfg));
 
-	  //  {
-	    			mqtt_cfg.client_id=					"anybody";
-	    			mqtt_cfg.username=					"yyfmmvmh";
-					mqtt_cfg.password=					"zE6oUgjoBQq4";
-					mqtt_cfg.uri = 						"mqtt://m15.cloudmqtt.com:18247";
-					mqtt_cfg.event_handle = 			mqtt_event_handler;
-					mqtt_cfg.disable_auto_reconnect=	true;
-	  //  };
+	     mqtt_cfg.client_id=					"anybody";
+	     mqtt_cfg.username=					"yyfmmvmh";
+	     mqtt_cfg.password=					"zE6oUgjoBQq4";
+	     mqtt_cfg.uri = 						"mqtt://m15.cloudmqtt.com:18247";
+	     mqtt_cfg.event_handle = 			mqtt_event_handler;
+	     mqtt_cfg.disable_auto_reconnect=	true;
 
 		mqttQ = xQueueCreate( 20, sizeof( meterType ) );
 		if(!mqttQ)
@@ -981,7 +1028,7 @@ static void mqtt_app_start(void)
 	    	printf("Not configured Mqtt\n");
 	    	return;
 	    }
-	//    esp_mqtt_client_start(clientCloud);
+	//    esp_mqtt_client_start(clientCloud); //should be started by the SubMode task
 }
 
 static void mqttManager(void* arg)
@@ -989,79 +1036,102 @@ static void mqttManager(void* arg)
 	cmdType cmd;
 	char text[15];
 	cJSON *elcmd;
+	time_t now;
+	loginT loginData;
+
 	mqttR = xQueueCreate( 100, sizeof( cmdType ) );
 			if(!mqttR)
 				printf("Failed queue Rx\n");
 
 	while(1)
 	{
-		clearScreen();
 
 		if( xQueueReceive( mqttR, &cmd, portMAX_DELAY ))
-			{
+		{
 			ESP_LOGW(TAG, "Received: %s Fd %d Queue %d ",cmd.mensaje,cmd.fd,uxQueueMessagesWaiting(mqttR));
-				if(deb)
-					printf("Cmd in %d = %s\n",cmd.cmd,cmd.mensaje);
 
-					elcmd= cJSON_Parse(cmd.mensaje);
-
-					if(displayf)
+			elcmd= cJSON_Parse(cmd.mensaje);
+			if(elcmd)
+			{
+				cJSON *monton= cJSON_GetObjectItem(elcmd,"Batch");
+				if(monton)
+				{
+					int son=cJSON_GetArraySize(monton);
+					for (int a=0;a<son;a++)
 					{
-						cJSON *meter= cJSON_GetObjectItem(elcmd,"MeterPin33");
-						cJSON *tran= cJSON_GetObjectItem(elcmd,"Transactions");
-						cJSON *pulse= cJSON_GetObjectItem(elcmd,"Pulse");
-						cJSON *beats= cJSON_GetObjectItem(elcmd,"Beats");
-
-						if(xSemaphoreTake(I2CSem, portMAX_DELAY))
+						cJSON *cmdIteml = cJSON_GetArrayItem(monton, a);
+						cJSON *cmdd= cJSON_GetObjectItem(cmdIteml,"cmd");
+						if(deb)
+							printf("Array[%d] cmd is %s\n",a,cmdd->valuestring);
+						if (strcmp(cmdd->valuestring,"tariff")==0)
+							loadit();
+						if (strcmp(cmdd->valuestring,"firmware")==0)
 						{
-							display.clear();
-							if(meter)
-								drawString(64,1,meter->valuestring,16,TEXT_ALIGN_CENTER,NODISPLAY,NOREP);
-							if(tran)
+							for (int a=0;a<4;a++)
+								gpio_isr_handler_remove((gpio_num_t)theMeters[a].pin);
+							//gpio_uninstall_isr_service();
+							xTaskCreate(&firmUpdate,"U571",8192,NULL, 5, NULL);
+						}
+						if (strcmp(cmdd->valuestring,"/ga_login")==0)
+						{
+							time(&now);
+							loginData.thedate=now;
+							loginData.theTariff=100;
+						//	printf("Time %d\n",(int)now);
+
+							send(cmd.fd, &loginData, sizeof(loginData), 0);
+						}
+						if (strcmp(cmdd->valuestring,"/ga_status")==0)
+						{
+							if(displayf)
 							{
-								sprintf(text,"Trans:%d",tran->valueint);
-								drawString(64,18,text,12,TEXT_ALIGN_CENTER,NODISPLAY,NOREP);
+								clearScreen();
+								cJSON *meter= cJSON_GetObjectItem(cmdIteml,"MeterId");
+								cJSON *tran= cJSON_GetObjectItem(cmdIteml,"Transactions");
+								cJSON *pulse= cJSON_GetObjectItem(cmdIteml,"Pulse");
+								cJSON *beats= cJSON_GetObjectItem(cmdIteml,"Beats");
+
+								if(xSemaphoreTake(I2CSem, portMAX_DELAY))
+								{
+									display.clear();
+									if(meter)
+										drawString(64,1,meter->valuestring,16,TEXT_ALIGN_CENTER,NODISPLAY,NOREP);
+									if(tran)
+									{
+										sprintf(text,"Trans:%d",tran->valueint);
+										drawString(64,18,text,12,TEXT_ALIGN_CENTER,NODISPLAY,NOREP);
+									}
+									if(beats)
+									{
+										sprintf(text,"Beats:%d",beats->valueint);
+										drawString(64,32,text,12,TEXT_ALIGN_CENTER,NODISPLAY,NOREP);
+									}
+									if(pulse)
+									{
+										sprintf(text,"Pulse:%d",pulse->valueint);
+										drawString(64,48,text,12,TEXT_ALIGN_CENTER,DISPLAYIT,NOREP);
+									}
+									xSemaphoreGive(I2CSem);
+								}
 							}
-							if(beats)
-							{
-								sprintf(text,"Beats:%d",beats->valueint);
-								drawString(64,32,text,12,TEXT_ALIGN_CENTER,NODISPLAY,NOREP);
-							}
-							if(pulse)
-							{
-								sprintf(text,"Pulse:%d",pulse->valueint);
-								drawString(64,48,text,12,TEXT_ALIGN_CENTER,DISPLAYIT,NOREP);
-							}
-							xSemaphoreGive(I2CSem);
+							time(&now);
+							loginData.thedate=now;
+							loginData.theTariff=100;
+							send(cmd.fd, &loginData, sizeof(loginData), 0);
 						}
 					}
-	            	cJSON *monton= cJSON_GetObjectItem(elcmd,"Batch");
-	            	if(monton)
-	            	{
-	            		int son=cJSON_GetArraySize(monton);
-	            		for (int a=0;a<son;a++)
-	            		{
-	            			cJSON *cmdIteml = cJSON_GetArrayItem(monton, a);
-	            			cJSON *cmd= cJSON_GetObjectItem(cmdIteml,"cmd");
-	            			if(deb)
-	            				printf("Array[%d] cmd is %s\n",a,cmd->valuestring);
-	            			if (strcmp(cmd->valuestring,"tariff")==0)
-	            				loadit();
-	            			if (strcmp(cmd->valuestring,"firmware")==0)
-	            			{
-	            			//	for (int a=0;a<4;a++)
-	            			//		gpio_isr_handler_remove((gpio_num_t)theMeters[a].pin);
-		            			//gpio_uninstall_isr_service();
-	            			   	xTaskCreate(&firmUpdate,"U571",8192,NULL, 5, NULL);
-	            			}
-	            		}
-	            	}
-            		cJSON_Delete(elcmd);
-	            }
-	}
+				}
+				cJSON_Delete(elcmd);
+		//		shutdown(cmd.fd, 0);
+		//		close(cmd.fd);
+			}
+			else
+				printf("Could not parse cmd\n");
+		}
+		else
+			printf("CmdQueue Error\n");
+	}//while
 }
-
-
 
 static void initI2C()
 {
@@ -1070,35 +1140,6 @@ static void initI2C()
 	i2cp.i2cport=I2C_NUM_0;
 	miI2C.init(i2cp.i2cport,i2cp.sdaport,i2cp.sclport,400000,&I2CSem);//Will reserve a Semaphore for Control
 }
-
-
-//	void printStationList()
-//	{
-//		printf(" Connected stations:\n");
-//		printf("--------------------------------------------------\n");
-//
-//		wifi_sta_list_t wifi_sta_list;
-//		tcpip_adapter_sta_list_t adapter_sta_list;
-//
-//		memset(&wifi_sta_list, 0, sizeof(wifi_sta_list));
-//		memset(&adapter_sta_list, 0, sizeof(adapter_sta_list));
-//
-//		ESP_ERROR_CHECK(esp_wifi_ap_get_sta_list(&wifi_sta_list));
-//		ESP_ERROR_CHECK(tcpip_adapter_get_sta_list(&wifi_sta_list, &adapter_sta_list));
-//
-//		for(int i = 0; i < adapter_sta_list.num; i++) {
-//
-//			tcpip_adapter_sta_info_t station = adapter_sta_list.sta[i];
-//	         printf("%d - mac: %.2x:%.2x:%.2x:%.2x:%.2x:%.2x - IP: %s\n", i + 1,
-//					station.mac[0], station.mac[1], station.mac[2],
-//					station.mac[3], station.mac[4], station.mac[5],
-//					ip4addr_ntoa(&(station.ip)));
-//		}
-//
-//		printf("\n");
-//	}
-
-
 
 	void sender(void *pArg)
 	{
@@ -1150,11 +1191,11 @@ void app_main()
 
     deb=false;
 
-#ifdef KBD
-    esp_log_level_set("*", ESP_LOG_NONE);
-#else
+//#ifdef KBD
+//    esp_log_level_set("*", ESP_LOG_NONE);
+//#else
     esp_log_level_set("*", ESP_LOG_WARN);
-#endif
+//#endif
 
 
     esp_err_t err = nvs_flash_init();
@@ -1164,15 +1205,16 @@ void app_main()
            err = nvs_flash_init();
        }
        ESP_ERROR_CHECK( err );
+
 		vanadd=0;
 		memset(&losMacs,0,sizeof(losMacs));
-		memset(&losMacsT,0,sizeof(losMacsT));
 		vanMacs=0;
 
     wifi_init();
     mqtt_app_start();
     initI2C();
     initScreen();
+
 #ifdef TEMP
     init_temp();
 #endif

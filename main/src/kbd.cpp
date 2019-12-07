@@ -10,12 +10,16 @@ extern void drawString(int x, int y, string que, int fsize, int align,displayTyp
 void printStationList()
 {
 	uint8_t them[4];
+	struct tm timeinfo;
+	char strftime_buf[64];
 
 	for (int a=0;a<vanMacs;a++)
 	{
-		memcpy(&them,&losMacs[a],4);
-		printf("Mac[%d][%d]: %.2x:%.2x:%.2x:%.2x\n",a, losMacsT[a],
-		them[0],them[1],them[2],them[3]);
+		localtime_r(&losMacs[a].lastUpdate, &timeinfo);
+			strftime(strftime_buf, sizeof(strftime_buf), "%c", &timeinfo);
+		memcpy(&them,&losMacs[a].macAdd,4);
+		printf("Mac[%d][%d]: %.2x:%.2x:%.2x:%.2x %s\n",a, losMacs[a].trans,
+		them[0],them[1],them[2],them[3],strftime_buf);
 	}
 	printf("Loops %d\n",vanvueltas);
 
@@ -90,7 +94,7 @@ void kbd(void *arg) {
 					if(!displayf)
 					{
 						display.clear();
-						drawString(64,12,"Meter",24,TEXT_ALIGN_CENTER,DISPLAYIT,NOREP);
+						drawString(64,12,"MeterIoT",24,TEXT_ALIGN_CENTER,DISPLAYIT,NOREP);
 					}
 					break;
 			case 'd':

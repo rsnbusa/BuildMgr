@@ -1,6 +1,12 @@
 #ifndef projTypes_h
 #define projTypes_h
 
+typedef struct macC{
+	uint32_t 	macAdd;
+	uint32_t 	trans;
+	time_t		lastUpdate;
+} macControl;
+
 typedef struct intPin{
 	char		name[20];
 	gpio_num_t	pin;
@@ -19,6 +25,11 @@ typedef struct i2cType{
 	gpio_num_t sdaport,sclport;
 	i2c_port_t i2cport;
 } i2ctype;
+
+typedef struct loginTarif{
+	time_t thedate;
+	uint16_t theTariff;
+} loginT;
 
 typedef enum resetType {ONCE,TIMER,REPEAT,TIMEREPEAT} resetType;
 typedef enum sendType {NOTSENT,SENT} sendType;

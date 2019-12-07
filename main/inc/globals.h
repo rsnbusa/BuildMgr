@@ -45,6 +45,5 @@ EXTERN	SSD1306             			display;
 EXTERN SSD1306 							display(0x3c, &miI2C);
 #endif
 EXTERN int								vanMacs,vanadd,vanvueltas;
-EXTERN uint32_t							losMacs[50],losMacsT[50];
-#define DSPIN							26
+EXTERN macControl						losMacs[50];
 #endif /* MAIN_GLOBALS_H_ */
