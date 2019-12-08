@@ -84,6 +84,9 @@ void kbd(void *arg) {
 		{
 			switch(data[0])
 			{
+			case '9':
+				printf("Total Received Msgs %d\n",llevoMsg);
+				break;
 			case 'm':
 			case 'M':
 					printStationList();

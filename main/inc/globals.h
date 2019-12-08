@@ -29,7 +29,7 @@ EXTERN int 								socket_id,binary_file_length ;
 EXTERN char								http_request[100];
 #ifdef MULTIX
 EXTERN SemaphoreHandle_t				I2CSem;
-EXTERN u16								icadd[2];
+EXTERN u16								icadd[2],llevoMsg;
 EXTERN QueueHandle_t					muxQueue;
 #endif
 

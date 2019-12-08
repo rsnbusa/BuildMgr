@@ -471,34 +471,37 @@ static void getMessage(const int sock)
             return;
         }
 
+        int fueron=0;
     do {
         len = recv(sock, comando.mensaje, sizeof(comando.mensaje) - 1, 0);
 
         if (len < 0) {
     	//	shutdown(sock, 0);
-        //	close(sock);
-            printf("Error occurred during receiving: errno %d\n", errno);
+        	close(sock);
+            printf("Error occurred during receiving: errno %d fueron %d\n", errno,fueron);
             break;
         } else if (len == 0) {
     	//	shutdown(sock, 0);
-       // 	close(sock);
-           printf( "Connection closed: errno %d\n", errno);
+        	close(sock);
+           printf( "Connection closed: errno %d fueron %d\n", errno,fueron);
            break;
         } else {
+        	fueron++;
+        	llevoMsg++;
         	comando.mensaje[len] = 0;
         	comando.cmd=0;
         	comando.fd=sock;
-        	printf("Add queue\n");
+        	printf("Add queue %d\n",fueron);
         	if(mqttR)
         		xQueueSend(mqttR,&comando,0);
-        	break;
+        	//break;
         }
     } while (len > 0);
     printf("Leaving\n");
 
 //    delay(10000);
-    shutdown(sock, 0);
-    close(sock);
+//    shutdown(sock, 0);
+ //   close(sock);
 }
 
 static void buildMgr(void *pvParameters)
@@ -1206,7 +1209,7 @@ void app_main()
        }
        ESP_ERROR_CHECK( err );
 
-		vanadd=0;
+		vanadd=llevoMsg=0;
 		memset(&losMacs,0,sizeof(losMacs));
 		vanMacs=0;
 
