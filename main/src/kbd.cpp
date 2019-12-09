@@ -84,8 +84,24 @@ void kbd(void *arg) {
 		{
 			switch(data[0])
 			{
+			case '8':
+				msgf=!msgf;
+				printf("Show Msg(%s)\n",msgf?"Y":"N");
+				break;
 			case '9':
-				printf("Total Received Msgs %d\n",llevoMsg);
+				for (int a=0;a<50;a++)
+				{
+					if(tallies[a][0]>0)
+					{
+						printf("\nController[%d]",a);
+						for(int b=0;b<5;b++)
+						{
+							if(tallies[a][b]>0)
+								printf(" [%d]=%d",b,tallies[a][b]);
+						}
+					}
+				}
+				printf("\nTotal Received Msgs %d\n",llevoMsg);
 				break;
 			case 'm':
 			case 'M':

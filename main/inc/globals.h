@@ -14,8 +14,7 @@ using namespace std;
 EXTERN esp_mqtt_client_handle_t 		clientCloud;
 EXTERN QueueHandle_t 					mqttQ,mqttR;
 EXTERN SemaphoreHandle_t 				wifiSem;
-EXTERN bool								isrf,connf,wifif,apstaf,firstTimeTimer,displayf;
-EXTERN char								deb;
+EXTERN bool								isrf,connf,wifif,apstaf,firstTimeTimer,displayf,deb,msgf;
 EXTERN int								numsensors;
 EXTERN u32								sentTotal,llevo;
 EXTERN u8								qwait,lastalign,lastFont;
@@ -46,4 +45,6 @@ EXTERN SSD1306 							display(0x3c, &miI2C);
 #endif
 EXTERN int								vanMacs,vanadd,vanvueltas;
 EXTERN macControl						losMacs[50];
+EXTERN u32								tallies[50][5];
+
 #endif /* MAIN_GLOBALS_H_ */

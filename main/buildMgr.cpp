@@ -454,50 +454,53 @@ static void IRAM_ATTR gpio_isr_handler(void * arg)
 	}
 #endif
 
-static void getMessage(const int sock)
+void getMessage(void *pArg)
 {
     int len;
     struct timeval to;
     cmdType comando;
 
-
-    	to.tv_sec = 3;
+    int sock=(int)pArg;
+    	to.tv_sec = 2;
         to.tv_usec = 0;
 
         if (setsockopt(sock,SOL_SOCKET,SO_RCVTIMEO,&to,sizeof(to)) < 0)
 
         {
             printf("Unable to set read timeout on socket!");
-            return;
+  //         return;
+            vTaskDelete(NULL);
         }
 
-        int fueron=0;
+    //    int fueron=0;
     do {
         len = recv(sock, comando.mensaje, sizeof(comando.mensaje) - 1, 0);
 
         if (len < 0) {
-    	//	shutdown(sock, 0);
+    		shutdown(sock, 0);
         	close(sock);
-            printf("Error occurred during receiving: errno %d fueron %d\n", errno,fueron);
+      //     printf("Error occurred during receiving: errno %d fueron %d\n", errno,fueron);
             break;
         } else if (len == 0) {
-    	//	shutdown(sock, 0);
+    		shutdown(sock, 0);
         	close(sock);
-           printf( "Connection closed: errno %d fueron %d\n", errno,fueron);
+      //     printf( "Connection closed: errno %d fueron %d\n", errno,fueron);
            break;
         } else {
-        	fueron++;
+    //    	fueron++;
         	llevoMsg++;
         	comando.mensaje[len] = 0;
         	comando.cmd=0;
         	comando.fd=sock;
-        	printf("Add queue %d\n",fueron);
+    //   	printf("Add queue %d\n",fueron);
         	if(mqttR)
         		xQueueSend(mqttR,&comando,0);
         	//break;
         }
     } while (len > 0);
-    printf("Leaving\n");
+  // printf("Leaving\n");
+    vTaskDelete(NULL);
+
 
 //    delay(10000);
 //    shutdown(sock, 0);
@@ -529,7 +532,7 @@ static void buildMgr(void *pvParameters)
             ESP_LOGE(TAG, "Unable to create socket: errno %d", errno);
             break;
         }
-        ESP_LOGI(TAG, "Socket created");
+     //   ESP_LOGI(TAG, "Socket created");
 
         int opt = 1;
          if (setsockopt(listen_sock, SOL_SOCKET, SO_REUSEADDR, (char *)&opt, sizeof(opt))<0) {
@@ -542,14 +545,14 @@ static void buildMgr(void *pvParameters)
             ESP_LOGE(TAG, "Socket unable to bind: errno %d", errno);
             break;
         }
-        ESP_LOGI(TAG, "Socket bound, port %d", BUILDMGRPORT);
+    //    ESP_LOGI(TAG, "Socket bound, port %d", BUILDMGRPORT);
 
-        err = listen(listen_sock, 1);
+        err = listen(listen_sock, 10);
         if (err != 0) {
             ESP_LOGE(TAG, "Error occurred during listen: errno %d", errno);
          //   break;
         }
-        ESP_LOGI(TAG, "Socket listening");
+     //   ESP_LOGI(TAG, "Socket listening");
 
 
         while (true) {
@@ -559,16 +562,18 @@ static void buildMgr(void *pvParameters)
                 break;
             }
 //#ifdef KBD
-            if (source_addr.sin6_family == PF_INET) {
-                inet_ntoa_r(((struct sockaddr_in *)&source_addr)->sin_addr.s_addr, addr_str, sizeof(addr_str) - 1);
-            } else if (source_addr.sin6_family == PF_INET6) {
-                inet6_ntoa_r(source_addr.sin6_addr, addr_str, sizeof(addr_str) - 1);
-            }
-            ESP_LOGW(TAG, "Socket accepted ip address: %s heap:%d", addr_str,esp_get_free_heap_size());
-
+//            if (source_addr.sin6_family == PF_INET) {
+//                inet_ntoa_r(((struct sockaddr_in *)&source_addr)->sin_addr.s_addr, addr_str, sizeof(addr_str) - 1);
+//            } else if (source_addr.sin6_family == PF_INET6) {
+//                inet6_ntoa_r(source_addr.sin6_addr, addr_str, sizeof(addr_str) - 1);
+//            }
+//            ESP_LOGW(TAG, "Socket accepted ip address: %s heap:%d", addr_str,esp_get_free_heap_size());
+//
 //#endif
-            getMessage(sock);
-            printf("done getmessage\n");
+        	xTaskCreate(&getMessage,"getm",4096,(void*)sock, 4, NULL);
+
+          //  getMessage(sock);
+          //  printf("done getmessage\n");
         }
     }
     vTaskDelete(NULL);
@@ -623,7 +628,18 @@ void install_meter_interrupts()
 	}
 #endif
 
-void add_new_mac(uint32_t esteMac)
+int find_mac(uint32_t esteMac)
+{
+	for (int a=0;a<vanMacs;a++)
+	{
+		if(losMacs[a].macAdd==esteMac){
+			return a;
+		}
+	}
+	return -1;
+}
+
+int add_new_mac(uint32_t esteMac)
 {
 	vanadd++;
 	if(vanadd>100)
@@ -638,10 +654,11 @@ void add_new_mac(uint32_t esteMac)
 		if(losMacs[a].macAdd==esteMac){
 			losMacs[a].trans++;
 			time(&losMacs[a].lastUpdate);
-			return;
+			return a;
 		}
 	}
 	losMacs[vanMacs++].macAdd=esteMac;
+	return -1;
 }
 static void wifi_event_handler(void* arg, esp_event_base_t event_base,
                                 int32_t event_id, void* event_data)
@@ -1051,7 +1068,8 @@ static void mqttManager(void* arg)
 
 		if( xQueueReceive( mqttR, &cmd, portMAX_DELAY ))
 		{
-			ESP_LOGW(TAG, "Received: %s Fd %d Queue %d ",cmd.mensaje,cmd.fd,uxQueueMessagesWaiting(mqttR));
+			if(msgf)
+				ESP_LOGW(TAG, "Received: %s Fd %d Queue %d ",cmd.mensaje,cmd.fd,uxQueueMessagesWaiting(mqttR));
 
 			elcmd= cJSON_Parse(cmd.mensaje);
 			if(elcmd)
@@ -1086,6 +1104,27 @@ static void mqttManager(void* arg)
 						}
 						if (strcmp(cmdd->valuestring,"/ga_status")==0)
 						{
+							cJSON *lmac= cJSON_GetObjectItem(cmdIteml,"macn");
+							cJSON *lpos= cJSON_GetObjectItem(cmdIteml,"Pos");
+							if(lmac && lpos)
+							{
+								int pos=lpos->valueint;
+								double dmacc=lmac->valuedouble;
+								u32 macc=(u32)dmacc;
+								int cual=find_mac(macc);
+								if(cual>=0)
+								{
+									tallies[cual][pos]++;
+									if(msgf)
+										printf("Meter[%d][%d]=%d\n",cual,pos,tallies[cual][pos]);
+								}
+								else
+								{
+									if(msgf)
+										printf("Mac not found %x\n",macc);
+								}
+							}
+
 							if(displayf)
 							{
 								clearScreen();
@@ -1192,7 +1231,7 @@ void app_main()
     ESP_LOGI(TAG, "[APP] Free memory: %d bytes", esp_get_free_heap_size());
     ESP_LOGI(TAG, "[APP] IDF version: %s", esp_get_idf_version());
 
-    deb=false;
+    deb=msgf=false;
 
 //#ifdef KBD
 //    esp_log_level_set("*", ESP_LOG_NONE);
@@ -1219,7 +1258,7 @@ void app_main()
     initScreen();
 
 #ifdef TEMP
-    init_temp();
+//    init_temp();
 #endif
     qwait=QDELAY;
     qdelay=qwait*1000;
