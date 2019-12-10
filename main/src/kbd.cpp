@@ -60,6 +60,7 @@ void kbd(void *arg) {
 	uart_port_t uart_num = UART_NUM_0 ;
 	char s1[20];
 	char data[20];
+	u8 *p;
 
 
 	uart_config_t uart_config = {
@@ -84,6 +85,12 @@ void kbd(void *arg) {
 		{
 			switch(data[0])
 			{
+			case '0':
+				printf("Dumping core...\n");
+				vTaskDelay(3000/portTICK_PERIOD_MS);
+				p=0;
+				*p=0;
+				break;
 			case '8':
 				msgf=!msgf;
 				printf("Show Msg(%s)\n",msgf?"Y":"N");

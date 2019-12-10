@@ -18,7 +18,7 @@ typedef struct intPin{
 typedef struct mqttMsg{
 	u16		cmd;
 	int		fd;
-	char	mensaje[1000];
+	char	*mensaje;
 }cmdType;
 
 typedef struct i2cType{

@@ -297,7 +297,7 @@ esp_err_t _http_event_handle(esp_http_client_event_t *evt)
             break;
         case HTTP_EVENT_ON_HEADER:
             ESP_LOGI(TAG, "HTTP_EVENT_ON_HEADER");
-            printf("%.*s", evt->data_len, (char*)evt->data);
+    //        printf("%.*s", evt->data_len, (char*)evt->data);
             break;
         case HTTP_EVENT_ON_DATA:
             ESP_LOGI(TAG, "HTTP_EVENT_ON_DATA, len=%d", evt->data_len);
@@ -464,18 +464,18 @@ void getMessage(void *pArg)
     	to.tv_sec = 2;
         to.tv_usec = 0;
 
-        if (setsockopt(sock,SOL_SOCKET,SO_RCVTIMEO,&to,sizeof(to)) < 0)
+	if (setsockopt(sock,SOL_SOCKET,SO_RCVTIMEO,&to,sizeof(to)) < 0)
+	{
+		printf("Unable to set read timeout on socket!");
+		vTaskDelete(NULL);
+	}
 
-        {
-            printf("Unable to set read timeout on socket!");
-  //         return;
-            vTaskDelete(NULL);
-        }
+//	printf("Getm%d heap %d\n",sock,esp_get_free_heap_size());
 
-    //    int fueron=0;
+	comando.mensaje=(char*)malloc(MAXBUFFER);
+
     do {
-        len = recv(sock, comando.mensaje, sizeof(comando.mensaje) - 1, 0);
-
+        len = recv(sock, comando.mensaje, MAXBUFFER-1, 0);
         if (len < 0) {
     		shutdown(sock, 0);
         	close(sock);
@@ -487,34 +487,29 @@ void getMessage(void *pArg)
       //     printf( "Connection closed: errno %d fueron %d\n", errno,fueron);
            break;
         } else {
-    //    	fueron++;
         	llevoMsg++;
         	comando.mensaje[len] = 0;
         	comando.cmd=0;
         	comando.fd=sock;
-    //   	printf("Add queue %d\n",fueron);
         	if(mqttR)
         		xQueueSend(mqttR,&comando,0);
-        	//break;
+        	//break; //if break, will not allow for stream of multiple messages. Must not break. Close or Timeout closes socket
         }
     } while (len > 0);
-  // printf("Leaving\n");
+
+ //   printf("Leaving %d\n",sock);
     vTaskDelete(NULL);
 
-
-//    delay(10000);
-//    shutdown(sock, 0);
- //   close(sock);
 }
 
 static void buildMgr(void *pvParameters)
 {
-    char addr_str[50];
-    int addr_family;
-    int ip_protocol;
-    int sock=0;
-    struct sockaddr_in6 source_addr;
-    uint addr_len = sizeof(source_addr);
+    char 						addr_str[50],tt[10];
+    int 						addr_family;
+    int 						ip_protocol;
+    int 						sock=0;
+    struct sockaddr_in6 		source_addr;
+    uint 						addr_len = sizeof(source_addr);
 
     while (true) {
 
@@ -532,7 +527,7 @@ static void buildMgr(void *pvParameters)
             ESP_LOGE(TAG, "Unable to create socket: errno %d", errno);
             break;
         }
-     //   ESP_LOGI(TAG, "Socket created");
+
 
         int opt = 1;
          if (setsockopt(listen_sock, SOL_SOCKET, SO_REUSEADDR, (char *)&opt, sizeof(opt))<0) {
@@ -545,14 +540,12 @@ static void buildMgr(void *pvParameters)
             ESP_LOGE(TAG, "Socket unable to bind: errno %d", errno);
             break;
         }
-    //    ESP_LOGI(TAG, "Socket bound, port %d", BUILDMGRPORT);
 
         err = listen(listen_sock, 10);
         if (err != 0) {
             ESP_LOGE(TAG, "Error occurred during listen: errno %d", errno);
-         //   break;
+            break;
         }
-     //   ESP_LOGI(TAG, "Socket listening");
 
 
         while (true) {
@@ -561,19 +554,10 @@ static void buildMgr(void *pvParameters)
                 ESP_LOGE(TAG, "Unable to accept connection: errno %d", errno);
                 break;
             }
-//#ifdef KBD
-//            if (source_addr.sin6_family == PF_INET) {
-//                inet_ntoa_r(((struct sockaddr_in *)&source_addr)->sin_addr.s_addr, addr_str, sizeof(addr_str) - 1);
-//            } else if (source_addr.sin6_family == PF_INET6) {
-//                inet6_ntoa_r(source_addr.sin6_addr, addr_str, sizeof(addr_str) - 1);
-//            }
-//            ESP_LOGW(TAG, "Socket accepted ip address: %s heap:%d", addr_str,esp_get_free_heap_size());
-//
-//#endif
-        	xTaskCreate(&getMessage,"getm",4096,(void*)sock, 4, NULL);
+            sprintf(tt,"getm%d",sock);
+    //        printf("%s Heap %d\n",tt,esp_get_free_heap_size());
 
-          //  getMessage(sock);
-          //  printf("done getmessage\n");
+        	xTaskCreate(&getMessage,tt,8192,(void*)sock, 4, NULL);
         }
     }
     vTaskDelete(NULL);
@@ -632,9 +616,8 @@ int find_mac(uint32_t esteMac)
 {
 	for (int a=0;a<vanMacs;a++)
 	{
-		if(losMacs[a].macAdd==esteMac){
+		if(losMacs[a].macAdd==esteMac)
 			return a;
-		}
 	}
 	return -1;
 }
@@ -660,6 +643,7 @@ int add_new_mac(uint32_t esteMac)
 	losMacs[vanMacs++].macAdd=esteMac;
 	return -1;
 }
+
 static void wifi_event_handler(void* arg, esp_event_base_t event_base,
                                 int32_t event_id, void* event_data)
 {
@@ -877,7 +861,7 @@ static esp_err_t mqtt_event_handler(esp_mqtt_event_handle_t event)
         	   printf("TOPIC=%.*s\r\n", event->topic_len, event->topic);
         	   printf("DATA=%.*s\r\n", event->data_len, event->data);
            }
-            memset(theCmd.mensaje,0,sizeof(theCmd.mensaje));
+           theCmd.mensaje=(char*)malloc(MAXBUFFER);
             if(event->data_len)// 0 will be the retained msg being erased
             {
             	memcpy(theCmd.mensaje,event->data,event->data_len);
@@ -894,7 +878,8 @@ static esp_err_t mqtt_event_handler(esp_mqtt_event_handle_t event)
             xEventGroupClearBits(wifi_event_group, MQTT_BIT|DONE_BIT);
         	break;
         default:
-        	printf("Event %d\n",event->event_id);
+        	if(deb)
+        		printf("Event %d\n",event->event_id);
             break;
     }
     return ESP_OK;
@@ -1065,11 +1050,10 @@ static void mqttManager(void* arg)
 
 	while(1)
 	{
-
 		if( xQueueReceive( mqttR, &cmd, portMAX_DELAY ))
 		{
 			if(msgf)
-				ESP_LOGW(TAG, "Received: %s Fd %d Queue %d ",cmd.mensaje,cmd.fd,uxQueueMessagesWaiting(mqttR));
+				ESP_LOGW(TAG, "Received: %s Fd %d Queue %d Heap %d",cmd.mensaje,cmd.fd,uxQueueMessagesWaiting(mqttR),esp_get_free_heap_size());
 
 			elcmd= cJSON_Parse(cmd.mensaje);
 			if(elcmd)
@@ -1163,12 +1147,14 @@ static void mqttManager(void* arg)
 						}
 					}
 				}
-				cJSON_Delete(elcmd);
-		//		shutdown(cmd.fd, 0);
-		//		close(cmd.fd);
+				if(elcmd)
+					cJSON_Delete(elcmd);
 			}
 			else
 				printf("Could not parse cmd\n");
+			free(cmd.mensaje); // Data is transfered via pointer from a malloc. Free it here.
+			printf("MqttManger heap %d\n",esp_get_free_heap_size());
+
 		}
 		else
 			printf("CmdQueue Error\n");
@@ -1240,29 +1226,29 @@ void app_main()
 //#endif
 
 
-    esp_err_t err = nvs_flash_init();
-       if (err == ESP_ERR_NVS_NO_FREE_PAGES || err == ESP_ERR_NVS_NEW_VERSION_FOUND)
-       {
-           ESP_ERROR_CHECK(nvs_flash_erase());
-           err = nvs_flash_init();
-       }
-       ESP_ERROR_CHECK( err );
+   esp_err_t err = nvs_flash_init();
+   if (err == ESP_ERR_NVS_NO_FREE_PAGES || err == ESP_ERR_NVS_NEW_VERSION_FOUND)
+   {
+	   ESP_ERROR_CHECK(nvs_flash_erase());
+	   err = nvs_flash_init();
+   }
+   ESP_ERROR_CHECK( err );
 
-		vanadd=llevoMsg=0;
-		memset(&losMacs,0,sizeof(losMacs));
-		vanMacs=0;
+	vanadd=llevoMsg=0;
+	memset(&losMacs,0,sizeof(losMacs));
+	vanMacs=0;
 
     wifi_init();
     mqtt_app_start();
-    initI2C();
-    initScreen();
+ //   initI2C();
+   // initScreen();
 
 #ifdef TEMP
 //    init_temp();
 #endif
     qwait=QDELAY;
     qdelay=qwait*1000;
-   	xTaskCreate(&sender,"U571",10240,NULL, 5, NULL);
+ //  	xTaskCreate(&sender,"U571",10240,NULL, 5, NULL);
    	xTaskCreate(&mqttManager,"mqtt",10240,NULL, 5, NULL);
    	apstaf=false;
 #ifdef WITHMETERS
@@ -1274,6 +1260,6 @@ void app_main()
 #ifdef KBD
 	xTaskCreate(&kbd,"kbd",4096,NULL, 4, NULL);
 #endif
-	xTaskCreate(&displayManager,"dispm",4096,NULL, 4, NULL);
+//	xTaskCreate(&displayManager,"dispm",4096,NULL, 4, NULL);
 
 }

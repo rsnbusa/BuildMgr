@@ -65,4 +65,5 @@
 #define INTERNETPASS					"csttpstt"
 #define LOCALTIME						"GMT+5" // Quito time
 
+#define MAXBUFFER						1500
 #endif
