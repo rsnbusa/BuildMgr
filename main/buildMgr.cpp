@@ -2,7 +2,7 @@
 #include "defines.h"
 #include "projTypes.h"
 #include "globals.h"
-
+#define WITHMETERS
 void submode(void * pArg);
 void kbd(void *pArg);
 
@@ -397,68 +397,69 @@ void init_temp()
 #endif
 
 #ifdef WITHMETERS
-static void IRAM_ATTR gpio_isr_handler(void * arg)
+void gpio_isr_handler(void * arg)
 {
 	BaseType_t tasker;
 	u32 fueron;
 	meterType *meter=(meterType*)arg;
 
-	uint8_t como=gpio_get_level(meter->pin);
-//	if(deb)
-	//	ets_printf("%d pin %d pos %d\n",como,meter->pin,meter->pos);
+	if(meter->beatsPerkW==0)
+		meter->beatsPerkW=800;
+	if (diaHoraTarifa==0)
+		diaHoraTarifa=100;
 
-		if(!como)
+	uint8_t como=gpio_get_level((gpio_num_t)meter->pin);
+	if(deb)
+		ets_printf("%d pin %d pos %d\n",como,meter->pin,meter->pos);
+
+		if(como)
 		{
-			meter->startTimePulse=millisISR();
-			fueron=meter->startTimePulse-meter->timestamp;
-		//	ets_printf("Pulse %d\n",fueron);
+			if (meter->startTimePulse>0) //first time no frame of reference, skip
+			{
+				meter->timestamp=millisISR();
+				meter->livingPulse+=meter->timestamp-meter->startTimePulse; //array pulseTime has time elapsed in ms between low and high
+				meter->livingCount++;
+				meter->pulse=meter->livingPulse/meter->livingCount;
+				if (meter->livingCount>100)
+				{
+			//		ets_printf("Pulse %d %d %d\n",meter->livingPulse/meter->livingCount,meter->livingPulse,meter->livingCount);
+					meter->livingPulse=0;
+					meter->livingCount=0;
+				}
+			}
 
+			fueron=meter->startTimePulse-meter->timestamp;
 			 if(fueron>=80)
 			 {
 				 meter->timestamp=millisISR(); //last valid isr
 				 meter->beatSave++;
 				 meter->beatSaveRaw++;
 				 meter->currentBeat++;
-				if((meter->currentBeat % 80)==0) //every GMAXLOSSPER interval
+				if((meter->currentBeat % (meter->beatsPerkW/10))==0) //every GMAXLOSSPER interval
 				{
-			//		ets_printf("Save lot %d pin %d\n",meter->currentBeat,meter->pin);
-					if(meter->beatSaveRaw>=800)
+					meter->saveit=false;
+
+					if(meter->beatSaveRaw >= meter->beatsPerkW*diaHoraTarifa/100)
 					{
 						meter->beatSaveRaw=0;
-						meter->currentKwH++;
-			//			ets_printf("Kwh\n");
+						//meter->curLife++;
 						meter->beatSave=0;
-
+						meter->saveit=true;
 					}
-					meter->startConn=millisISR();
-				//	ets_printf("Start Time %d Pin %d\n",meter->startConn,meter->pin);
-				//	ets_printf("SendISR pin %d pos %d\n",meter->pin,meter->pos);
+
 					if(mqttQ)
-						xQueueSendFromISR( mqttQ,arg,&tasker );
+					{
+						xQueueSendFromISR( mqttQ,meter,&tasker );
 							if (tasker)
 									portYIELD_FROM_ISR();
+					}
 				}
 			 }
 		}
-		else
-		{
-			// try to get pulse width
-			if (meter->startTimePulse>0) //first time no frame of reference, skip
-			{
-				meter->timestamp=millisISR();
-				meter->livingPulse+=millisISR()-meter->startTimePulse; //array pulseTime has time elapsed in ms between low and high
-				meter->livingCount++;
-				meter->pulse=meter->livingPulse/meter->livingCount;
-
-					if (meter->livingCount>100)
-					{
-				//		ets_printf("Pulse %d\n",meter->livingPulse/meter->livingCount);
-						meter->livingPulse=0;
-						meter->livingCount=0;
-					}
-			}
-		}
+		else //rising edge start pulse timer
+				meter->startTimePulse=millisISR();
 	}
+
 #endif
 
 void getMessage(void *pArg)
@@ -572,6 +573,7 @@ static void buildMgr(void *pvParameters)
     }
     vTaskDelete(NULL);
 }
+
 
 #ifdef WITHMETERS
 void install_meter_interrupts()
@@ -908,9 +910,9 @@ void sendStatusNow(meterType* meter)
 		return;
 	}
 
-	cJSON_AddStringToObject(root,"MeterPin",		meter->name);
+	cJSON_AddStringToObject(root,"MeterPin",		meter->serialNumber);
 	cJSON_AddNumberToObject(root,"Transactions",	++meter->vanMqtt);
-	cJSON_AddNumberToObject(root,"KwH",				meter->currentKwH);
+	cJSON_AddNumberToObject(root,"KwH",				meter->curLife);
 	cJSON_AddNumberToObject(root,"Beats",			meter->currentBeat);
 	cJSON_AddNumberToObject(root,"Pulse",			meter->pulse);
 #ifdef TEMP

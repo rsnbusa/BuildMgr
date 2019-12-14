@@ -69,4 +69,18 @@
 
 #define MAXBUFFER						1500
 #define MAXCMDS							20
+#define MAXDEVS							5
+
+#define METER0							4
+#define METER1							22
+#define METER2							16
+#define METER3							17
+#define METER4							21
+
+#define BREAK0							13
+#define BREAK1							14
+#define BREAK2							25
+#define BREAK3							26
+#define BREAK4							27
+
 #endif

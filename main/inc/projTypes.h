@@ -7,13 +7,20 @@ typedef struct macC{
 	time_t		lastUpdate;
 } macControl;
 
-typedef struct intPin{
-	char		name[20];
-	gpio_num_t	pin;
-	u8			pos;
-	u32 		startTimePulse,beatSave,beatSaveRaw,vanMqtt,currentKwH;
-	u32			currentBeat,msNow,livingPulse,livingCount,timestamp,pulse,startConn;
-}meterType;
+typedef struct meterType{
+	 char serialNumber[20];
+	 uint8_t meterid,state,pos,pin,pinB;
+	 uint32_t timestamp,startConn,pulse;
+	 uint32_t currentBeat,oldbeat,vanMqtt;
+	 u16 elpin;
+	 bool saveit;
+	 u32 msNow, minamps,maxamps;
+	 u16 curMonth,curMonthRaw,curDay,curDayRaw,beatSave,beatSaveRaw;
+	 u8 curHour,cycleMonth,curHourRaw;
+	 u32 curLife,curCycle,lastKwHDate;
+	 u16 beatsPerkW,maxLoss;
+	 u32 livingPulse,livingCount,startTimePulse;
+} meterType;
 
 typedef struct mqttMsg{
 	u16		cmd;
