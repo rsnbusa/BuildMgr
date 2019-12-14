@@ -37,4 +37,20 @@ typedef enum overType {NOREP,REPLACE} overType;
 typedef enum displayType {NODISPLAY,DISPLAYIT} displayType;
 typedef enum displayModeType {DISPLAYPULSES,DISPLAYKWH,DISPLAYUSER,DISPLAYALL,DISPLAYALLK,DISPLAYAMPS,DISPLAYRSSI,DISPLAYNADA} displayModeType;
 
+typedef struct pcomm{
+    void *pMessage;
+    uint8_t typeMsg;
+    int pComm;
+}parg;
+
+typedef void (*functrsn)(parg *);
+
+typedef struct cmdRecord{
+    char comando[20];
+    functrsn code;
+}cmdRecord;
+
+
+
+
 #endif

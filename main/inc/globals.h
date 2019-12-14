@@ -18,7 +18,7 @@ EXTERN bool								isrf,connf,wifif,apstaf,firstTimeTimer,displayf,deb,msgf;
 EXTERN int								numsensors;
 EXTERN u32								sentTotal,llevo;
 EXTERN u8								qwait,lastalign,lastFont;
-EXTERN u16 								qdelay;
+EXTERN u16 								qdelay,llevoMsg;
 EXTERN char								texto[101];
 EXTERN meterType						theMeters[4],algo;
 EXTERN gpio_config_t 					io_conf;
@@ -28,7 +28,7 @@ EXTERN int 								socket_id,binary_file_length ;
 EXTERN char								http_request[100];
 #ifdef MULTIX
 EXTERN SemaphoreHandle_t				I2CSem;
-EXTERN u16								icadd[2],llevoMsg;
+EXTERN u16								icadd[2];
 EXTERN QueueHandle_t					muxQueue;
 #endif
 
@@ -43,8 +43,9 @@ EXTERN	SSD1306             			display;
 #else
 EXTERN SSD1306 							display(0x3c, &miI2C);
 #endif
-EXTERN int								vanMacs,vanadd,vanvueltas;
+EXTERN int								vanMacs,vanadd,vanvueltas,van;
 EXTERN macControl						losMacs[50];
 EXTERN u32								tallies[50][5];
+EXTERN cmdRecord 						cmds[MAXCMDS];
 
 #endif /* MAIN_GLOBALS_H_ */

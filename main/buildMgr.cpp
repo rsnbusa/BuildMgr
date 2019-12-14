@@ -2,14 +2,15 @@
 #include "defines.h"
 #include "projTypes.h"
 #include "globals.h"
-#include <inttypes.h>
-#include "esp_sntp.h"
 
-void drawString(int x, int y, string que, int fsize, int align,displayType showit,overType erase);
 void submode(void * pArg);
-void displayManager(void * pArg);
 void kbd(void *pArg);
+
+#ifdef DISPLAY
 void clearScreen();
+void displayManager(void * pArg);
+void drawString(int x, int y, string que, int fsize, int align,displayType showit,overType erase);
+#endif
 
 static const char *TAG = "BDMGR";
 
@@ -17,17 +18,25 @@ static EventGroupHandle_t wifi_event_group;
 const static int MQTT_BIT = BIT0;
 const static int WIFI_BIT = BIT1;
 const static int PUB_BIT  = BIT2;
-const static int DONE_BIT  = BIT3;
+const static int DONE_BIT = BIT3;
 
-int van=0;
+int findCommand(string cual)
+{
+	for (int a=0;a<MAXCMDS;a++)
+	{
+		if(cual==string(cmds[a].comando))
+			return a;
+	}
+	return -1;
+}
 
-uint32_t IRAM_ATTR millisISR()
+uint32_t  millisISR()
 {
 	return xTaskGetTickCountFromISR() * portTICK_PERIOD_MS;
 
 }
 
-uint32_t IRAM_ATTR millis()
+uint32_t millis()
 {
 	return xTaskGetTickCount() * portTICK_PERIOD_MS;
 
@@ -199,10 +208,13 @@ static void firmUpdate(void *pArg)
 
 	xTaskCreate(&ConfigSystem, "cfg", 512, (void*)50, 3, &blinker);
 
-	bool resp_body_start = false, flag = true;
+	bool resp_body_start,fflag;
+	resp_body_start=false;
+	fflag = true;
 	/*deal with all receive packet*/
-	bool  bb=false;
-	while (flag) {
+	bool  bb;
+	bb=false;
+	while (fflag) {
 		memset(tempb, 0, BUFFSIZE);
 		int buff_len = recv(socket_id, tempb, TEXT_BUFFSIZE, 0);
 		if (buff_len < 0) { /*receive error*/
@@ -245,7 +257,7 @@ static void firmUpdate(void *pArg)
 
 				} else
 					if (buff_len == 0) {  /*packet over*/
-						flag = false;
+						fflag = false;
 						if(deb)
 							printf( "Connection closed, all packets received\n");
 						close(socket_id);
@@ -283,8 +295,6 @@ exit:	printf("Prepare to restart system!\n");
 
 esp_err_t _http_event_handle(esp_http_client_event_t *evt)
 {
-
-
     switch(evt->event_id) {
         case HTTP_EVENT_ERROR:
             ESP_LOGI(TAG, "HTTP_EVENT_ERROR");
@@ -301,9 +311,6 @@ esp_err_t _http_event_handle(esp_http_client_event_t *evt)
             break;
         case HTTP_EVENT_ON_DATA:
             ESP_LOGI(TAG, "HTTP_EVENT_ON_DATA, len=%d", evt->data_len);
-//            memcpy(temp,(char*)evt->data,evt->data_len);
-//            temp[evt->data_len]=0;
-//            printf("Data %s\n",temp);
             if (!esp_http_client_is_chunked_response(evt->client)) {
             	memcpy(&tempb[van],evt->data,evt->data_len);
             	van+=evt->data_len;
@@ -322,7 +329,7 @@ esp_err_t _http_event_handle(esp_http_client_event_t *evt)
 }
 
 
-void loadit()
+static void loadit(parg *pArg)
 {
 	van=0;
 	memset(tempb,0,sizeof(tempb));
@@ -455,19 +462,20 @@ static void IRAM_ATTR gpio_isr_handler(void * arg)
 #endif
 
 void getMessage(void *pArg)
+//static void getMessage(int sock)
 {
     int len;
     struct timeval to;
     cmdType comando;
-
-    int sock=(int)pArg;
+    int sock =(int)pArg;
     	to.tv_sec = 2;
         to.tv_usec = 0;
+		gpio_set_level((gpio_num_t)WIFILED, 1);
 
 	if (setsockopt(sock,SOL_SOCKET,SO_RCVTIMEO,&to,sizeof(to)) < 0)
 	{
 		printf("Unable to set read timeout on socket!");
-		vTaskDelete(NULL);
+		return;
 	}
 
 //	printf("Getm%d heap %d\n",sock,esp_get_free_heap_size());
@@ -477,13 +485,9 @@ void getMessage(void *pArg)
     do {
         len = recv(sock, comando.mensaje, MAXBUFFER-1, 0);
         if (len < 0) {
-    		shutdown(sock, 0);
-        	close(sock);
       //     printf("Error occurred during receiving: errno %d fueron %d\n", errno,fueron);
             break;
         } else if (len == 0) {
-    		shutdown(sock, 0);
-        	close(sock);
       //     printf( "Connection closed: errno %d fueron %d\n", errno,fueron);
            break;
         } else {
@@ -496,24 +500,26 @@ void getMessage(void *pArg)
         	//break; //if break, will not allow for stream of multiple messages. Must not break. Close or Timeout closes socket
         }
     } while (len > 0);
+	shutdown(sock, 0);
+	close(sock);
+	gpio_set_level((gpio_num_t)WIFILED, 0);
 
- //   printf("Leaving %d\n",sock);
-    vTaskDelete(NULL);
-
+	vTaskDelete(NULL);
 }
 
 static void buildMgr(void *pvParameters)
 {
-    char 						addr_str[50],tt[10];
+    char 						addr_str[50];
     int 						addr_family;
     int 						ip_protocol;
     int 						sock=0;
     struct sockaddr_in6 		source_addr;
     uint 						addr_len = sizeof(source_addr);
+    struct sockaddr_in 			dest_addr;
+    char						tt[20];
 
     while (true) {
 
-        struct sockaddr_in dest_addr;
         dest_addr.sin_addr.s_addr = htonl(INADDR_ANY);
         dest_addr.sin_family = AF_INET;
         dest_addr.sin_port = htons(BUILDMGRPORT);
@@ -556,8 +562,12 @@ static void buildMgr(void *pvParameters)
             }
             sprintf(tt,"getm%d",sock);
     //        printf("%s Heap %d\n",tt,esp_get_free_heap_size());
+	//		gpio_set_level((gpio_num_t)WIFILED, 1);
 
         	xTaskCreate(&getMessage,tt,8192,(void*)sock, 4, NULL);
+       // 	getMessage(sock);
+	//		gpio_set_level((gpio_num_t)WIFILED, 0);
+
         }
     }
     vTaskDelete(NULL);
@@ -566,49 +576,59 @@ static void buildMgr(void *pvParameters)
 #ifdef WITHMETERS
 void install_meter_interrupts()
 {
-	char 	temp[20];
-	memset(&theMeters,0,sizeof(theMeters));
+	char 	temp[30];
+	u8 		mac[6];
 
-	theMeters[0].pin=16;
-	theMeters[1].pin=17;
-	theMeters[2].pin=4;
-	theMeters[3].pin=5;
+	theMeters[0].pin=METER0;
+	theMeters[1].pin=METER1;
+	theMeters[2].pin=METER2;
+	theMeters[3].pin=METER3;
+	theMeters[4].pin=METER4;
 
+	theMeters[0].pinB=BREAK0;
+	theMeters[1].pinB=BREAK1;
+	theMeters[2].pinB=BREAK2;
+	theMeters[3].pinB=BREAK3;
+	theMeters[4].pinB=BREAK4;
+
+	esp_wifi_get_mac(ESP_IF_WIFI_STA, (u8*)&mac);
+	sprintf(temp,"MeterIoT%02x%02x",mac[4],mac[5]);
+	printf("Mac %s\n",temp);
 	gpio_install_isr_service(ESP_INTR_FLAG_IRAM);
 
 	io_conf.intr_type = GPIO_INTR_ANYEDGE;
 	io_conf.mode = GPIO_MODE_INPUT;
 	io_conf.pull_down_en =GPIO_PULLDOWN_DISABLE;
 	io_conf.pull_up_en =GPIO_PULLUP_ENABLE;
-	for (int a=0;a<4;a++)
+
+	// Input Pins configuration
+	for (int a=0;a<MAXDEVS;a++)
 	{
-		sprintf(temp,"Meter%d",a);
-		strcpy(theMeters[a].name,temp);
+		sprintf(theMeters[a].serialNumber,"MeterIoT%02x%02x/%d",mac[4],mac[5],a);
 		theMeters[a].pos=a;
 		io_conf.pin_bit_mask = (1ULL<<theMeters[a].pin);
 		gpio_config(&io_conf);
 		gpio_isr_handler_add((gpio_num_t)theMeters[a].pin, gpio_isr_handler, (void*)&theMeters[a]);
-		if(deb)
-			printf("Install %d Pin %d Pos %d name %s\n",a,theMeters[a].pin,theMeters[a].pos,theMeters[a].name);
 	}
-#ifdef MULTIX
-	io_conf.intr_type = GPIO_INTR_ANYEDGE;
-	io_conf.pin_bit_mask = (1ULL<<MUXPIN);
-	gpio_config(&io_conf);
-	gpio_isr_handler_add((gpio_num_t)MUXPIN, gpio_isr_handler_mx, (void*)MUXPIN);
-	io_conf.intr_type = GPIO_INTR_ANYEDGE;
-	io_conf.pin_bit_mask = (1ULL<<MUXPIN1);
-	gpio_config(&io_conf);
-	gpio_isr_handler_add((gpio_num_t)MUXPIN1, gpio_isr_handler_mx, (void*)MUXPIN1);
-#endif
 
-	isrf=true;
+	// Breakers pin configuration.
+	io_conf.intr_type = GPIO_INTR_ANYEDGE;
+	io_conf.mode = GPIO_MODE_OUTPUT;
+	io_conf.pull_down_en =GPIO_PULLDOWN_ENABLE;
+	io_conf.pull_up_en =GPIO_PULLUP_DISABLE;
+
+	for (int a=0;a<MAXDEVS;a++)
+	{
+		io_conf.pin_bit_mask = (1ULL<<theMeters[a].pinB);
+		gpio_config(&io_conf);
+	}
 
 	io_conf.mode = GPIO_MODE_OUTPUT;
 	io_conf.pull_down_en =GPIO_PULLDOWN_ENABLE;
-	io_conf.pin_bit_mask = (1ULL);
+	io_conf.pin_bit_mask = (1ULL<<WIFILED);
 	gpio_config(&io_conf);
 	gpio_set_level((gpio_num_t)WIFILED, 0);
+
 	}
 #endif
 
@@ -688,17 +708,11 @@ static void wifi_event_handler(void* arg, esp_event_base_t event_base,
     return;
 }
 
-void time_sync_notification_cb(struct timeval *tv)
-{
-    ESP_LOGI(TAG, "Notification of a time synchronization event");
-}
-
 static void initialize_sntp(void)
 {
     ESP_LOGI(TAG, "Initializing SNTP");
     sntp_setoperatingmode(SNTP_OPMODE_POLL);
     sntp_setservername(0, "pool.ntp.org");
-    sntp_set_time_sync_notification_cb(time_sync_notification_cb);
     sntp_init();
 }
 
@@ -714,7 +728,8 @@ void sntpget(void *pArgs)
   //      printf("Time is not set yet. Connecting to WiFi and getting time over NTP.");
 
 	initialize_sntp();
-	struct tm timeinfo = { 0 };
+	struct tm timeinfo;
+	memset(&timeinfo,0,sizeof(timeinfo));
 	int retry = 0;
 	const int retry_count = 10;
 	while (sntp_get_sync_status() == SNTP_SYNC_STATUS_RESET && ++retry < retry_count) {
@@ -745,7 +760,7 @@ static void ip_event_handler(void* arg, esp_event_base_t event_base,
             strcpy((char*)wifi_config.ap.ssid,"Meteriot");
 			strcpy((char*)wifi_config.ap.password,"Meteriot");
 			wifi_config.ap.authmode=WIFI_AUTH_WPA_PSK;
-			wifi_config.ap.ssid_hidden=false;
+			wifi_config.ap.ssid_hidden=true;
 			wifi_config.ap.beacon_interval=400;
 			wifi_config.ap.max_connection=50;
 			wifi_config.ap.ssid_len=0;
@@ -755,7 +770,6 @@ static void ip_event_handler(void* arg, esp_event_base_t event_base,
         	wifif=true;
             xEventGroupSetBits(wifi_event_group, WIFI_BIT);
         	xTaskCreate(&sntpget,"sntp",2048,NULL, 4, NULL);
-
             break;
         default:
             break;
@@ -1013,10 +1027,10 @@ static void mqtt_app_start(void)
 	     esp_mqtt_client_config_t mqtt_cfg;
 	     memset((void*)&mqtt_cfg,0,sizeof(mqtt_cfg));
 
-	     mqtt_cfg.client_id=					"anybody";
+	     mqtt_cfg.client_id=				"anybody";
 	     mqtt_cfg.username=					"yyfmmvmh";
 	     mqtt_cfg.password=					"zE6oUgjoBQq4";
-	     mqtt_cfg.uri = 						"mqtt://m15.cloudmqtt.com:18247";
+	     mqtt_cfg.uri = 					"mqtt://m15.cloudmqtt.com:18247";
 	     mqtt_cfg.event_handle = 			mqtt_event_handler;
 	     mqtt_cfg.disable_auto_reconnect=	true;
 
@@ -1036,15 +1050,90 @@ static void mqtt_app_start(void)
 	//    esp_mqtt_client_start(clientCloud); //should be started by the SubMode task
 }
 
-static void mqttManager(void* arg)
+ void firmwareCmd(parg *pArg)
 {
-	cmdType cmd;
-	char text[15];
-	cJSON *elcmd;
-	time_t now;
+		for (int a=0;a<4;a++)
+			gpio_isr_handler_remove((gpio_num_t)theMeters[a].pin);
+		//gpio_uninstall_isr_service();
+		xTaskCreate(&firmUpdate,"U571",8192,NULL, 5, NULL);
+}
+
+ void loginCmd(parg* argument)
+{
+	loginT loginData;
+	time(&loginData.thedate);
+	loginData.theTariff=100;
+	send(argument->pComm, &loginData, sizeof(loginData), 0);
+}
+
+ void statusCmd(parg *argument)
+{
 	loginT loginData;
 
-	mqttR = xQueueCreate( 100, sizeof( cmdType ) );
+		cJSON *lmac= cJSON_GetObjectItem((cJSON*)argument->pMessage,"macn");
+		cJSON *lpos= cJSON_GetObjectItem((cJSON*)argument->pMessage,"Pos");
+		if(lmac && lpos)
+		{
+			int pos=lpos->valueint;
+			double dmacc=lmac->valuedouble;
+			u32 macc=(u32)dmacc;
+			int cual=find_mac(macc);
+			if(cual>=0)
+			{
+				tallies[cual][pos]++;
+				if(msgf)
+					printf("Meter[%d][%d]=%d\n",cual,pos,tallies[cual][pos]);
+			}
+			else
+			{
+				if(msgf)
+					printf("Mac not found %x\n",macc);
+			}
+		}//lmac && lpos
+#ifdef DISPLAY
+		if(displayf)
+		{
+			clearScreen();
+			cJSON *meter= cJSON_GetObjectItem((cJSON*)argument->pMessage,"MeterId");
+			cJSON *tran= cJSON_GetObjectItem((cJSON*)argument->pMessage,"Transactions");
+			cJSON *pulse= cJSON_GetObjectItem((cJSON*)argument->pMessage,"Pulse");
+			cJSON *beats= cJSON_GetObjectItem((cJSON*)argument->pMessage,"Beats");
+
+			if(xSemaphoreTake(I2CSem, portMAX_DELAY))
+			{
+				display.clear();
+				if(meter)
+					drawString(64,1,meter->valuestring,16,TEXT_ALIGN_CENTER,NODISPLAY,NOREP);
+				if(tran)
+				{
+					sprintf(text,"Trans:%d",tran->valueint);
+					drawString(64,18,text,12,TEXT_ALIGN_CENTER,NODISPLAY,NOREP);
+				}
+				if(beats)
+				{
+					sprintf(text,"Beats:%d",beats->valueint);
+					drawString(64,32,text,12,TEXT_ALIGN_CENTER,NODISPLAY,NOREP);
+				}
+				if(pulse)
+				{
+					sprintf(text,"Pulse:%d",pulse->valueint);
+					drawString(64,48,text,12,TEXT_ALIGN_CENTER,DISPLAYIT,NOREP);
+				}
+				xSemaphoreGive(I2CSem);
+			}
+		}
+#endif
+		time(&loginData.thedate);
+		loginData.theTariff=100;
+		send(argument->pComm, &loginData, sizeof(loginData), 0);
+}
+
+static void cmdManager(void* arg)
+{
+	cmdType cmd;
+	cJSON *elcmd;
+
+	mqttR = xQueueCreate( 20, sizeof( cmdType ) );
 			if(!mqttR)
 				printf("Failed queue Rx\n");
 
@@ -1062,91 +1151,28 @@ static void mqttManager(void* arg)
 				if(monton)
 				{
 					int son=cJSON_GetArraySize(monton);
+					printf("Batch son %d ",son);
 					for (int a=0;a<son;a++)
 					{
-						cJSON *cmdIteml = cJSON_GetArrayItem(monton, a);
-						cJSON *cmdd= cJSON_GetObjectItem(cmdIteml,"cmd");
+						cJSON *cmdIteml = cJSON_GetArrayItem(monton, a);//next item
+						cJSON *cmdd= cJSON_GetObjectItem(cmdIteml,"cmd"); //get cmd. Nopt detecting invalid cmd
 						if(deb)
 							printf("Array[%d] cmd is %s\n",a,cmdd->valuestring);
-						if (strcmp(cmdd->valuestring,"tariff")==0)
-							loadit();
-						if (strcmp(cmdd->valuestring,"firmware")==0)
-						{
-							for (int a=0;a<4;a++)
-								gpio_isr_handler_remove((gpio_num_t)theMeters[a].pin);
-							//gpio_uninstall_isr_service();
-							xTaskCreate(&firmUpdate,"U571",8192,NULL, 5, NULL);
-						}
-						if (strcmp(cmdd->valuestring,"/ga_login")==0)
-						{
-							time(&now);
-							loginData.thedate=now;
-							loginData.theTariff=100;
-						//	printf("Time %d\n",(int)now);
 
-							send(cmd.fd, &loginData, sizeof(loginData), 0);
-						}
-						if (strcmp(cmdd->valuestring,"/ga_status")==0)
+						int cualf=findCommand(string(cmdd->valuestring));
+						if(cualf>=0)
 						{
-							cJSON *lmac= cJSON_GetObjectItem(cmdIteml,"macn");
-							cJSON *lpos= cJSON_GetObjectItem(cmdIteml,"Pos");
-							if(lmac && lpos)
-							{
-								int pos=lpos->valueint;
-								double dmacc=lmac->valuedouble;
-								u32 macc=(u32)dmacc;
-								int cual=find_mac(macc);
-								if(cual>=0)
-								{
-									tallies[cual][pos]++;
-									if(msgf)
-										printf("Meter[%d][%d]=%d\n",cual,pos,tallies[cual][pos]);
-								}
-								else
-								{
-									if(msgf)
-										printf("Mac not found %x\n",macc);
-								}
-							}
-
-							if(displayf)
-							{
-								clearScreen();
-								cJSON *meter= cJSON_GetObjectItem(cmdIteml,"MeterId");
-								cJSON *tran= cJSON_GetObjectItem(cmdIteml,"Transactions");
-								cJSON *pulse= cJSON_GetObjectItem(cmdIteml,"Pulse");
-								cJSON *beats= cJSON_GetObjectItem(cmdIteml,"Beats");
-
-								if(xSemaphoreTake(I2CSem, portMAX_DELAY))
-								{
-									display.clear();
-									if(meter)
-										drawString(64,1,meter->valuestring,16,TEXT_ALIGN_CENTER,NODISPLAY,NOREP);
-									if(tran)
-									{
-										sprintf(text,"Trans:%d",tran->valueint);
-										drawString(64,18,text,12,TEXT_ALIGN_CENTER,NODISPLAY,NOREP);
-									}
-									if(beats)
-									{
-										sprintf(text,"Beats:%d",beats->valueint);
-										drawString(64,32,text,12,TEXT_ALIGN_CENTER,NODISPLAY,NOREP);
-									}
-									if(pulse)
-									{
-										sprintf(text,"Pulse:%d",pulse->valueint);
-										drawString(64,48,text,12,TEXT_ALIGN_CENTER,DISPLAYIT,NOREP);
-									}
-									xSemaphoreGive(I2CSem);
-								}
-							}
-							time(&now);
-							loginData.thedate=now;
-							loginData.theTariff=100;
-							send(cmd.fd, &loginData, sizeof(loginData), 0);
+							parg *argument=(parg*)malloc(sizeof(parg));
+							argument->pMessage=(void*)cmdIteml;
+							argument->typeMsg=1;
+							argument->pComm=cmd.fd;
+							(*cmds[cualf].code)(argument);
+							free(argument);
 						}
-					}
-				}
+
+
+					}// array
+				}//batch
 				if(elcmd)
 					cJSON_Delete(elcmd);
 			}
@@ -1161,6 +1187,7 @@ static void mqttManager(void* arg)
 	}//while
 }
 
+#ifdef DISPLAY
 static void initI2C()
 {
 	i2cp.sdaport=(gpio_num_t)SDAW;
@@ -1169,47 +1196,73 @@ static void initI2C()
 	miI2C.init(i2cp.i2cport,i2cp.sdaport,i2cp.sclport,400000,&I2CSem);//Will reserve a Semaphore for Control
 }
 
-	void sender(void *pArg)
+void initScreen()
+{
+	if(xSemaphoreTake(I2CSem, portMAX_DELAY))
 	{
-		meterType algo;
-
-		while(true)
-		{
-			if(deb)
-				printf("Heap before send %d\n",esp_get_free_heap_size());
-			if(!xQueueSend( mqttQ,&algo,0))
-				printf("Error sending queue %d\n",uxQueueMessagesWaiting( mqttQ ));
-			else
-				if(deb)
-				{
-					//printf("Sending %d\n",algo++);
-					printf("Heap after send %d\n",esp_get_free_heap_size());
-				}
-
-
-			if(uxQueueMessagesWaiting(mqttQ)>uxQueueSpacesAvailable(mqttQ))
-			{
-				while(uxQueueMessagesWaiting(mqttQ)>2)
-					delay(1000);
-			}
-			delay(qdelay);
-		}
+		display.init();
+		display.flipScreenVertically();
+		display.clear();
+		drawString(64,10,"WiFi",24,TEXT_ALIGN_CENTER,DISPLAYIT,NOREP);
+		xSemaphoreGive(I2CSem);
 	}
+	else
+		printf("Failed to InitScreen\n");
+}
+#endif
 
-	void initScreen()
+#ifdef MQT
+void sender(void *pArg)
+{
+	meterType algo;
+
+	while(true)
 	{
-		if(xSemaphoreTake(I2CSem, portMAX_DELAY))
-		{
-			display.init();
-			display.flipScreenVertically();
-			display.clear();
-			drawString(64,10,"WiFi",24,TEXT_ALIGN_CENTER,DISPLAYIT,NOREP);
-			xSemaphoreGive(I2CSem);
-		}
+		if(deb)
+			printf("Heap before send %d\n",esp_get_free_heap_size());
+		if(!xQueueSend( mqttQ,&algo,0))
+			printf("Error sending queue %d\n",uxQueueMessagesWaiting( mqttQ ));
 		else
-			printf("Failed to InitScreen\n");
-	}
+			if(deb)
+			{
+				//printf("Sending %d\n",algo++);
+				printf("Heap after send %d\n",esp_get_free_heap_size());
+			}
 
+
+		if(uxQueueMessagesWaiting(mqttQ)>uxQueueSpacesAvailable(mqttQ))
+		{
+			while(uxQueueMessagesWaiting(mqttQ)>2)
+				delay(1000);
+		}
+		delay(qdelay);
+	}
+}
+#endif
+
+
+static void init_vars()
+{
+	vanadd=0;
+	llevoMsg=0;
+
+	memset(&losMacs,0,sizeof(losMacs));
+	vanMacs=0;
+    qwait=QDELAY;
+    qdelay=qwait*1000;
+   	apstaf=false;
+
+	io_conf.mode = GPIO_MODE_OUTPUT;
+	io_conf.pull_down_en =GPIO_PULLDOWN_ENABLE;
+	io_conf.pin_bit_mask = (1ULL<<WIFILED);
+	gpio_config(&io_conf);
+	gpio_set_level((gpio_num_t)WIFILED, 0);
+
+	strcpy((char*)&cmds[0].comando,"/ga_firmware");			cmds[0].code=firmwareCmd;
+	strcpy((char*)&cmds[1].comando,"/ga_tariff");			cmds[1].code=loadit;
+	strcpy((char*)&cmds[2].comando,"/ga_status");			cmds[2].code=statusCmd;
+	strcpy((char*)&cmds[3].comando,"/ga_login");			cmds[3].code=loginCmd;
+}
 
 void app_main()
 {
@@ -1219,11 +1272,11 @@ void app_main()
 
     deb=msgf=false;
 
-//#ifdef KBD
-//    esp_log_level_set("*", ESP_LOG_NONE);
-//#else
+#ifdef KBD
+    esp_log_level_set("*", ESP_LOG_NONE);
+#else
     esp_log_level_set("*", ESP_LOG_WARN);
-//#endif
+#endif
 
 
    esp_err_t err = nvs_flash_init();
@@ -1234,23 +1287,20 @@ void app_main()
    }
    ESP_ERROR_CHECK( err );
 
-	vanadd=llevoMsg=0;
-	memset(&losMacs,0,sizeof(losMacs));
-	vanMacs=0;
-
+	init_vars();
     wifi_init();
     mqtt_app_start();
- //   initI2C();
-   // initScreen();
-
-#ifdef TEMP
-//    init_temp();
+#ifdef DISPLAY
+    initI2C();
+    initScreen();
 #endif
-    qwait=QDELAY;
-    qdelay=qwait*1000;
- //  	xTaskCreate(&sender,"U571",10240,NULL, 5, NULL);
-   	xTaskCreate(&mqttManager,"mqtt",10240,NULL, 5, NULL);
-   	apstaf=false;
+#ifdef TEMP
+    init_temp();
+#endif
+#ifdef MQT
+   	xTaskCreate(&sender,"U571",10240,NULL, 5, NULL);
+#endif
+   	xTaskCreate(&cmdManager,"mqtt",10240,NULL, 5, NULL);
 #ifdef WITHMETERS
       install_meter_interrupts();
 #endif
@@ -1260,6 +1310,9 @@ void app_main()
 #ifdef KBD
 	xTaskCreate(&kbd,"kbd",4096,NULL, 4, NULL);
 #endif
-//	xTaskCreate(&displayManager,"dispm",4096,NULL, 4, NULL);
+
+#ifdef DISPLAY
+	xTaskCreate(&displayManager,"dispm",4096,NULL, 4, NULL);
+#endif
 
 }

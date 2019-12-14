@@ -4,8 +4,9 @@
 #include "projTypes.h"
 #include "globals.h"
 
+#ifdef DISPLAY
 extern void drawString(int x, int y, string que, int fsize, int align,displayType showit,overType erase);
-
+#endif
 
 void printStationList()
 {
@@ -114,6 +115,7 @@ void kbd(void *arg) {
 			case 'M':
 					printStationList();
 					break;
+#ifdef DISPLAY
 			case 'S':
 			case 's':
 					displayf=!displayf;
@@ -123,6 +125,8 @@ void kbd(void *arg) {
 						drawString(64,12,"MeterIoT",24,TEXT_ALIGN_CENTER,DISPLAYIT,NOREP);
 					}
 					break;
+#endif
+
 			case 'd':
 			case 'D':
 					deb=!deb;

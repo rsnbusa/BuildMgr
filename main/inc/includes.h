@@ -40,6 +40,9 @@ extern "C"{
 
 #include "mqtt_client.h"
 
+#include <inttypes.h>
+#include "esp_sntp.h"
+
 void app_main();
 }
 //#include <algorithm>

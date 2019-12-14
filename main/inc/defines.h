@@ -1,9 +1,11 @@
 #ifndef defines_h
 #define defines_h
 
-#define MULTIX		// if we are going to have 9575 GPIO Expanders
-#define TEMP
+//#define MULTIX		// if we are going to have 9575 GPIO Expanders
+//#define TEMP
 //#define WITHMETERS
+//#define MQT
+//#define DISPLAY
 #define KBD			// only for testing build
 
 #define BUILDMGRPORT					30000
@@ -53,7 +55,7 @@
 
 #define QDELAY							10
 #define MAXWIFI							100
-#define WIFILED							14
+#define WIFILED							2
 
 #define BUFFSIZE 						4096
 #define TEXT_BUFFSIZE 					4096
@@ -66,4 +68,5 @@
 #define LOCALTIME						"GMT+5" // Quito time
 
 #define MAXBUFFER						1500
+#define MAXCMDS							20
 #endif

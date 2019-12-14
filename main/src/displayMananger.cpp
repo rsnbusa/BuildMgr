@@ -4,7 +4,8 @@
  *  Created on: Apr 18, 2017
  *      Author: RSN
  */
-
+#include "defines.h"
+#ifdef DISPLAY
 #include "displayManager.h"
 
 void clearScreen()
@@ -83,7 +84,6 @@ void drawString(int x, int y, string que, int fsize, int align,displayType showi
 	if (showit==DISPLAYIT)
 		display.display();
 }
-
 void displayManager(void *arg) {
 	time_t t = 0;
 	struct tm timeinfo ;
@@ -115,3 +115,4 @@ void displayManager(void *arg) {
 		}
 	}
 }
+#endif
