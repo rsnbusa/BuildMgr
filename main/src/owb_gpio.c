@@ -27,20 +27,20 @@
  * @file
  */
 
-#include <stddef.h>
-#include <stdbool.h>
-#include <inttypes.h>
-#include <string.h>
-#include <stdlib.h>
+#include "driver/gpio.h"
+#include "esp_log.h"
 
 #include "freertos/FreeRTOS.h"
 #include "freertos/task.h"
-#include "esp_log.h"
-#include "sdkconfig.h"
-#include "driver/gpio.h"
-
-#include "owb.h"
 #include "owb_gpio.h"
+#include "owb.h"
+#include "sdkconfig.h"
+
+#include <inttypes.h>
+#include <stdbool.h>
+#include <stddef.h>
+#include <stdlib.h>
+#include <string.h>
 
 static const char * TAG = "owb_gpio";
 

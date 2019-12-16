@@ -3,8 +3,10 @@
 #include "projTypes.h"
 #include "globals.h"
 #define WITHMETERS
-void submode(void * pArg);
+
+static void submode(void * pArg);
 void kbd(void *pArg);
+static void update_mac(u32 newmac);
 
 #ifdef DISPLAY
 void clearScreen();
@@ -20,7 +22,28 @@ const static int WIFI_BIT = BIT1;
 const static int PUB_BIT  = BIT2;
 const static int DONE_BIT = BIT3;
 
-int findCommand(string cual)
+static int find_mac(uint32_t esteMac)
+{
+	for (int a=0;a<vanMacs;a++)
+	{
+		if(losMacs[a].macAdd==esteMac)
+			return a;
+	}
+	return -1;
+}
+
+static int find_ip(uint32_t esteIp)
+{
+	for (int a=0;a<vanMacs;a++)
+	{
+		if(losMacs[a].theIp==esteIp)
+			return a;
+	}
+	return -1;
+}
+
+
+static int findCommand(string cual)
 {
 	for (int a=0;a<MAXCMDS;a++)
 	{
@@ -47,7 +70,7 @@ void delay(uint16_t a)
 	vTaskDelay(a /  portTICK_RATE_MS);
 }
 
-void ConfigSystem(void *pArg)
+static void ConfigSystem(void *pArg)
 {
 	uint32_t del=(uint32_t)pArg;
 	while(1)
@@ -59,7 +82,7 @@ void ConfigSystem(void *pArg)
 	}
 }
 
-void task_fatal_error()
+static void task_fatal_error()
 								{
 	printf("Exiting task due to fatal error...");
 	close(socket_id);
@@ -92,12 +115,12 @@ static bool read_past_http_header(char text[], int total_len, esp_ota_handle_t u
 			int i_write_len = total_len - (i + 2);
 			esp_err_t err = esp_ota_write( update_handle, (const void *)&(text[i + 2]), i_write_len);
 			if (err != ESP_OK) {
-				if(deb)
-					printf( "Error: esp_ota_write failed! err=0x%x\n", err);
+				if(theConf.traceflag & (1<<OTAD))
+					printf( "%sError: esp_ota_write failed! err=0x%x\n",OTADT, err);
 				return false;
 			} else {
-				if(deb)
-					printf( "esp_ota_write header OK\n");
+				if(theConf.traceflag & (1<<OTAD))
+					printf( "%sesp_ota_write header OK\n",OTADT);
 				binary_file_length += i_write_len;
 			}
 			return true;
@@ -109,16 +132,16 @@ static bool read_past_http_header(char text[], int total_len, esp_ota_handle_t u
 
 static bool connect_to_http_server()
 {
-	if(deb)
-		printf("RSNServer IP: %s Server Port:%s\n", EXAMPLE_SERVER_IP, EXAMPLE_SERVER_PORT);
+	if(theConf.traceflag & (1<<WEBD))
+		printf("%sIP: %s Server Port:%s\n",WEBDT, EXAMPLE_SERVER_IP, EXAMPLE_SERVER_PORT);
 	sprintf(http_request, "GET %s HTTP/1.1\r\nHost: %s:%s \r\n\r\n", EXAMPLE_FILENAME, EXAMPLE_SERVER_IP, EXAMPLE_SERVER_PORT);
 	int  http_connect_flag = -1;
 	struct sockaddr_in sock_info;
 
 	socket_id = socket(AF_INET, SOCK_STREAM, 0);
 	if (socket_id == -1) {
-		if(deb)
-			printf( "Create socket failed!\n");
+		if(theConf.traceflag & (1<<WEBD))
+			printf( "%sCreate socket failed!\n",WEBDT);
 		return false;
 	}
 
@@ -131,13 +154,13 @@ static bool connect_to_http_server()
 	// connect to http server
 	http_connect_flag = connect(socket_id, (struct sockaddr *)&sock_info, sizeof(sock_info));
 	if (http_connect_flag == -1) {
-		if(deb)
-			printf( "Connect to server failed! errno=%d\n", errno);
+		if(theConf.traceflag & (1<<WEBD))
+			printf( "%sConnect to server failed! errno=%d\n",WEBDT, errno);
 		close(socket_id);
 		return false;
 	} else {
-		if(deb)
-			printf( "Connected to server\n");
+		if(theConf.traceflag & (1<<WEBD))
+			printf( "%sConnected to server\n",WEBDT);
 		return true;
 	}
 	return false;
@@ -148,7 +171,6 @@ static void firmUpdate(void *pArg)
 	esp_err_t err;
 	uint8_t como=1;
 	TaskHandle_t blinker=NULL;
-	deb=true;
 	esp_ota_handle_t update_handle = 0 ;
 	const esp_partition_t *update_partition = NULL;
 
@@ -157,23 +179,24 @@ static void firmUpdate(void *pArg)
 		gpio_isr_handler_remove((gpio_num_t)theMeters[a].pin);
 #endif
 
-	if(deb)
-		printf("Starting OTA...\n");
+	if(theConf.traceflag & (1<<OTAD))
+		printf("%sStarting OTA...\n",OTADT);
 
 	const esp_partition_t *configured = esp_ota_get_boot_partition();
 	const esp_partition_t *running = esp_ota_get_running_partition();
 
 	assert(configured == running); /* fresh from reset, should be running from configured boot partition */
-	if(deb)
-		printf("Running partition type %d subtype %d (offset 0x%08x)\n",configured->type, configured->subtype, configured->address);
+
+	if(theConf.traceflag & (1<<OTAD))
+		printf("%sRunning partition type %d subtype %d (offset 0x%08x)\n",OTADT,configured->type, configured->subtype, configured->address);
 
 	/*connect to http server*/
 	if (connect_to_http_server()) {
-		if(deb)
-			printf( "Connected to http server\n");
+		if(theConf.traceflag & (1<<OTAD))
+			printf( "%sConnected to http server\n",OTADT);
 	} else {
-		if(deb)
-			printf( "Connect to http server failed!\n");
+		if(theConf.traceflag & (1<<OTAD))
+			printf( "%sConnect to http server failed!\n",OTADT);
 		task_fatal_error();
 		goto exit;
 	}
@@ -182,29 +205,29 @@ static void firmUpdate(void *pArg)
 	/*send GET request to http server*/
 	res = send(socket_id, http_request, strlen(http_request), 0);
 	if (res == -1) {
-		if(deb)
-			printf("Send GET request to server failed\n");
+		if(theConf.traceflag & (1<<OTAD))
+			printf("%sSend GET request to server failed\n",OTADT);
 		task_fatal_error();
 		goto exit;
 	} else {
-		if(deb)
-			printf("Send GET request to server succeeded\n");
+		if(theConf.traceflag & (1<<OTAD))
+			printf("%sSend GET request to server succeeded\n",OTADT);
 	}
 
 	update_partition = esp_ota_get_next_update_partition(NULL);
-	if(deb)
-		printf("Writing to partition %s subtype %d at offset 0x%x\n",
+	if(theConf.traceflag & (1<<OTAD))
+		printf("%sWriting to partition %s subtype %d at offset 0x%x\n",OTADT,
 			update_partition->label,update_partition->subtype, update_partition->address);
 	assert(update_partition != NULL);
 	err = esp_ota_begin(update_partition, OTA_SIZE_UNKNOWN, &update_handle);
 	if (err != ESP_OK) {
-		if(deb)
-			printf( "esp_ota_begin failed, error=%d\n", err);
+		if(theConf.traceflag & (1<<OTAD))
+			printf( "%sesp_ota_begin failed, error=%d\n",OTADT, err);
 		task_fatal_error();
 		goto exit;
 	}
-	if(deb)
-		printf("esp_ota_begin succeeded\n");
+	if(theConf.traceflag & (1<<OTAD))
+		printf("%sesp_ota_begin succeeded\n",OTADT);
 
 	xTaskCreate(&ConfigSystem, "cfg", 512, (void*)50, 3, &blinker);
 
@@ -218,7 +241,8 @@ static void firmUpdate(void *pArg)
 		memset(tempb, 0, BUFFSIZE);
 		int buff_len = recv(socket_id, tempb, TEXT_BUFFSIZE, 0);
 		if (buff_len < 0) { /*receive error*/
-			printf("Error: receive data error! errno=%d\n", errno);
+			if(theConf.traceflag & (1<<OTAD))
+				printf("%sError: receive data error! errno=%d\n", OTADT,errno);
 			task_fatal_error();
 			if(blinker)
 				vTaskDelete(blinker);
@@ -228,14 +252,14 @@ static void firmUpdate(void *pArg)
 			if (buff_len > 0 && !resp_body_start && !bb) { /*deal with response header*/
 				bb=true;
 				resp_body_start = read_past_http_header(tempb, buff_len, update_handle);
-				if(deb)
-					printf("Header found %s\n",resp_body_start?"Yes":"No");
+				if(theConf.traceflag & (1<<OTAD))
+					printf("%sHeader found %s\n",OTADT,resp_body_start?"Yes":"No");
 			} else
 				if (buff_len > 0 && resp_body_start) { /*deal with response body*/
 					err = esp_ota_write( update_handle, (const void *)tempb, buff_len);
 					if (err != ESP_OK) {
-						if(deb)
-							printf( "Error: esp_ota_write failed! err=0x%x\n", err);
+						if(theConf.traceflag & (1<<OTAD))
+							printf( "%sError: esp_ota_write failed! err=0x%x\n",OTADT, err);
 						task_fatal_error();
 						if(blinker)
 							vTaskDelete(blinker);
@@ -246,7 +270,7 @@ static void firmUpdate(void *pArg)
 					//	printf("Have written image length %d\n", binary_file_length);
 
 					como = !como;
-					if(deb)
+					if(theConf.traceflag & (1<<OTAD))
 					{
 						if(como)
 							printf(".");
@@ -258,21 +282,21 @@ static void firmUpdate(void *pArg)
 				} else
 					if (buff_len == 0) {  /*packet over*/
 						fflag = false;
-						if(deb)
-							printf( "Connection closed, all packets received\n");
+						if(theConf.traceflag & (1<<OTAD))
+							printf( "%sConnection closed, all packets received\n",OTADT);
 						close(socket_id);
 					} else {
-						if(deb)
-							printf("Unexpected recv result\n");
+						if(theConf.traceflag & (1<<OTAD))
+							printf("%sUnexpected recv result\n",OTADT);
 					}
 	}
 
-	if(deb)
-		printf("\nTotal Write binary data length : %d\n", binary_file_length);
+	if(theConf.traceflag & (1<<OTAD))
+		printf("\n%sTotal Write binary data length : %d\n",OTADT, binary_file_length);
 
 	if (esp_ota_end(update_handle) != ESP_OK) {
-		if(deb)
-			printf( "esp_ota_end failed!\n");
+		if(theConf.traceflag & (1<<OTAD))
+			printf( "%sesp_ota_end failed!\n",OTADT);
 		task_fatal_error();
 		if(blinker)
 			vTaskDelete(blinker);
@@ -280,8 +304,8 @@ static void firmUpdate(void *pArg)
 	}
 	err = esp_ota_set_boot_partition(update_partition);
 	if (err != ESP_OK) {
-		if(deb)
-			printf( "esp_ota_set_boot_partition failed! err=0x%x\n", err);
+		if(theConf.traceflag & (1<<OTAD))
+			printf( "%sesp_ota_set_boot_partition failed! err=0x%x\n",OTADT, err);
 		task_fatal_error();
 		if(blinker)
 			vTaskDelete(blinker);
@@ -293,7 +317,7 @@ exit:	printf("Prepare to restart system!\n");
 	return ;
 }
 
-esp_err_t _http_event_handle(esp_http_client_event_t *evt)
+static esp_err_t _http_event_handle(esp_http_client_event_t *evt)
 {
     switch(evt->event_id) {
         case HTTP_EVENT_ERROR:
@@ -316,7 +340,6 @@ esp_err_t _http_event_handle(esp_http_client_event_t *evt)
             	van+=evt->data_len;
              //   printf("%.*s", evt->data_len, (char*)evt->data);
             }
-
             break;
         case HTTP_EVENT_ON_FINISH:
             ESP_LOGI(TAG, "HTTP_EVENT_ON_FINISH");
@@ -347,7 +370,8 @@ static void loadit(parg *pArg)
 	           esp_http_client_get_content_length(client));
 	}
 	esp_http_client_cleanup(client);
-	printf("Received %d bytes\n",van);
+	if(theConf.traceflag & (1<<WEBD))
+		printf("%sReceived %d bytes\n",WEBDT,van);
 	u32 monton=0;
 	for(int a=0;a<van;a++)
 		monton+=tempb[a];
@@ -369,7 +393,7 @@ float DS_get_temp(DS18B20_Info * cual)
 }
 
 
-void init_temp()
+static void init_temp()
 {
 
 	  owb = owb_rmt_initialize(&rmt_driver_info, DSPIN, RMT_CHANNEL_1, RMT_CHANNEL_0);
@@ -397,7 +421,7 @@ void init_temp()
 #endif
 
 #ifdef WITHMETERS
-void gpio_isr_handler(void * arg)
+static void gpio_isr_handler(void * arg)
 {
 	BaseType_t tasker;
 	u32 fueron;
@@ -409,8 +433,8 @@ void gpio_isr_handler(void * arg)
 		diaHoraTarifa=100;
 
 	uint8_t como=gpio_get_level((gpio_num_t)meter->pin);
-	if(deb)
-		ets_printf("%d pin %d pos %d\n",como,meter->pin,meter->pos);
+	if(theConf.traceflag & (1<<INTD))
+		ets_printf("%s%d pin %d pos %d\n",INTDT,como,meter->pin,meter->pos);
 
 		if(como)
 		{
@@ -435,9 +459,12 @@ void gpio_isr_handler(void * arg)
 				 meter->beatSave++;
 				 meter->beatSaveRaw++;
 				 meter->currentBeat++;
+
 				if((meter->currentBeat % (meter->beatsPerkW/10))==0) //every GMAXLOSSPER interval
 				{
 					meter->saveit=false;
+					if(theConf.traceflag & (1<<INTD))
+						ets_printf("%sBPK %d Beat %d\n",INTDT,meter->beatsPerkW/10,(meter->currentBeat % (meter->beatsPerkW/10)));
 
 					if(meter->beatSaveRaw >= meter->beatsPerkW*diaHoraTarifa/100)
 					{
@@ -466,45 +493,62 @@ void getMessage(void *pArg)
 //static void getMessage(int sock)
 {
     int len;
-    struct timeval to;
+  //  struct timeval to;
     cmdType comando;
-    int sock =(int)pArg;
-    	to.tv_sec = 2;
-        to.tv_usec = 0;
-		gpio_set_level((gpio_num_t)WIFILED, 1);
+    task_param *theP=(task_param*)pArg;
 
-	if (setsockopt(sock,SOL_SOCKET,SO_RCVTIMEO,&to,sizeof(to)) < 0)
-	{
-		printf("Unable to set read timeout on socket!");
-		return;
-	}
 
-//	printf("Getm%d heap %d\n",sock,esp_get_free_heap_size());
+    int sock =theP->sock_p;
+    int pos=theP->pos_p;
+	if(theConf.traceflag & (1<<CMDD))
+		printf("%sStarting GetM Fd %d Pos %d\n",CMDDT,sock,pos);
+  //  to.tv_sec = 2;
+    //to.tv_usec = 0;
 
-	comando.mensaje=(char*)malloc(MAXBUFFER);
+//	if (setsockopt(sock,SOL_SOCKET,SO_RCVTIMEO,&to,sizeof(to)) < 0)
+//	{
+//		printf("Unable to set read timeout on socket!");
+//		return;
+//	}
 
-    do {
-        len = recv(sock, comando.mensaje, MAXBUFFER-1, 0);
-        if (len < 0) {
-      //     printf("Error occurred during receiving: errno %d fueron %d\n", errno,fueron);
-            break;
-        } else if (len == 0) {
-      //     printf( "Connection closed: errno %d fueron %d\n", errno,fueron);
-           break;
-        } else {
-        	llevoMsg++;
-        	comando.mensaje[len] = 0;
-        	comando.cmd=0;
-        	comando.fd=sock;
-        	if(mqttR)
-        		xQueueSend(mqttR,&comando,0);
-        	//break; //if break, will not allow for stream of multiple messages. Must not break. Close or Timeout closes socket
-        }
-    } while (len > 0);
+	if(theConf.traceflag & (1<<CMDD))
+		printf("%sGetm%d heap %d\n",CMDDT,sock,esp_get_free_heap_size());
+
+		while(1)
+		{
+			do {
+				comando.mensaje=(char*)malloc(MAXBUFFER);
+				len = recv(sock, comando.mensaje, MAXBUFFER-1, 0);
+				if (len < 0) {
+					if(theConf.traceflag & (1<<CMDD))
+						printf("%sError occurred during receiving: errno %d fd: %d Pos %d\n",CMDDT, errno,sock,pos);
+					goto exit;
+				} else if (len == 0) {
+					if(theConf.traceflag & (1<<CMDD))
+						printf("%sConnection closed: errno %d \n", CMDDT,errno);
+				   goto exit;
+				} else {
+					gpio_set_level((gpio_num_t)WIFILED, 1);
+					llevoMsg++;
+					comando.mensaje[len] = 0;
+					comando.pos=pos;
+					comando.fd=sock;
+					if(mqttR)
+						xQueueSend(mqttR,&comando,0);
+					gpio_set_level((gpio_num_t)WIFILED, 0);
+
+					//break; //if break, will not allow for stream of multiple messages. Must not break. Close or Timeout closes socket
+				}
+			} while (len > 0);
+		}
+	exit:
+	losMacs[pos].theHandle=NULL;
+	if(theConf.traceflag & (1<<CMDD))
+		printf("%sGetm task failed leaving\n",CMDDT);
 	shutdown(sock, 0);
 	close(sock);
-	gpio_set_level((gpio_num_t)WIFILED, 0);
-
+	if(comando.mensaje)
+		free(comando.mensaje);
 	vTaskDelete(NULL);
 }
 
@@ -514,10 +558,11 @@ static void buildMgr(void *pvParameters)
     int 						addr_family;
     int 						ip_protocol;
     int 						sock=0;
-    struct sockaddr_in6 		source_addr;
+    struct sockaddr_in 			source_addr;
     uint 						addr_len = sizeof(source_addr);
     struct sockaddr_in 			dest_addr;
     char						tt[20];
+    task_param					theP;
 
     while (true) {
 
@@ -561,22 +606,49 @@ static void buildMgr(void *pvParameters)
                 ESP_LOGE(TAG, "Unable to accept connection: errno %d", errno);
                 break;
             }
+
+            struct sockaddr_in* pV4Addr = (struct sockaddr_in*)&source_addr;
+            struct in_addr ipAddr = pV4Addr->sin_addr;
+
+            char str[INET_ADDRSTRLEN];
+            char str2[INET_ADDRSTRLEN];
+            inet_ntop( AF_INET, &ipAddr, str, INET_ADDRSTRLEN );
+            inet_ntop( AF_INET,(in_addr*)&losMacs[0].theIp, str2, INET_ADDRSTRLEN );
+
             sprintf(tt,"getm%d",sock);
     //        printf("%s Heap %d\n",tt,esp_get_free_heap_size());
 	//		gpio_set_level((gpio_num_t)WIFILED, 1);
+            int  a,b;
+            memcpy((void*)&a,(void*)&losMacs[0].theIp,4);
+            memcpy((void*)&b,(void*)&ipAddr,4);
 
-        	xTaskCreate(&getMessage,tt,8192,(void*)sock, 4, NULL);
+        //    printf("Source Ip (%s)%x == (%s)%x \n",str2,a,str,b);
+            a=find_ip(b);
+			if(a<0)
+			{
+				if(theConf.traceflag & (1<<CMDD))
+					printf("%sInternal error no Ip %x\n",CMDDT,b);
+			}
+            //	else
+            //		printf("Found Ip %x at Pos %d ip %x\n",b,a,losMacs[a].theIp);
+			losMacs[a].theSock=sock;
+			theP.pos_p=a;
+			theP.sock_p=sock;
+        	xTaskCreate(&getMessage,tt,GETMT,(void*)&theP, 4, &losMacs[a].theHandle);
        // 	getMessage(sock);
 	//		gpio_set_level((gpio_num_t)WIFILED, 0);
 
         }
+		if(theConf.traceflag & (1<<CMDD))
+			printf("%sBuildmgr listend error %d\n",CMDDT,errno);
     }
+    printf("BuildMgr will die OMG....\n");
     vTaskDelete(NULL);
 }
 
 
 #ifdef WITHMETERS
-void install_meter_interrupts()
+static void install_meter_interrupts()
 {
 	char 	temp[30];
 	u8 		mac[6];
@@ -595,7 +667,8 @@ void install_meter_interrupts()
 
 	esp_wifi_get_mac(ESP_IF_WIFI_STA, (u8*)&mac);
 	sprintf(temp,"MeterIoT%02x%02x",mac[4],mac[5]);
-	printf("Mac %s\n",temp);
+	if(theConf.traceflag & (1<<BOOTD))
+		printf("%sMac %s\n",BOOTDT,temp);
 	gpio_install_isr_service(ESP_INTR_FLAG_IRAM);
 
 	io_conf.intr_type = GPIO_INTR_ANYEDGE;
@@ -634,64 +707,45 @@ void install_meter_interrupts()
 	}
 #endif
 
-int find_mac(uint32_t esteMac)
+static void close_mac(int cual)
 {
-	for (int a=0;a<vanMacs;a++)
-	{
-		if(losMacs[a].macAdd==esteMac)
-			return a;
-	}
-	return -1;
-}
+	int err;
+	if(theConf.traceflag & (1<<CMDD))
+		printf("%sClosing[%d] FD %d\n",CMDDT,cual,losMacs[cual].theSock);
+	if(losMacs[cual].theHandle)
+		vTaskDelete(losMacs[cual].theHandle);// kill the task
+	if(losMacs[cual].theBuffer)
+		free(losMacs[cual].theBuffer); //free the buffer
+	if(losMacs[cual].theSock>=3)
+		close(losMacs[cual].theSock); //close the socket
 
-int add_new_mac(uint32_t esteMac)
-{
-	vanadd++;
-	if(vanadd>100)
+	if(cual==vanMacs-1)
 	{
-		vanadd=0;
-		vanvueltas++;
-		memset(&losMacs,0,sizeof(losMacs));
+		memset((void*)&losMacs[cual],0,sizeof(losMacs[cual]));
+		vanMacs--;
+		return;
+	}
+	memmove(&losMacs[cual],&losMacs[cual+1],(vanMacs-cual-1)*sizeof(losMacs[0]));
+	vanMacs--;
+	if (vanMacs<0)//just in case
 		vanMacs=0;
-	}
-	for (int a=0;a<vanMacs;a++)
-	{
-		if(losMacs[a].macAdd==esteMac){
-			losMacs[a].trans++;
-			time(&losMacs[a].lastUpdate);
-			return a;
-		}
-	}
-	losMacs[vanMacs++].macAdd=esteMac;
-	return -1;
 }
 
 static void wifi_event_handler(void* arg, esp_event_base_t event_base,
                                 int32_t event_id, void* event_data)
 {
-	wifi_sta_list_t wifi_sta_list;
-	tcpip_adapter_sta_list_t adapter_sta_list;
-	uint32_t bigmac;
-	tcpip_adapter_sta_info_t station;
-
-
+	u32 newmac;
+	wifi_event_ap_staconnected_t *ev=(wifi_event_ap_staconnected_t*)event_data;
     switch (event_id) {
-    case  WIFI_EVENT_AP_STACONNECTED:
-   // 	printf("AP Station in\n");
-    	memset(&wifi_sta_list, 0, sizeof(wifi_sta_list));
-    	memset(&adapter_sta_list, 0, sizeof(adapter_sta_list));
-    	ESP_ERROR_CHECK(esp_wifi_ap_get_sta_list(&wifi_sta_list));
-    	ESP_ERROR_CHECK(tcpip_adapter_get_sta_list(&wifi_sta_list, &adapter_sta_list));
 
-    	for(int i = 0; i < adapter_sta_list.num; i++)
-    	{
-			station = adapter_sta_list.sta[i];
-			bigmac=0;
-			memcpy(&bigmac,&station.mac[2],4);
-			add_new_mac(bigmac);
-    	}
+    case  WIFI_EVENT_AP_STACONNECTED:
+		if(theConf.traceflag & (1<<WIFID))
+    	printf("%sWIFIMac connected %02x:%02x:%02x:%02x:%02x:%02x\n",WIFIDT,ev->mac[0],ev->mac[1],ev->mac[2],ev->mac[3],ev->mac[4],ev->mac[5]);
+    	memcpy((void*)&newmac,&ev->mac[2],4);
+    	update_mac(newmac);
     	break;
 	case WIFI_EVENT_AP_STADISCONNECTED:
+    //	printf("Mac disco %02x:%02x:%02x:%02x:%02x:%02x\n",ev->mac[0],ev->mac[1],ev->mac[2],ev->mac[3],ev->mac[4],ev->mac[5]);
 		break;
     case WIFI_EVENT_AP_START:
         	break;
@@ -718,7 +772,22 @@ static void initialize_sntp(void)
     sntp_init();
 }
 
-void sntpget(void *pArgs)
+static void updateDateTime(loginT loginData)
+{
+    struct tm timeinfo;
+
+	localtime_r(&loginData.thedate, &timeinfo);
+	diaHoraTarifa=loginData.theTariff;// Host will give us Hourly Tariff. No need to store
+
+	mesg=timeinfo.tm_mon;
+	diag=timeinfo.tm_mday;
+	yearg=timeinfo.tm_year+1900;
+	horag=timeinfo.tm_hour;
+	struct timeval now = { .tv_sec = loginData.thedate, .tv_usec=0};
+	settimeofday(&now, NULL);
+}
+
+static void sntpget(void *pArgs)
 {
     char strftime_buf[64];
     time_t now;
@@ -748,15 +817,73 @@ void sntpget(void *pArgs)
     vTaskDelete(NULL);
 }
 
+static void update_ip()
+{
+	wifi_sta_list_t wifi_sta_list;
+	tcpip_adapter_sta_list_t adapter_sta_list;
+	tcpip_adapter_sta_info_t station;
+
+	memset(&wifi_sta_list, 0, sizeof(wifi_sta_list));
+	memset(&adapter_sta_list, 0, sizeof(adapter_sta_list));
+
+	esp_wifi_ap_get_sta_list(&wifi_sta_list);
+	tcpip_adapter_get_sta_list(&wifi_sta_list, &adapter_sta_list);
+
+	for (int i = 0; i < adapter_sta_list.num; i++)
+	{
+		station = adapter_sta_list.sta[i];
+		if(theConf.traceflag & (1<<CMDD))
+		{
+			printf("[%sstation[%d] MAC ",CMDDT,i);
+			for(int i = 0; i< 6; i++)
+			{
+				printf("%02X", station.mac[i]);
+				if(i<5)printf(":");
+			}
+		}
+		u32 bigmac;
+		memcpy(&bigmac,&station.mac[2],4);
+		int este=find_mac(bigmac);
+		if(este<0)
+		{
+			if(theConf.traceflag & (1<<CMDD))
+				printf("%sNot registered mac %x found \n",CMDDT,bigmac);
+
+		}
+		else
+			memcpy((void*)&losMacs[este].theIp,(void*)&station.ip,4);
+	}
+}
+
+static void update_mac(u32 newmac)
+{
+
+
+	 int este=find_mac(newmac);
+ 	 if(este>=0)
+ 		close_mac(este);
+
+ 	 losMacs[vanMacs].trans=0;
+ 	 losMacs[vanMacs].theIp=0;
+ 	 losMacs[vanMacs].theHandle=NULL;
+ 	 losMacs[vanMacs].theBuffer=NULL;
+ 	 losMacs[vanMacs].theSock=-1;
+ 	 losMacs[vanMacs++].macAdd=newmac;
+	//now add it
+}
+
 static void ip_event_handler(void* arg, esp_event_base_t event_base,
                                 int32_t event_id, void* event_data)
 {
 	 wifi_config_t wifi_config;
+	// ip_event_got_ip_t *ev=(ip_event_got_ip_t*)event_data;
 
 	    memset(&wifi_config,0,sizeof(wifi_config));//very important
 
     switch (event_id) {
     case IP_EVENT_AP_STAIPASSIGNED:
+//    	printf("\nIP Assigned:" IPSTR, IP2STR(&ev->ip_info.ip));
+    	update_ip();
     	break;
         case IP_EVENT_STA_GOT_IP:
             strcpy((char*)wifi_config.ap.ssid,"Meteriot");
@@ -821,6 +948,7 @@ static void wifi_init(void)
 
     ESP_ERROR_CHECK(esp_event_handler_register(WIFI_EVENT, ESP_EVENT_ANY_ID, &wifi_event_handler, NULL));
     ESP_ERROR_CHECK(esp_event_handler_register(IP_EVENT, IP_EVENT_STA_GOT_IP, &ip_event_handler, NULL));
+    ESP_ERROR_CHECK(esp_event_handler_register(IP_EVENT, IP_EVENT_AP_STAIPASSIGNED, &ip_event_handler, NULL));
 
     wifi_init_config_t cfg = WIFI_INIT_CONFIG_DEFAULT();
     ESP_ERROR_CHECK(esp_wifi_init(&cfg));
@@ -865,23 +993,22 @@ static esp_err_t mqtt_event_handler(esp_mqtt_event_handle_t event)
             break;
         case MQTT_EVENT_PUBLISHED:
             ESP_LOGI(TAG, "MQTT_EVENT_PUBLISHED, msg_id=%d", event->msg_id);
-            if(deb)
-            	printf("Published\n");
+        	if(theConf.traceflag & (1<<MQTTD))
+            	printf("%sPublished\n",MQTTDT);
             esp_mqtt_client_unsubscribe(client, "MeterIoT/Chillo/Chillo/CMD");//bit is set by unsubscribe
             break;
 
         case MQTT_EVENT_DATA:
            ESP_LOGI(TAG, "MQTT_EVENT_DATA");
-           if(deb)
+       	if(theConf.traceflag & (1<<MQTTD))
            {
-        	   printf("TOPIC=%.*s\r\n", event->topic_len, event->topic);
-        	   printf("DATA=%.*s\r\n", event->data_len, event->data);
+        	   printf("%sTOPIC=%.*s\r\n",MQTTDT,event->topic_len, event->topic);
+        	   printf("%sDATA=%.*s\r\n", MQTTDT,event->data_len, event->data);
            }
            theCmd.mensaje=(char*)malloc(MAXBUFFER);
             if(event->data_len)// 0 will be the retained msg being erased
             {
             	memcpy(theCmd.mensaje,event->data,event->data_len);
-            	theCmd.cmd=event->data_len;
             	xQueueSend( mqttR,&theCmd,0 );
             }
             break;
@@ -894,14 +1021,14 @@ static esp_err_t mqtt_event_handler(esp_mqtt_event_handle_t event)
             xEventGroupClearBits(wifi_event_group, MQTT_BIT|DONE_BIT);
         	break;
         default:
-        	if(deb)
-        		printf("Event %d\n",event->event_id);
+        	if(theConf.traceflag & (1<<MQTTD))
+        		printf("%sEvent %d\n",MQTTDT,event->event_id);
             break;
     }
     return ESP_OK;
 }
 
-void sendStatusNow(meterType* meter)
+static void sendStatusNow(meterType* meter)
 {
 	cJSON *root=cJSON_CreateObject();
 	if(root==NULL)
@@ -915,15 +1042,15 @@ void sendStatusNow(meterType* meter)
 	cJSON_AddNumberToObject(root,"KwH",				meter->curLife);
 	cJSON_AddNumberToObject(root,"Beats",			meter->currentBeat);
 	cJSON_AddNumberToObject(root,"Pulse",			meter->pulse);
+	cJSON_AddNumberToObject(root,"Pos",				meter->pos);
 #ifdef TEMP
 		cJSON_AddNumberToObject(root,"Temp",			ttemp);
 #endif
 
 	char *rendered=cJSON_Print(root);
-	if (deb)
+	if(theConf.traceflag & (1<<MQTTT))
 	{
-		//printf("[MQTTD]Json %s\n",rendered);
-		printf("Publishing message Sent %d\n",++sentTotal);
+		printf("%sPublishing message Sent %d\n",MQTTTT,++sentTotal);
 	}
 	esp_mqtt_client_publish(clientCloud, "MeterIoT/Chillo/Chillo/CONTROL", rendered, 0, 1,0);
 
@@ -932,7 +1059,7 @@ void sendStatusNow(meterType* meter)
 	}
 
 
- void submode(void * pArg)
+static void submode(void * pArg)
 {
 	 meterType meter;
 
@@ -942,18 +1069,20 @@ void sendStatusNow(meterType* meter)
 		{
 			if( xQueueReceive( mqttQ, &meter, portMAX_DELAY ))
 			{
-				if (deb)
-					printf("Heap after submode rx %d\n",esp_get_free_heap_size());
+				xQueueSend( framQ,&meter,0);//copy to fram Manager
 
-				if (deb)
-					printf("Ready to send for Pin %d Pos %d Qwaiting=%d\n",meter.pin,meter.pos,uxQueueMessagesWaiting( mqttQ ));
+				if(theConf.traceflag & (1<<CMDD))
+					printf("%sHeap after submode rx %d\n",CMDDT,esp_get_free_heap_size());
+
+				if(theConf.traceflag & (1<<CMDD))
+					printf("%sReady to send for Pin %d Pos %d Qwaiting=%d\n",CMDDT,meter.pin,meter.pos,uxQueueMessagesWaiting( mqttQ ));
 
 				if(!clientCloud) //just in case
 						printf("Error no client mqtt\n");
 				else
 				{
-					if (deb)
-						printf("Starting mqtt\n");
+					if(theConf.traceflag & (1<<CMDD))
+						printf("%sStarting mqtt\n",CMDDT);
 
 					xEventGroupClearBits(wifi_event_group, MQTT_BIT);//clear flag to wait on
 
@@ -969,11 +1098,10 @@ void sendStatusNow(meterType* meter)
 							if(xEventGroupWaitBits(wifi_event_group, MQTT_BIT, false, true, 4000/  portTICK_RATE_MS))
 							{
 								//wait max 4secs maxs for connection
-							//	if (deb)
-								//	printf("Sending state %d\n",esp_mqtt_get_state(clientCloud));
+								if(theConf.traceflag & (1<<CMDD))
+									printf("%sSending Mqtt state\n",CMDDT);
 
 								xEventGroupClearBits(wifi_event_group, PUB_BIT); // clear our waiting bit
-
 								sendStatusNow(&theMeters[meter.pos]);
 
 							//	sendStatusNow(&algo);//send whatever message
@@ -990,8 +1118,8 @@ void sendStatusNow(meterType* meter)
 								//	if(!xEventGroupWaitBits(wifi_event_group, STOP_BIT, false, true,  4000/  portTICK_RATE_MS))
 									//	printf("Could not stop\n");
 								//	else
-									if (deb)
-										printf("Stopping\n");
+									if(theConf.traceflag & (1<<CMDD))
+										printf("%sStopping\n",CMDDT);
 								}
 					}
 						else
@@ -1012,8 +1140,8 @@ void sendStatusNow(meterType* meter)
 						}
 					}
 				}
-				if(deb)
-					printf("Sent %d pin %d. Heap after submode %d\n",++sentTotal,meter.pin,esp_get_free_heap_size());
+				if(theConf.traceflag & (1<<CMDD))
+					printf("%sSent %d pin %d. Heap after submode %d\n",CMDDT,++sentTotal,meter.pin,esp_get_free_heap_size());
 
 			}
 		else
@@ -1028,14 +1156,21 @@ static void mqtt_app_start(void)
 {
 	     esp_mqtt_client_config_t mqtt_cfg;
 	     memset((void*)&mqtt_cfg,0,sizeof(mqtt_cfg));
-
+#ifdef MQTTLOCAL
+	     mqtt_cfg.client_id=				"anybody";
+	     mqtt_cfg.username=					"";
+	     mqtt_cfg.password=					"";
+	     mqtt_cfg.uri = 					"mqtt://192.168.100.7:1883";
+	     mqtt_cfg.event_handle = 			mqtt_event_handler;
+	     mqtt_cfg.disable_auto_reconnect=	true;
+#else
 	     mqtt_cfg.client_id=				"anybody";
 	     mqtt_cfg.username=					"yyfmmvmh";
 	     mqtt_cfg.password=					"zE6oUgjoBQq4";
 	     mqtt_cfg.uri = 					"mqtt://m15.cloudmqtt.com:18247";
 	     mqtt_cfg.event_handle = 			mqtt_event_handler;
 	     mqtt_cfg.disable_auto_reconnect=	true;
-
+#endif
 		mqttQ = xQueueCreate( 20, sizeof( meterType ) );
 		if(!mqttQ)
 			printf("Failed queue\n");
@@ -1049,10 +1184,14 @@ static void mqtt_app_start(void)
 	    	printf("Not configured Mqtt\n");
 	    	return;
 	    }
+	//    if(esp_mqtt_client_start(clientCloud)!=;
+	  //  if (err !=ESP_OK)
+	    //	printf("Error connect mqtt %d\n",err);
+
 	//    esp_mqtt_client_start(clientCloud); //should be started by the SubMode task
 }
 
- void firmwareCmd(parg *pArg)
+static void firmwareCmd(parg *pArg)
 {
 		for (int a=0;a<4;a++)
 			gpio_isr_handler_remove((gpio_num_t)theMeters[a].pin);
@@ -1060,7 +1199,7 @@ static void mqtt_app_start(void)
 		xTaskCreate(&firmUpdate,"U571",8192,NULL, 5, NULL);
 }
 
- void loginCmd(parg* argument)
+ static void loginCmd(parg* argument)
 {
 	loginT loginData;
 	time(&loginData.thedate);
@@ -1083,13 +1222,13 @@ static void mqtt_app_start(void)
 			if(cual>=0)
 			{
 				tallies[cual][pos]++;
-				if(msgf)
-					printf("Meter[%d][%d]=%d\n",cual,pos,tallies[cual][pos]);
+				if(theConf.traceflag & (1<<CMDD))
+					printf("%sMeter[%d][%d]=%d\n",CMDDT,cual,pos,tallies[cual][pos]);
 			}
 			else
 			{
-				if(msgf)
-					printf("Mac not found %x\n",macc);
+				if(theConf.traceflag & (1<<CMDD))
+					printf("%sMac not found %x\n",CMDDT,macc);
 			}
 		}//lmac && lpos
 #ifdef DISPLAY
@@ -1143,8 +1282,8 @@ static void cmdManager(void* arg)
 	{
 		if( xQueueReceive( mqttR, &cmd, portMAX_DELAY ))
 		{
-			if(msgf)
-				ESP_LOGW(TAG, "Received: %s Fd %d Queue %d Heap %d",cmd.mensaje,cmd.fd,uxQueueMessagesWaiting(mqttR),esp_get_free_heap_size());
+			if(theConf.traceflag & (1<<MSGD))
+				printf("%sReceived: %s Fd %d Queue %d Heap %d\n",MSGDT,cmd.mensaje,cmd.fd,uxQueueMessagesWaiting(mqttR),esp_get_free_heap_size());
 
 			elcmd= cJSON_Parse(cmd.mensaje);
 			if(elcmd)
@@ -1153,13 +1292,14 @@ static void cmdManager(void* arg)
 				if(monton)
 				{
 					int son=cJSON_GetArraySize(monton);
-					printf("Batch son %d ",son);
+					losMacs[cmd.pos].trans+=son;
+					time(&losMacs[cmd.pos].lastUpdate);
 					for (int a=0;a<son;a++)
 					{
 						cJSON *cmdIteml = cJSON_GetArrayItem(monton, a);//next item
 						cJSON *cmdd= cJSON_GetObjectItem(cmdIteml,"cmd"); //get cmd. Nopt detecting invalid cmd
-						if(deb)
-							printf("Array[%d] cmd is %s\n",a,cmdd->valuestring);
+						if(theConf.traceflag & (1<<CMDD))
+							printf("%sArray[%d] cmd is %s\n",CMDDT,a,cmdd->valuestring);
 
 						int cualf=findCommand(string(cmdd->valuestring));
 						if(cualf>=0)
@@ -1175,17 +1315,21 @@ static void cmdManager(void* arg)
 
 					}// array
 				}//batch
+
 				if(elcmd)
 					cJSON_Delete(elcmd);
 			}
 			else
-				printf("Could not parse cmd\n");
+				if(theConf.traceflag & (1<<CMDD))
+					printf("%sCould not parse cmd\n",CMDDT);
 			free(cmd.mensaje); // Data is transfered via pointer from a malloc. Free it here.
-			printf("MqttManger heap %d\n",esp_get_free_heap_size());
+			if(theConf.traceflag & (1<<MSGD))
+				printf("%sMqttManger heap %d\n",MSGDT,esp_get_free_heap_size());
 
 		}
 		else
-			printf("CmdQueue Error\n");
+			if(theConf.traceflag & (1<<CMDD))
+				printf("%sCmdQueue Error\n",CMDDT);
 	}//while
 }
 
@@ -1214,21 +1358,21 @@ void initScreen()
 #endif
 
 #ifdef MQT
-void sender(void *pArg)
+static void sender(void *pArg)
 {
 	meterType algo;
 
 	while(true)
 	{
-		if(deb)
-			printf("Heap before send %d\n",esp_get_free_heap_size());
+		if(theConf.traceflag & (1<<CMDD))
+			printf("%sHeap before send %d\n",CMDDT,esp_get_free_heap_size());
 		if(!xQueueSend( mqttQ,&algo,0))
 			printf("Error sending queue %d\n",uxQueueMessagesWaiting( mqttQ ));
 		else
-			if(deb)
+			if(theConf.traceflag & (1<<CMDD))
 			{
 				//printf("Sending %d\n",algo++);
-				printf("Heap after send %d\n",esp_get_free_heap_size());
+				printf("%sHeap after send %d\n",CMDDT,esp_get_free_heap_size());
 			}
 
 
@@ -1241,6 +1385,227 @@ void sender(void *pArg)
 	}
 }
 #endif
+
+static void read_flash()
+{
+	esp_err_t q ;
+	size_t largo;
+	q = nvs_open("config", NVS_READONLY, &nvshandle);
+	if(q!=ESP_OK)
+	{
+		printf("Error opening NVS Read File %x\n",q);
+		return;
+	}
+
+	largo=sizeof(theConf);
+	q=nvs_get_blob(nvshandle,"config",(void*)&theConf,&largo);
+
+	if (q !=ESP_OK)
+		printf("Error read %x largo %d aqui %d\n",q,largo,sizeof(theConf));
+	nvs_close(nvshandle);
+
+}
+
+void write_to_flash() //save our configuration
+{
+	esp_err_t q ;
+	q = nvs_open("config", NVS_READWRITE, &nvshandle);
+	if(q!=ESP_OK)
+	{
+		printf("Error opening NVS File RW %x\n",q);
+		return;
+	}
+	size_t req=sizeof(theConf);
+	q=nvs_set_blob(nvshandle,"config",(void*)&theConf,&req);
+	if (q ==ESP_OK)
+		q = nvs_commit(nvshandle);
+	nvs_close(nvshandle);
+}
+
+static void write_to_fram(u8 meter,bool addit)
+{
+	time_t timeH;
+    struct tm timeinfo;
+
+	// FRAM Semaphore is taken by the Interrupt Manager. Safe to work.
+	scratchTypespi scratch;
+    time(&timeH);
+	localtime_r(&timeH, &timeinfo);
+	mesg=timeinfo.tm_mon;
+	diag=timeinfo.tm_mday-1;
+	yearg=timeinfo.tm_year+1900;
+	horag=timeinfo.tm_hour-1;
+//	if(aqui.traceflag & (1<<BEATD)) //Should not print. semaphore is taking longer
+	//		printf("[BEATD]Save KWH Meter %d Month %d Day %d Hour %d Year %d lifekWh %d beats %d addkw %d\n",meter,mesg,diag,horag,yearg,
+	//					theMeters.curLife,theMeters.currentBeat,addit);
+			if(addit)
+			{
+				theMeters[meter].curLife++;
+				theMeters[meter].curMonth++;
+				theMeters[meter].curDay++;
+				theMeters[meter].curHour++;
+				theMeters[meter].curCycle++;
+				time((time_t*)&theMeters[meter].lastKwHDate); //last time we saved data
+
+
+	scratch.medidor.state=1;                    //scratch written state. Must be 0 to be ok. Every 800-1000 beats so its worth it
+	scratch.medidor.meter=meter;
+	scratch.medidor.month=theMeters[meter].curMonth;
+	scratch.medidor.life=theMeters[meter].curLife;
+	scratch.medidor.day=theMeters[meter].curDay;
+	scratch.medidor.hora=theMeters[meter].curHour;
+	scratch.medidor.cycle=theMeters[meter].curCycle;
+	scratch.medidor.mesg=mesg;
+	scratch.medidor.diag=diag;
+	scratch.medidor.horag=horag;
+	scratch.medidor.yearg=yearg;
+	fram.write_recover(scratch);            //Power Failure recover register
+
+	fram.write_beat(meter,theMeters[meter].currentBeat);
+	fram.write_lifekwh(meter,theMeters[meter].curLife);
+	fram.write_month(meter,mesg,theMeters[meter].curMonth);
+	fram.write_monthraw(meter,mesg,theMeters[meter].curMonthRaw);
+	fram.write_day(meter,yearg,mesg,diag,theMeters[meter].curDay);
+	fram.write_dayraw(meter,yearg,mesg,diag,theMeters[meter].curDayRaw);
+	fram.write_hour(meter,yearg,mesg,diag,horag,theMeters[meter].curHour);
+	fram.write_hourraw(meter,yearg,mesg,diag,horag,theMeters[meter].curHourRaw);
+	fram.write_cycle(meter, mesg,theMeters[meter].curCycle);
+	fram.write_minamps(meter,theMeters[meter].minamps);
+	fram.write_maxamps(meter,theMeters[meter].maxamps);
+	fram.write_lifedate(meter,theMeters[meter].lastKwHDate);  //should be down after scratch record???
+	fram.write8(SCRATCHOFF,0); //Fast write first byte of Scratch record to 0=done.
+			}
+			else
+			fram.write_beat(meter,theMeters[meter].currentBeat);
+//	scratch.medidor.state=0;            // done state. OK
+//	FramSPI_write_recover(scratch);
+}
+
+static void load_from_fram(u8 meter)
+{
+	if(xSemaphoreTake(framSem, portMAX_DELAY/  portTICK_RATE_MS))
+	{
+		fram.read_lifekwh(meter,(u8*)&theMeters[meter].curLife);
+		fram.read_lifedate(meter,(u8*)&theMeters[meter].lastKwHDate);
+		fram.read_month(meter, mesg, (u8*)&theMeters[meter].curMonth);
+		fram.read_monthraw(meter, mesg, (u8*)&theMeters[meter].curMonthRaw);
+		fram.read_day(meter, yearg,mesg, diag, (u8*)&theMeters[meter].curDay);
+		fram.read_dayraw(meter, yearg,mesg, diag, (u8*)&theMeters[meter].curDayRaw);
+		fram.read_hour(meter, yearg,mesg, diag, horag, (u8*)&theMeters[meter].curHour);
+		fram.read_hourraw(meter, yearg,mesg, diag, horag, (u8*)&theMeters[meter].curHourRaw);
+		fram.read_cycle(meter, mesg, (u8*)&theMeters[meter].curCycle); //should we change this here too and use cycleMonth[meter]?????
+		fram.read_beat(meter,(u8*)&theMeters[meter].currentBeat);
+		theMeters[meter].oldbeat=theMeters[meter].currentBeat;
+		if(theConf.beatsPerKw[meter]==0)
+			theConf.beatsPerKw[meter]=800;// just in case div by 0 crash
+		u16 nada=theMeters[meter].currentBeat/theConf.beatsPerKw[meter];
+		theMeters[meter].beatSave=theMeters[meter].currentBeat-(nada*theConf.beatsPerKw[meter]);
+		theMeters[meter].beatSaveRaw=theMeters[meter].beatSave;
+		fram.read_minamps(meter,(u8*)&theMeters[meter].minamps);
+		fram.read_maxamps(meter,(u8*)&theMeters[meter].maxamps);
+		xSemaphoreGive(framSem);
+
+		if(theConf.traceflag & (1<<FRAMD))
+			printf("[BEATD]Loaded Meter %d curLife %d beat %d\n",meter,theMeters[meter].curLife,theMeters[meter].currentBeat);
+	}
+}
+
+
+static void recover_fram()
+{
+	char textl[100];
+
+	scratchTypespi scratch;
+	if(xSemaphoreTake(framSem, portMAX_DELAY/  portTICK_RATE_MS))
+	{
+		fram.read_recover(&scratch);
+
+		if (scratch.medidor.state==0)
+		{
+			xSemaphoreGive(framSem);
+			return;
+		}
+
+		sprintf(textl,"PF Recover. Meter %d State %d Life %x\n",scratch.medidor.meter,scratch.medidor.state,scratch.medidor.life);
+		fram.write_lifekwh(scratch.medidor.meter,scratch.medidor.life);
+		fram.write_month(scratch.medidor.meter,scratch.medidor.mesg,scratch.medidor.month);
+		fram.write_day(scratch.medidor.meter,scratch.medidor.yearg,scratch.medidor.mesg,scratch.medidor.diag,scratch.medidor.day);
+		fram.write_hour(scratch.medidor.meter,scratch.medidor.yearg,scratch.medidor.mesg,scratch.medidor.diag,scratch.medidor.horag,scratch.medidor.hora);
+		fram.write_cycle(scratch.medidor.meter, scratch.medidor.mesg,scratch.medidor.cycle);
+//		scratch.medidor.state=0;                                //variables written state
+//		fram.write_recover(scratch);
+//		scratch.medidor.state=0;                                // done state. OK
+//		fram.write_recover(scratch);
+		fram.write8(SCRATCHOFF,0); //Fast write first byte of Scratch record to 0=done.
+
+		xSemaphoreGive(framSem);
+		printf("Recover %s",textl);
+	}
+	//    mlog(GENERAL, textl);
+}
+
+
+static void init_fram()
+{
+	scratchTypespi scratch;
+	// FRAM Setup
+	fram.begin(FMOSI,FMISO,FCLK,FCS,&framSem); //will create SPI channel and Semaphore
+	//framWords=fram.intframWords;
+	spi_flash_init();
+
+
+
+		if(xSemaphoreTake(framSem, portMAX_DELAY/  portTICK_RATE_MS))
+		{
+			fram.read_recover(&scratch);
+			xSemaphoreGive(framSem);
+		}
+
+		if (scratch.medidor.state!=0)
+		{
+			//  check_log_file(); //Our log file. Need to open it before normal sequence
+			if(theConf.traceflag & (1<<FRAMD))
+				printf("Recover Fram\n");
+			recover_fram();
+			//recf=true;
+		}
+		//all okey in our Fram after this point
+
+		//load all devices counters from FRAM
+		for (int a=0;a<MAXDEVS;a++)
+			load_from_fram(a);
+
+}
+
+static void framManager(void * pArg)
+{
+	 meterType theMeter;
+
+	framQ = xQueueCreate( 20, sizeof( meterType ) );
+	if(!framQ)
+		printf("Failed queue Fram\n");
+
+	while(1)
+	{
+		while(uxQueueMessagesWaiting(framQ)>0)
+		{
+			if(xSemaphoreTake(framSem, portMAX_DELAY/  portTICK_RATE_MS))
+			{
+				while(uxQueueMessagesWaiting(framQ)>0)
+				{
+					if( xQueueReceive( framQ, &theMeter, 500/  portTICK_RATE_MS ))
+					{
+						write_to_fram(theMeter.pos,theMeter.saveit);
+						if(theConf.traceflag & (1<<FRAMD))
+							printf("%sSaving Meter %d add %d Beats %d\n",FRAMDT,theMeter.pos,theMeter.saveit,theMeter.currentBeat);
+					}
+				}
+				xSemaphoreGive(framSem);
+			}
+		}
+		delay(400);
+	}
+}
 
 
 static void init_vars()
@@ -1264,45 +1629,113 @@ static void init_vars()
 	strcpy((char*)&cmds[1].comando,"/ga_tariff");			cmds[1].code=loadit;
 	strcpy((char*)&cmds[2].comando,"/ga_status");			cmds[2].code=statusCmd;
 	strcpy((char*)&cmds[3].comando,"/ga_login");			cmds[3].code=loginCmd;
+
+	strcpy(lookuptable[0],"BOOTD");
+	strcpy(lookuptable[1],"WIFID");
+	strcpy(lookuptable[2],"MQTTD");
+	strcpy(lookuptable[3],"PUBSUBD");
+	strcpy(lookuptable[4],"OTAD");
+	strcpy(lookuptable[5],"CMDD");
+	strcpy(lookuptable[6],"WEBD");
+	strcpy(lookuptable[7],"GEND");
+	strcpy(lookuptable[8],"MQTTT");
+	strcpy(lookuptable[9],"HEAPD");
+	strcpy(lookuptable[10],"INTD");
+	strcpy(lookuptable[11],"FRAMD");
+	strcpy(lookuptable[12],"MSGD");
+
+	string debugs;
+
+	// add - sign to Keys
+	for (int a=0;a<NKEYS/2;a++)
+	{
+		debugs="-"+string(lookuptable[a]);
+		strcpy(lookuptable[a+NKEYS/2],debugs.c_str());
+	}
+}
+
+static void erase_config() //do the dirty work
+{
+	memset(&theConf,0,sizeof(theConf));
+	theConf.centinel=CENTINEL;
+	theConf.ssl=0;
+	theConf.beatsPerKw[0]=800;//old way
+	theConf.bounce[0]=100;
+	//    fram.write_tarif_bpw(0, 800); // since everything is going to be 0, BPW[0]=800 HUMMMMMM????? SHould load Tariffs after this
+	write_to_flash();
+	//	if(  xSemaphoreTake(logSem, portMAX_DELAY/  portTICK_RATE_MS))
+	//	{
+	//		fclose(bitacora);
+	//	    bitacora = fopen("/spiflash/log.txt", "w"); //truncate
+	//	    if(bitacora)
+	//	    {
+	//	    	fclose(bitacora); //Close and reopen r+
+	//		    bitacora = fopen("/spiflash/log.txt", "r+");
+	//		    if(!bitacora)
+	//		    	printf("Could not reopen logfile\n");
+	//		    else
+	//			    postLog(0,"Log cleared");
+	//	    }
+	//	    xSemaphoreGive(logSem);
+	//	}
+	if(theConf.traceflag & (1<<BOOTD))
+		printf("%sCentinel %x\n",BOOTDT,theConf.centinel);
 }
 
 void app_main()
 {
-	ESP_LOGI(TAG, "[APP] BuildMgr starting up..");
-    ESP_LOGI(TAG, "[APP] Free memory: %d bytes", esp_get_free_heap_size());
-    ESP_LOGI(TAG, "[APP] IDF version: %s", esp_get_idf_version());
+	if(theConf.traceflag & (1<<BOOTD))
+	{
+		printf("%sBuildMgr starting up..",BOOTDT);
+		printf("%sFree memory: %d bytes", BOOTDT,esp_get_free_heap_size());
+		printf("%sIDF version: %s", BOOTDT,esp_get_idf_version());
+	}
+	//#ifdef KBD
+	//    esp_log_level_set("*", ESP_LOG_NONE);
+	//#else
+	esp_log_level_set("*", ESP_LOG_WARN);
+	//#endif
 
-    deb=msgf=false;
 
-#ifdef KBD
-    esp_log_level_set("*", ESP_LOG_NONE);
-#else
-    esp_log_level_set("*", ESP_LOG_WARN);
-#endif
+	esp_err_t err = nvs_flash_init();
+    if (err == ESP_ERR_NVS_NO_FREE_PAGES|| err == ESP_ERR_NVS_NEW_VERSION_FOUND) {
+        // NVS partition was truncated and needs to be erased
+        // Retry nvs_flash_init
+    	printf("No free pages erased!!!!\n");
+        ESP_ERROR_CHECK(nvs_flash_erase());
+        err = nvs_flash_init();
+    }
+	ESP_ERROR_CHECK( err );
 
-
-   esp_err_t err = nvs_flash_init();
-   if (err == ESP_ERR_NVS_NO_FREE_PAGES || err == ESP_ERR_NVS_NEW_VERSION_FOUND)
-   {
-	   ESP_ERROR_CHECK(nvs_flash_erase());
-	   err = nvs_flash_init();
-   }
-   ESP_ERROR_CHECK( err );
+	read_flash();
+	if (theConf.centinel!=CENTINEL || !gpio_get_level((gpio_num_t)0))
+	{
+		if(theConf.traceflag & (1<<BOOTD))
+			printf("%sRead centinel %x",BOOTDT,theConf.centinel);
+		erase_config();
+	}
 
 	init_vars();
+	init_fram();
     wifi_init();
     mqtt_app_start();
+
 #ifdef DISPLAY
     initI2C();
     initScreen();
 #endif
+
 #ifdef TEMP
     init_temp();
 #endif
+
 #ifdef MQT
    	xTaskCreate(&sender,"U571",10240,NULL, 5, NULL);
 #endif
-   	xTaskCreate(&cmdManager,"mqtt",10240,NULL, 5, NULL);
+
+   	xTaskCreate(&cmdManager,"cmdMgr",10240,NULL, 5, NULL);
+	xTaskCreate(&framManager,"framMgr",4096,NULL, 4, NULL);
+
 #ifdef WITHMETERS
       install_meter_interrupts();
 #endif
@@ -1314,7 +1747,7 @@ void app_main()
 #endif
 
 #ifdef DISPLAY
-	xTaskCreate(&displayManager,"dispm",4096,NULL, 4, NULL);
+	xTaskCreate(&displayManager,"dispMgr",4096,NULL, 4, NULL);
 #endif
 
 }

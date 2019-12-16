@@ -8,6 +8,8 @@
 extern void drawString(int x, int y, string que, int fsize, int align,displayType showit,overType erase);
 #endif
 
+extern void write_to_flash();
+
 void printStationList()
 {
 	uint8_t them[4];
@@ -19,11 +21,9 @@ void printStationList()
 		localtime_r(&losMacs[a].lastUpdate, &timeinfo);
 			strftime(strftime_buf, sizeof(strftime_buf), "%c", &timeinfo);
 		memcpy(&them,&losMacs[a].macAdd,4);
-		printf("Mac[%d][%d]: %.2x:%.2x:%.2x:%.2x %s\n",a, losMacs[a].trans,
-		them[0],them[1],them[2],them[3],strftime_buf);
+		printf("Mac[%d][%d]:%.2x:%.2x:%.2x:%.2x Ip:%s (%s)\n",a,losMacs[a].trans,
+		them[0],them[1],them[2],them[3],(char*)ip4addr_ntoa((ip4_addr_t *)&losMacs[a].theIp),strftime_buf);
 	}
-	printf("Loops %d\n",vanvueltas);
-
 }
 
 
@@ -42,26 +42,49 @@ int get_string(uart_port_t uart_num,uint8_t cual,char *donde)
 				*donde=0;
 				return son;
 			}
-
 			else
 			{
 				*donde=(char)ch;
 				donde++;
 				son++;
 			}
-
 		}
-
 		vTaskDelay(30/portTICK_PERIOD_MS);
 	}
 }
 
+int cmdfromstring(string key)
+{
+    for (int i=0; i <NKEYS; i++)
+    {
+    	string s1=string(lookuptable[i]);
+    	if(strstr(s1.c_str(),key.c_str())!=NULL)
+            return i;
+    }
+    return -1;
+}
+
+
+int keyfromstring(char *key)
+{
+
+    int i;
+    for (i=0; i < NKEYS; i++) {
+
+        if (strcmp(lookuptable[i], key) == 0)
+            return i;
+    }
+    return 100;
+}
+
 void kbd(void *arg) {
-	int len;
+	int len,cualf,a;
 	uart_port_t uart_num = UART_NUM_0 ;
-	char s1[20];
+	char s1[20],s2[20];
 	char data[20];
 	u8 *p;
+	string ss;
+	char lastcmd=10;
 
 
 	uart_config_t uart_config = {
@@ -84,17 +107,30 @@ void kbd(void *arg) {
 		len = uart_read_bytes((uart_port_t)uart_num, (uint8_t*)data, sizeof(data),20);
 		if(len>0)
 		{
+			if(data[0]==10)
+				data[0]=lastcmd;
+			lastcmd=data[0];
+
 			switch(data[0])
 			{
+			case 'f':
+			case 'F':
+				printf("Format FRAM initValue:");
+				fflush(stdout);
+				len=get_string((uart_port_t)uart_num,10,s1);
+				if(len<=0)
+				{
+					printf("\n");
+					break;
+				}
+				fram.format(atoi(s1),tempb,sizeof(tempb),true);
+				printf("Format done\n");
+				break;
 			case '0':
 				printf("Dumping core...\n");
 				vTaskDelay(3000/portTICK_PERIOD_MS);
 				p=0;
 				*p=0;
-				break;
-			case '8':
-				msgf=!msgf;
-				printf("Show Msg(%s)\n",msgf?"Y":"N");
 				break;
 			case '9':
 				for (int a=0;a<50;a++)
@@ -126,12 +162,6 @@ void kbd(void *arg) {
 					}
 					break;
 #endif
-
-			case 'd':
-			case 'D':
-					deb=!deb;
-					printf("Debug %s\n",deb?"On":"Off");
-					break;
 			case 'l':
 			case 'L':
 					printf("LOG level:(N)one (I)nfo (E)rror (V)erbose (W)arning:");
@@ -166,6 +196,63 @@ void kbd(void *arg) {
 									break;
 						}
 					break;
+					case 'v':
+					case 'V':{
+						printf("Trace Flags ");
+						for (int a=0;a<NKEYS/2;a++)
+							if (theConf.traceflag & (1<<a))
+							{
+								if(a<(NKEYS/2)-1)
+									printf("%s-",lookuptable[a]);
+								else
+									printf("%s",lookuptable[a]);
+							}
+						printf("\nEnter TRACE FLAG:");
+						fflush(stdout);
+						memset(s1,0,sizeof(s1));
+						get_string((uart_port_t)uart_num,10,s1);
+						memset(s2,0,sizeof(s2));
+						for(a=0;a<strlen(s1);a++)
+							s2[a]=toupper(s1[a]);
+						ss=string(s2);
+						if(strlen(s2)<=1)
+							break;
+						if(strcmp(ss.c_str(),"NONE")==0)
+						{
+							theConf.traceflag=0;
+							write_to_flash();
+							break;
+						}
+						if(strcmp(ss.c_str(),"ALL")==0)
+						{
+							theConf.traceflag=0xFFFF;
+							write_to_flash();
+							break;
+						}
+						cualf=cmdfromstring((char*)ss.c_str());
+						if(cualf<0)
+						{
+							printf("Invalid Debug Option\n");
+							break;
+						}
+						if(cualf<NKEYS/2 )
+						{
+							printf("Debug Key %s added\n",lookuptable[cualf]);
+							theConf.traceflag |= 1<<cualf;
+							write_to_flash();
+							break;
+						}
+						else
+						{
+							cualf=cualf-NKEYS/2;
+							printf("Debug Key %s removed\n",lookuptable[cualf]);
+							theConf.traceflag ^= (1<<cualf);
+							write_to_flash();
+							break;
+						}
+
+						}
+
 			default:
 				break;
 			}
