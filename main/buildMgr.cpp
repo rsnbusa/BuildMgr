@@ -2,6 +2,7 @@
 #include "defines.h"
 #include "projTypes.h"
 #include "globals.h"
+#include "driver/pcnt.h"
 #define WITHMETERS
 
 static void submode(void * pArg);
@@ -420,7 +421,7 @@ static void init_temp()
 }
 #endif
 
-#ifdef WITHMETERS
+#ifdef XWITHMETERS
 static void gpio_isr_handler(void * arg)
 {
 	BaseType_t tasker;
@@ -489,7 +490,98 @@ static void gpio_isr_handler(void * arg)
 
 #endif
 
-void getMessage(void *pArg)
+
+#define PCNT_TEST_UNIT      PCNT_UNIT_4
+#define PCNT_H_LIM_VAL      82
+#define PCNT_L_LIM_VAL      0
+#define PCNT_THRESH1_VAL    80
+//#define PCNT_THRESH0_VAL    0
+#define PCNT_INPUT_SIG_IO   4  // Pulse Input GPIO
+#define PCNT_INPUT_CTRL_IO  14  // Control GPIO HIGH=count up, LOW=count down
+
+typedef struct DDD{
+    int unit;  // the PCNT unit that originated an interrupt
+    uint32_t status; // information on the event type that caused the interrupt
+} pcnt_evt_t;
+
+static void pcnt_intr_handler(void *arg)
+{
+    uint32_t intr_status = PCNT.int_st.val;
+    int i;
+    pcnt_evt_t evt;
+    portBASE_TYPE HPTaskAwoken = pdFALSE;
+
+    for (i = 0; i < PCNT_UNIT_MAX+1; i++) {
+        if (intr_status & (BIT(i))) {
+            evt.unit = i;
+            evt.status = PCNT.status_unit[i].val;
+            PCNT.int_clr.val = BIT(i);
+
+            xQueueSendFromISR(pcnt_evt_queue, &evt, &HPTaskAwoken);
+            if (HPTaskAwoken == pdTRUE) {
+                portYIELD_FROM_ISR();
+            }
+        }
+    }
+}
+static void pcnt_init(void)
+{
+    pcnt_config_t pcnt_config;
+    pcnt_isr_handle_t user_isr_handle = NULL; //user's ISR service handle
+
+	theMeters[0].pin=METER0;
+	theMeters[1].pin=METER1;
+	theMeters[2].pin=METER2;
+	theMeters[3].pin=METER3;
+	theMeters[4].pin=METER4;
+
+	theMeters[0].pinB=BREAK0;
+	theMeters[1].pinB=BREAK1;
+	theMeters[2].pinB=BREAK2;
+	theMeters[3].pinB=BREAK3;
+	theMeters[4].pinB=BREAK4;
+
+	uint16_t sonl;
+
+    memset((void*)&pcnt_config,0,sizeof(pcnt_config));
+
+	pcnt_config.ctrl_gpio_num 	= PCNT_INPUT_CTRL_IO; // -1 DOES NOT work
+	pcnt_config .channel 		= PCNT_CHANNEL_0;
+	pcnt_config .pos_mode 		= PCNT_COUNT_INC;   // Count up on the positive edge
+	pcnt_config.neg_mode 		= PCNT_COUNT_DIS;   // Keep the counter value on the negative edge
+	pcnt_config.lctrl_mode 		= PCNT_MODE_REVERSE; // Reverse counting direction if low
+	pcnt_config .hctrl_mode 	= PCNT_MODE_KEEP;    // Keep the primary counter mode if high
+
+    pcnt_isr_register(pcnt_intr_handler, NULL, 0,&user_isr_handle);
+
+	for(int a=0;a<MAXDEVS;a++)
+	{
+		pcnt_config.pulse_gpio_num = theMeters[a].pin;
+		pcnt_config.unit = (pcnt_unit_t)a;
+		pcnt_unit_config(&pcnt_config);
+
+		theMeters[a].pos=a;
+		sonl=theMeters[a].beatsPerkW/10;
+
+		pcnt_event_disable((pcnt_unit_t)a, PCNT_EVT_H_LIM);
+		pcnt_event_disable((pcnt_unit_t)a, PCNT_EVT_L_LIM);
+		pcnt_event_disable((pcnt_unit_t)a, PCNT_EVT_THRES_0);
+		pcnt_event_disable((pcnt_unit_t)a, PCNT_EVT_ZERO);
+
+		pcnt_set_filter_value((pcnt_unit_t)a, 1000);
+		pcnt_filter_enable((pcnt_unit_t)a);
+
+		pcnt_set_event_value((pcnt_unit_t)a, PCNT_EVT_THRES_1, sonl);
+		pcnt_event_enable((pcnt_unit_t)a, PCNT_EVT_THRES_1);
+
+		pcnt_counter_pause((pcnt_unit_t)a);
+		pcnt_counter_clear((pcnt_unit_t)a);
+		pcnt_intr_enable((pcnt_unit_t)a);
+		pcnt_counter_resume((pcnt_unit_t)a);
+	}
+}
+
+static void getMessage(void *pArg)
 //static void getMessage(int sock)
 {
     int len;
@@ -647,7 +739,7 @@ static void buildMgr(void *pvParameters)
 }
 
 
-#ifdef WITHMETERS
+#ifdef XWITHMETERS
 static void install_meter_interrupts()
 {
 	char 	temp[30];
@@ -1398,7 +1490,7 @@ static void read_flash()
 	}
 
 	largo=sizeof(theConf);
-	q=nvs_get_blob(nvshandle,"config",(void*)&theConf,&largo);
+	q=nvs_get_blob(nvshandle,"sysconf",(void*)&theConf,&largo);
 
 	if (q !=ESP_OK)
 		printf("Error read %x largo %d aqui %d\n",q,largo,sizeof(theConf));
@@ -1415,10 +1507,17 @@ void write_to_flash() //save our configuration
 		printf("Error opening NVS File RW %x\n",q);
 		return;
 	}
-	size_t req=sizeof(theConf);
-	q=nvs_set_blob(nvshandle,"config",(void*)&theConf,&req);
+//	size_t req=sizeof(theConf)+20;
+	size_t req=20;
+	q=nvs_set_blob(nvshandle,"sysconf",&theConf,&req);
 	if (q ==ESP_OK)
+	{
 		q = nvs_commit(nvshandle);
+		if(q!=ESP_OK)
+			printf("Flash commit write failed %d\n",q);
+	}
+	else
+		printf("Fail to write flash %x\n",q);
 	nvs_close(nvshandle);
 }
 
@@ -1438,53 +1537,53 @@ static void write_to_fram(u8 meter,bool addit)
 //	if(aqui.traceflag & (1<<BEATD)) //Should not print. semaphore is taking longer
 	//		printf("[BEATD]Save KWH Meter %d Month %d Day %d Hour %d Year %d lifekWh %d beats %d addkw %d\n",meter,mesg,diag,horag,yearg,
 	//					theMeters.curLife,theMeters.currentBeat,addit);
-			if(addit)
-			{
-				theMeters[meter].curLife++;
-				theMeters[meter].curMonth++;
-				theMeters[meter].curDay++;
-				theMeters[meter].curHour++;
-				theMeters[meter].curCycle++;
-				time((time_t*)&theMeters[meter].lastKwHDate); //last time we saved data
+	if(addit)
+	{
+		theMeters[meter].curLife++;
+		theMeters[meter].curMonth++;
+		theMeters[meter].curDay++;
+		theMeters[meter].curHour++;
+		theMeters[meter].curCycle++;
+		time((time_t*)&theMeters[meter].lastKwHDate); //last time we saved data
 
 
-	scratch.medidor.state=1;                    //scratch written state. Must be 0 to be ok. Every 800-1000 beats so its worth it
-	scratch.medidor.meter=meter;
-	scratch.medidor.month=theMeters[meter].curMonth;
-	scratch.medidor.life=theMeters[meter].curLife;
-	scratch.medidor.day=theMeters[meter].curDay;
-	scratch.medidor.hora=theMeters[meter].curHour;
-	scratch.medidor.cycle=theMeters[meter].curCycle;
-	scratch.medidor.mesg=mesg;
-	scratch.medidor.diag=diag;
-	scratch.medidor.horag=horag;
-	scratch.medidor.yearg=yearg;
-	fram.write_recover(scratch);            //Power Failure recover register
+		scratch.medidor.state=1;                    //scratch written state. Must be 0 to be ok. Every 800-1000 beats so its worth it
+		scratch.medidor.meter=meter;
+		scratch.medidor.month=theMeters[meter].curMonth;
+		scratch.medidor.life=theMeters[meter].curLife;
+		scratch.medidor.day=theMeters[meter].curDay;
+		scratch.medidor.hora=theMeters[meter].curHour;
+		scratch.medidor.cycle=theMeters[meter].curCycle;
+		scratch.medidor.mesg=mesg;
+		scratch.medidor.diag=diag;
+		scratch.medidor.horag=horag;
+		scratch.medidor.yearg=yearg;
+		fram.write_recover(scratch);            //Power Failure recover register
 
-	fram.write_beat(meter,theMeters[meter].currentBeat);
-	fram.write_lifekwh(meter,theMeters[meter].curLife);
-	fram.write_month(meter,mesg,theMeters[meter].curMonth);
-	fram.write_monthraw(meter,mesg,theMeters[meter].curMonthRaw);
-	fram.write_day(meter,yearg,mesg,diag,theMeters[meter].curDay);
-	fram.write_dayraw(meter,yearg,mesg,diag,theMeters[meter].curDayRaw);
-	fram.write_hour(meter,yearg,mesg,diag,horag,theMeters[meter].curHour);
-	fram.write_hourraw(meter,yearg,mesg,diag,horag,theMeters[meter].curHourRaw);
-	fram.write_cycle(meter, mesg,theMeters[meter].curCycle);
-	fram.write_minamps(meter,theMeters[meter].minamps);
-	fram.write_maxamps(meter,theMeters[meter].maxamps);
-	fram.write_lifedate(meter,theMeters[meter].lastKwHDate);  //should be down after scratch record???
-	fram.write8(SCRATCHOFF,0); //Fast write first byte of Scratch record to 0=done.
-			}
-			else
+		fram.write_beat(meter,theMeters[meter].currentBeat);
+		fram.write_lifekwh(meter,theMeters[meter].curLife);
+		fram.write_month(meter,mesg,theMeters[meter].curMonth);
+		fram.write_monthraw(meter,mesg,theMeters[meter].curMonthRaw);
+		fram.write_day(meter,yearg,mesg,diag,theMeters[meter].curDay);
+		fram.write_dayraw(meter,yearg,mesg,diag,theMeters[meter].curDayRaw);
+		fram.write_hour(meter,yearg,mesg,diag,horag,theMeters[meter].curHour);
+		fram.write_hourraw(meter,yearg,mesg,diag,horag,theMeters[meter].curHourRaw);
+		fram.write_cycle(meter, mesg,theMeters[meter].curCycle);
+		fram.write_minamps(meter,theMeters[meter].minamps);
+		fram.write_maxamps(meter,theMeters[meter].maxamps);
+		fram.write_lifedate(meter,theMeters[meter].lastKwHDate);  //should be down after scratch record???
+		fram.write8(SCRATCHOFF,0); //Fast write first byte of Scratch record to 0=done.
+	}
+		else
 			fram.write_beat(meter,theMeters[meter].currentBeat);
-//	scratch.medidor.state=0;            // done state. OK
-//	FramSPI_write_recover(scratch);
 }
 
 static void load_from_fram(u8 meter)
 {
 	if(xSemaphoreTake(framSem, portMAX_DELAY/  portTICK_RATE_MS))
 	{
+		if (diaHoraTarifa==0)
+			diaHoraTarifa=100;
 		fram.read_lifekwh(meter,(u8*)&theMeters[meter].curLife);
 		fram.read_lifedate(meter,(u8*)&theMeters[meter].lastKwHDate);
 		fram.read_month(meter, mesg, (u8*)&theMeters[meter].curMonth);
@@ -1498,6 +1597,8 @@ static void load_from_fram(u8 meter)
 		theMeters[meter].oldbeat=theMeters[meter].currentBeat;
 		if(theConf.beatsPerKw[meter]==0)
 			theConf.beatsPerKw[meter]=800;// just in case div by 0 crash
+		if(theMeters[meter].beatsPerkW==0)
+			theMeters[meter].beatsPerkW=800;// just in case div by 0 crash
 		u16 nada=theMeters[meter].currentBeat/theConf.beatsPerKw[meter];
 		theMeters[meter].beatSave=theMeters[meter].currentBeat-(nada*theConf.beatsPerKw[meter]);
 		theMeters[meter].beatSaveRaw=theMeters[meter].beatSave;
@@ -1577,6 +1678,8 @@ static void init_fram()
 
 }
 
+
+
 static void framManager(void * pArg)
 {
 	 meterType theMeter;
@@ -1604,6 +1707,52 @@ static void framManager(void * pArg)
 			}
 		}
 		delay(400);
+	}
+}
+
+static void pcntManager(void * pArg)
+{
+	BaseType_t tasker;
+	pcnt_evt_t evt;
+	portBASE_TYPE res;
+	u16 residuo,count;
+	pcnt_evt_queue = xQueueCreate( 20, sizeof( pcnt_evt_t ) );
+	if(!pcnt_evt_queue)
+		printf("Failed queue PCNT\n");
+
+	while(1)
+	{
+        res = xQueueReceive(pcnt_evt_queue, &evt,portMAX_DELAY / portTICK_PERIOD_MS);
+        if (res == pdTRUE)
+        {
+			if(theConf.traceflag & (1<<INTD)){
+            pcnt_get_counter_value(PCNT_TEST_UNIT, &count);
+            printf("%sEvent PCNT unit[%d]; cnt: %d status %x\n",INTDT, evt.unit, count,evt.status);
+			}
+			if (evt.status & PCNT_EVT_THRES_1)
+			{
+				pcnt_counter_clear( evt.unit);
+
+				theMeters[evt.unit].saveit=false;
+				theMeters[evt.unit].currentBeat+=theMeters[evt.unit].beatsPerkW/10;
+
+				residuo=theMeters[evt.unit].currentBeat % (theMeters[evt.unit].beatsPerkW*diaHoraTarifa/100);
+
+				if(theConf.traceflag & (1<<INTD))
+					printf("%sResiduo %d Beat %d MeterPos %d\n",INTDT,residuo,theMeters[evt.unit].currentBeat,theMeters[evt.unit].pos);
+
+				if(residuo==0 && theMeters[evt.unit].currentBeat>0)
+					theMeters[evt.unit].saveit=true;
+
+				if(mqttQ)
+				{
+					xQueueSendFromISR( mqttQ,&theMeters[evt.unit],&tasker );
+					if (tasker)
+						portYIELD_FROM_ISR();
+				}
+			}
+        } else
+            printf("PCNT Failed Queue\n");
 	}
 }
 
@@ -1656,12 +1805,14 @@ static void init_vars()
 
 static void erase_config() //do the dirty work
 {
+	printf("Erase config\n");
 	memset(&theConf,0,sizeof(theConf));
 	theConf.centinel=CENTINEL;
 	theConf.ssl=0;
 	theConf.beatsPerKw[0]=800;//old way
 	theConf.bounce[0]=100;
 	//    fram.write_tarif_bpw(0, 800); // since everything is going to be 0, BPW[0]=800 HUMMMMMM????? SHould load Tariffs after this
+
 	write_to_flash();
 	//	if(  xSemaphoreTake(logSem, portMAX_DELAY/  portTICK_RATE_MS))
 	//	{
@@ -1708,10 +1859,13 @@ void app_main()
 	ESP_ERROR_CHECK( err );
 
 	read_flash();
+	delay(3000);
 	if (theConf.centinel!=CENTINEL || !gpio_get_level((gpio_num_t)0))
 	{
 		if(theConf.traceflag & (1<<BOOTD))
 			printf("%sRead centinel %x",BOOTDT,theConf.centinel);
+		 ESP_ERROR_CHECK(nvs_flash_erase());
+		        err = nvs_flash_init();
 		erase_config();
 	}
 
@@ -1737,7 +1891,10 @@ void app_main()
 	xTaskCreate(&framManager,"framMgr",4096,NULL, 4, NULL);
 
 #ifdef WITHMETERS
-      install_meter_interrupts();
+  //    install_meter_interrupts();
+	xTaskCreate(&pcntManager,"pcntMgr",4096,NULL, 4, NULL);
+
+	pcnt_init();
 #endif
 
 	xTaskCreate(&buildMgr,"TCP",10240,(void*)1, 4, NULL);
