@@ -17,12 +17,12 @@ typedef struct taskp{
 } task_param;
 
 typedef struct meterType{
-	 bool saveit;
+	 bool saveit,lowThresf;
 	 char serialNumber[20];
-	 u16 beatsPerkW,maxLoss,curMonth,curMonthRaw,curDay,curDayRaw,beatSave,beatSaveRaw,elpin;
-	 u32 curLife,curCycle,lastKwHDate,livingPulse,livingCount,startTimePulse,msNow, minamps,maxamps;
-	 u32 currentBeat,oldbeat,vanMqtt,timestamp,startConn,pulse;
-	 u8 curHour,cycleMonth,curHourRaw,meterid,state,pos,pin,pinB;
+	 u16 beatsPerkW,curMonth,curMonthRaw,curDay,curDayRaw;
+	 u32 curLife,curCycle,lastKwHDate,msNow, minamps,maxamps,currentBeat,vanMqtt,ampTime,beatSave;
+	 u8 curHour,cycleMonth,curHourRaw,pos,pin,pinB;
+	 TaskHandle_t lowThresHandle;
 } meterType;
 
 typedef struct mqttMsg{
@@ -76,4 +76,8 @@ typedef struct framq{
 	bool addit;
 }framMeterType;
 
+typedef struct pcntt{
+    int unit;  // the PCNT unit that originated an interrupt
+    uint32_t status; // information on the event type that caused the interrupt
+} pcnt_evt_t;
 #endif

@@ -12,11 +12,11 @@
 #include "includes.h"
 using namespace std;
 
-EXTERN bool								isrf,connf,wifif,apstaf,firstTimeTimer,displayf;
-EXTERN char								http_request[100],tempb[5000],texto[101],lookuptable[NKEYS][10];
+EXTERN bool								isrf,connf,wifif,apstaf,displayf;
+EXTERN char								http_request[100],tempb[5000],texto[101];
 EXTERN cmdRecord 						cmds[MAXCMDS];
 EXTERN cmdType							theCmd;
-EXTERN config_flash						theConf __attribute__((aligned(4))) ;
+EXTERN config_flash						theConf;
 EXTERN DS18B20_Info 					*ds18b20_info;
 EXTERN esp_mqtt_client_handle_t 		clientCloud;
 EXTERN float							ttemp;
@@ -30,9 +30,15 @@ EXTERN OneWireBus 						*owb;
 EXTERN owb_rmt_driver_info 				rmt_driver_info;
 EXTERN QueueHandle_t 					mqttQ,mqttR,framQ,pcnt_evt_queue;
 EXTERN SemaphoreHandle_t 				wifiSem,framSem;
-EXTERN u16 								qdelay,llevoMsg,mesg,diag,horag,yearg;
+EXTERN TimerHandle_t					hourChangeT;
+EXTERN u16 								qdelay,llevoMsg,mesg,diag,horag,yearg,wDelay,tarifasDia[24],oldMesg,oldDiag,oldHorag,yearDay;
 EXTERN u32								sentTotal,llevo,tallies[MAXSTAS][MAXDEVS];
 EXTERN u8								qwait,lastalign,lastFont;
+EXTERN uint32_t							totalPulses;
+
+#ifdef KBD
+EXTERN char								lookuptable[NKEYS][10];
+#endif
 
 #ifdef MULTIX
 EXTERN QueueHandle_t					muxQueue;

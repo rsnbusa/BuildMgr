@@ -51,9 +51,7 @@ public:
     int 		sendCmd (uint8_t cmd);
     int			readStatus(uint8_t *donde);
     int  		writeStatus(uint8_t streg);
-  //  bool    	begin(spi_device_handle_t spic,uint16_t *prod);
     bool 		begin(int MOSI, int MISO, int CLK, int CS,SemaphoreHandle_t *framSem);
-//    bool 		begin(int MOSI, int MISO, int CLK, int CS);
     int	        write8 (uint32_t framAddr, uint8_t value);
     int     	read8  (uint32_t framAddr, uint8_t *donde);
     void        getDeviceID(uint16_t *manufacturerID, uint16_t *productID);
@@ -81,39 +79,32 @@ public:
     int	        write_pago(uint8_t medidor, float value);
     int	        write_month(uint8_t medidor,uint8_t month,uint16_t value);
     int	        write_monthraw(uint8_t medidor,uint8_t month,uint16_t value);
-    int	        write_cycle(uint8_t medidor,uint8_t month,uint16_t value);
-    int	        write_cycledate(uint8_t medidor,uint8_t month,uint32_t value);
     int	        write_day(uint8_t medidor,uint16_t yearl,uint8_t month,uint8_t dia,uint16_t value);
     int	        write_dayraw(uint8_t medidor,uint16_t yearl,uint8_t month,uint8_t dia,uint16_t value);
     int	        write_hour(uint8_t medidor,uint16_t yearl,uint8_t month,uint8_t dia,uint8_t hora,uint8_t value);
     int	        write_hourraw(uint8_t medidor,uint16_t yearl,uint8_t month,uint8_t dia,uint8_t hora,uint8_t value);
     int	        write_lifedate(uint8_t medidor, uint32_t value);
-    int	        write_maxamps(uint8_t medidor,uint16_t value);
-    int	        write_minamps(uint8_t medidor,uint16_t value);
     int	        write_recover(scratchTypespi value);
     int	        read_beat(uint8_t medidor, uint8_t*  value);
-    int	        read_corte(uint8_t medidor, uint8_t*  value);
-    int	        read_pago(uint8_t medidor, uint8_t*  value);
     int	        read_month(uint8_t medidor,uint8_t month,uint8_t*  value);
     int	        read_monthraw(uint8_t medidor,uint8_t month,uint8_t*  value);
     int	        read_day(uint8_t medidor,uint16_t yearl,uint8_t month,uint8_t dia,uint8_t*  value);
     int	        read_dayraw(uint8_t medidor,uint16_t yearl,uint8_t month,uint8_t dia,uint8_t*  value);
     int	        read_hour(uint8_t medidor,uint16_t yearl,uint8_t month,uint8_t dia,uint8_t hora,uint8_t*  value);
     int	        read_hourraw(uint8_t medidor,uint16_t yearl,uint8_t month,uint8_t dia,uint8_t hora,uint8_t*  value);
-    int	        read_cycle(uint8_t medidor,uint8_t month,uint8_t*  value);
-    int       	read_cycledate(uint8_t medidor,uint8_t month,uint8_t*  value);
     int	        read_lifedate(uint8_t medidor,uint8_t*  value);
     int	        read_lifekwh(uint8_t medidor, uint8_t*  value);
-    int	        read_minamps(uint8_t medidor,uint8_t*  value);
-    int	        read_maxamps(uint8_t medidor,uint8_t*  value);
     int	        read_recover(scratchTypespi *value);
-
 
 public:
     bool _framInitialised;
     spi_device_handle_t spi;
     uint8_t addressBytes;
     uint32_t intframWords;
+    uint16_t manufID,prodId;
+
+    void			setWrite(void);
+
 };
 
 #endif

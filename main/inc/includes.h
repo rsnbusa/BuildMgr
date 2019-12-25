@@ -18,7 +18,7 @@ extern "C"{
 #include "esp_event.h"
 #include "esp_http_client.h"
 #include "esp_log.h"
-#include "esp_netif.h"
+//#include "esp_netif.h"
 #include "esp_ota_ops.h"
 #include "esp_sntp.h"
 #include "esp_system.h"
@@ -42,6 +42,7 @@ extern "C"{
 #include "owb.h"
 #include "SSD1306.h"
 #include "tcpip_adapter.h"
+#include "driver/pcnt.h"
 
 void app_main();
 }

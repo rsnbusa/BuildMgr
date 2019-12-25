@@ -8,6 +8,7 @@
 //#define DISPLAY
 #define MQTTLOCAL
 #define KBD			// only for testing build
+#define DEBUGX
 
 #ifdef MULTIX
 
@@ -58,7 +59,7 @@
 #define BUILDMGRPORT					30000
 
 #define CENTINEL						0x12345678
-#define EXAMPLE_FILENAME 				"http://feediot.c1.biz/emitter_client.bin"
+#define EXAMPLE_FILENAME 				"http://feediot.c1.biz/buildMgrOled.bin"
 #define EXAMPLE_SERVER_IP   			"185.176.43.60"
 #define EXAMPLE_SERVER_PORT 			"80"
 
@@ -94,6 +95,8 @@
 #define u32								uint32_t
 #define u8								uint8_t
 #define WIFILED							2
+#define TIMEWAITPCNT 					60000 // 1 minute
+#define MIN30							TIMEWAITPCNT*30 //30 minutes
 
 //30	Black
 //31	Red
@@ -119,14 +122,15 @@
 #define FRAMDT							"\e[37m[FRAMD]\e[0m"
 #define ERASET							"\e[2J"
 
-#define BLACK							"\e[30m"
+#define BLACKC							"\e[30m"
 #define RED								"\e[31m"
 #define GREEN							"\e[32m"
 #define YELLOW							"\e[33m"
 #define BLUE							"\e[34m"
 #define MAGENTA							"\e[35m"
 #define CYAN							"\e[36m"
-#define WHITE							"\e[37m"
+#define WHITEC							"\e[37m"
+#define RESETC							"\e[0m"
 
 
 #endif
