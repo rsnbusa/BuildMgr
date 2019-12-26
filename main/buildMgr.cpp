@@ -1122,15 +1122,15 @@ static void ip_event_handler(void* arg, esp_event_base_t event_base,
     	update_ip();
     	break;
         case IP_EVENT_STA_GOT_IP:
-            strcpy((char*)wifi_config.ap.ssid,"Meteriot");
-			strcpy((char*)wifi_config.ap.password,"Meteriot");
-			wifi_config.ap.authmode=WIFI_AUTH_WPA_PSK;
-			wifi_config.ap.ssid_hidden=true;
-			wifi_config.ap.beacon_interval=400;
-			wifi_config.ap.max_connection=50;
-			wifi_config.ap.ssid_len=0;
-			wifi_config.ap.channel=1;
-			ESP_ERROR_CHECK(esp_wifi_set_config(ESP_IF_WIFI_AP, &wifi_config));
+//            strcpy((char*)wifi_config.ap.ssid,"Meteriot");
+//			strcpy((char*)wifi_config.ap.password,"Meteriot");
+//			wifi_config.ap.authmode=WIFI_AUTH_WPA_PSK;
+//			wifi_config.ap.ssid_hidden=true;
+//			wifi_config.ap.beacon_interval=400;
+//			wifi_config.ap.max_connection=50;
+//			wifi_config.ap.ssid_len=0;
+//			wifi_config.ap.channel=1;
+//			ESP_ERROR_CHECK(esp_wifi_set_config(ESP_IF_WIFI_AP, &wifi_config));
 
         	wifif=true;
             xEventGroupSetBits(wifi_event_group, WIFI_BIT);
@@ -1162,25 +1162,6 @@ static void wifi_init(void)
 //	ESP_ERROR_CHECK(tcpip_adapter_set_ip_info(TCPIP_ADAPTER_IF_AP, &ipInfo));
 //	ESP_ERROR_CHECK(tcpip_adapter_dhcps_start(TCPIP_ADAPTER_IF_AP));
 
-  //  #define DIRECT
-    #ifdef DIRECT
-	tcpip_adapter_ip_info_t 		ipInfo;
-
-    	//For using of static IP to the Internet AP. Fast vs DHCP request
-	ESP_ERROR_CHECK(tcpip_adapter_dhcpc_stop(TCPIP_ADAPTER_IF_STA)); // Don't run a DHCP client
-    	memset(&ipInfo,0,sizeof(ipInfo));
-
-    	//Set static IP
-    	inet_pton(AF_INET, "192.168.100.10", &ipInfo.ip);
-    	inet_pton(AF_INET, "192.168.100.1", &ipInfo.gw);
-    	inet_pton(AF_INET, "255.255.255.0", &ipInfo.netmask);
-    	tcpip_adapter_set_ip_info(TCPIP_ADAPTER_IF_STA, &ipInfo);
-
-    	//Set Main DNS server
-    	tcpip_adapter_dns_info_t dnsInfo;
-    	inet_pton(AF_INET, "8.8.8.8",&dnsInfo.ip);
-    	tcpip_adapter_set_dns_info(TCPIP_ADAPTER_IF_STA, TCPIP_ADAPTER_DNS_MAIN,&dnsInfo);
-    #endif
     wifi_event_group = xEventGroupCreate();
     xEventGroupClearBits(wifi_event_group, WIFI_BIT);
 
@@ -1195,15 +1176,27 @@ static void wifi_init(void)
  //   wifi_init_config_t cfg = WIFI_INIT_CONFIG_DEFAULT();
     ESP_ERROR_CHECK(esp_wifi_init(&cfg));
     ESP_ERROR_CHECK(esp_wifi_set_storage(WIFI_STORAGE_RAM));
+    ESP_ERROR_CHECK(esp_wifi_set_mode(WIFI_MODE_APSTA));
 
     wifi_config_t wifi_config;
-    // To get both AP y STA to work, first set the local STA section
-    // When STA got IP set the AP part
+
+    //AP section
     memset(&wifi_config,0,sizeof(wifi_config));//very important
+    strcpy((char*)wifi_config.ap.ssid,"Meteriot");
+	strcpy((char*)wifi_config.ap.password,"Meteriot");
+	wifi_config.ap.authmode=WIFI_AUTH_WPA_PSK;
+	wifi_config.ap.ssid_hidden=false;
+	wifi_config.ap.beacon_interval=400;
+	wifi_config.ap.max_connection=50;
+	wifi_config.ap.ssid_len=0;
+	wifi_config.ap.channel=1;
+	ESP_ERROR_CHECK(esp_wifi_set_config(ESP_IF_WIFI_AP, &wifi_config));
+
+	//STA section
+	memset(&wifi_config,0,sizeof(wifi_config));//very important
 	strcpy((char*)wifi_config.sta.ssid,INTERNET);
 	strcpy((char*)wifi_config.sta.password,INTERNETPASS);
 
-    ESP_ERROR_CHECK(esp_wifi_set_mode(WIFI_MODE_APSTA));
     ESP_ERROR_CHECK(esp_wifi_set_config(ESP_IF_WIFI_STA, &wifi_config));
     ESP_LOGI(TAG, "start the WIFI SSID:[%s] password:[%s]", wifi_config.sta.ssid,wifi_config.sta.password );
     ESP_ERROR_CHECK(esp_wifi_start());
