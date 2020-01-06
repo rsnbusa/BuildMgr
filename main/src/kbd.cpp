@@ -10,8 +10,8 @@ extern void drawString(int x, int y, string que, int fsize, int align,displayTyp
 
 extern void write_to_flash();
 extern void load_from_fram(u8 meter);
-extern void firmwareCmd();
-extern void loadit();
+extern void firmwareCmd(parg *pArg);
+extern void loadit(parg *pArg);
 
 void printStationList()
 {
@@ -24,7 +24,7 @@ void printStationList()
 		localtime_r(&losMacs[a].lastUpdate, &timeinfo);
 			strftime(strftime_buf, sizeof(strftime_buf), "%c", &timeinfo);
 		memcpy(&them,&losMacs[a].macAdd,4);
-		printf("Mac[%d][%d]:%.2x:%.2x:%.2x:%.2x Ip:%s (%s)\n",a,losMacs[a].trans,
+		printf("Mac[%d][%d]:%.2x:%.2x:%.2x:%.2x Ip:%s (%s)\n",a,losMacs[a].trans[0],
 		them[0],them[1],them[2],them[3],(char*)ip4addr_ntoa((ip4_addr_t *)&losMacs[a].theIp),strftime_buf);
 	}
 }
@@ -80,6 +80,18 @@ int keyfromstring(char *key)
     return 100;
 }
 
+static void printControllers()
+{
+	printf("Listing %d Active Controllers\n",vanMacs);
+	for (int a=0;a<vanMacs;a++)
+	{
+		printf("Controller[%d] Mac %06x seen %s\n",a,losMacs[a].macAdd,ctime(&losMacs[a].lastUpdate));
+		for (int b=0;b<MAXDEVS;b++)
+			printf("Meter[%d]=%s KwH %6d Beats %9d\n",b,losMacs[a].meterSerial[b],losMacs[a].controlLastKwH[b],losMacs[a].controlLastBeats[b]);
+	}
+}
+
+
 void kbd(void *arg) {
 	int len,cualf,a;
 	uart_port_t uart_num = UART_NUM_0 ;
@@ -91,7 +103,7 @@ void kbd(void *arg) {
 	uint32_t tots=0,totsp;
 	uint16_t count,th1;
 	u32 framAddress;
-	u8 fueron,valor;
+	u8 fueron;
     time_t now;
     struct tm timeinfo;
     char strftime_buf[64];
@@ -124,6 +136,9 @@ void kbd(void *arg) {
 
 			switch(data[0])
 			{
+			case '+':
+				printControllers();
+				break;
 			case'-':
 				for (int a=0;a<24;a++)
 					printf("Tarifa[%d]=%d\n",a,tarifasDia[a]);
@@ -139,11 +154,11 @@ void kbd(void *arg) {
 				break;
 			case 'W':
 				printf("Firmware \n");
-				firmwareCmd();
+				firmwareCmd(NULL);
 				break;
 			case 'w':
 				printf("Tariffs\n");
-				loadit();
+				loadit(NULL);
 				break;
 			case 'd':
 			case 'D':
@@ -190,8 +205,7 @@ void kbd(void *arg) {
 						tots+=theMeters[a].currentBeat;
 						totsp+=count;
 						pcnt_get_event_value((pcnt_unit_t)a, PCNT_EVT_THRES_1, &th1);
-						printf("%sMeter[%d]=%s Beats %d kWh %d %s countnow %d TH1 %d MaxAmp %d\n",YELLOW,a,RESETC,theMeters[a].currentBeat,theMeters[a].curLife,
-								theMeters[a].lowThresHandle?"TimerActive":"NoTimer",count,th1,(uint16_t)theMeters[a].maxamps);
+						printf("%sMeter[%d]=%s Beats %d kWh %d \n",YELLOW,a,RESETC,theMeters[a].currentBeat,theMeters[a].curLife);
 					}
 				}
 				printf("%sTotal Pulses rx=%s %d (%s) Pending %d\n",RED,RESETC,totalPulses,tots==totalPulses?"Ok":"No",totsp);

@@ -2,12 +2,15 @@
 #include "defines.h"
 #include "projTypes.h"
 #include "globals.h"
+
 #define WITHMETERS
 
 static void submode(void * pArg);
 void kbd(void *pArg);
 static void update_mac(u32 newmac);
 static void write_to_fram(u8 meter,bool addit);
+static esp_err_t setup_get_handler(httpd_req_t *req);
+static esp_err_t challenge_get_handler(httpd_req_t *req);
 
 #ifdef DISPLAY
 void clearScreen();
@@ -130,7 +133,7 @@ void dayChange()
 	for (int a=0;a<MAXDEVS;a++)
 			{
 				if(theConf.traceflag & (1<<CMDD))
-					printf("%sDay change mes %d day %d oldday %d corte %d sent %d\n",CMDDT,oldMesg,diag,oldDiag,theConf.diaDeCorte[a],theConf.corteSent[a]);
+					printf("%sDay change mes %d day %d oldday %d\n",CMDDT,oldMesg,diag,oldDiag);
 				if(xSemaphoreTake(framSem, portMAX_DELAY))
 				{
 					fram. write_day(a,yearg, oldMesg,oldDiag, theMeters[a].curDay);
@@ -560,7 +563,7 @@ static esp_err_t _http_event_handle(esp_http_client_event_t *evt)
 }
 
 
-void loadit()
+void loadit(parg *pArg)
 {
 	van=0;
 	esp_http_client_config_t lconfig;
@@ -759,7 +762,7 @@ static void getMessage(void *pArg)
     int pos=theP->pos_p;
 #ifdef DEBUGX
 	if(theConf.traceflag & (1<<CMDD))
-		printf("%sStarting GetM Fd %d Pos %d\n",CMDDT,sock,pos);
+		printf("%sStarting GetM Fd %d Pos %d GlobaCount %d\n",CMDDT,sock,pos,globalSocks);
 #endif
   //  to.tv_sec = 2;
     //to.tv_usec = 0;
@@ -816,6 +819,9 @@ static void getMessage(void *pArg)
 	close(sock);
 	if(comando.mensaje)
 		free(comando.mensaje);
+	globalSocks--;
+	if (globalSocks<0)
+		globalSocks=0;
 	vTaskDelete(NULL);
 }
 
@@ -866,7 +872,6 @@ static void buildMgr(void *pvParameters)
             break;
         }
 
-
         while (true) {
             sock = accept(listen_sock, (struct sockaddr *)&source_addr, &addr_len);
             if (sock < 0) {
@@ -904,6 +909,8 @@ static void buildMgr(void *pvParameters)
 			theP.pos_p=a;
 			theP.sock_p=sock;
         	xTaskCreate(&getMessage,tt,GETMT,(void*)&theP, 4, &losMacs[a].theHandle);
+            globalSocks++;
+
        // 	getMessage(sock);
 	//		gpio_set_level((gpio_num_t)WIFILED, 0);
 
@@ -913,23 +920,34 @@ static void buildMgr(void *pvParameters)
 			printf("%sBuildmgr listend error %d\n",CMDDT,errno);
 #endif
     }
-    printf("BuildMgr will die OMG....\n");
+    char them[6];
+    printf("BuildMgr will die OMG. GlobalCount %d VanMacs %d\n",globalSocks,vanMacs);
+	for (int a=0;a<vanMacs;a++)
+	{
+		memcpy(&them,&losMacs[a].macAdd,4);
+		printf("Mac[%d][%d]:%.2x:%.2x:%.2x:%.2x Ip:%s (%s)\n",a,losMacs[a].trans[0],
+		them[0],them[1],them[2],them[3],(char*)ip4addr_ntoa((ip4_addr_t *)&losMacs[a].theIp),ctime(&losMacs[a].lastUpdate));
+	}
     vTaskDelete(NULL);
 }
 
 static void close_mac(int cual)
 {
-	int err;
 #ifdef DEBUGX
 	if(theConf.traceflag & (1<<CMDD))
 		printf("%sClosing[%d] FD %d\n",CMDDT,cual,losMacs[cual].theSock);
 #endif
 	if(losMacs[cual].theHandle)
 		vTaskDelete(losMacs[cual].theHandle);// kill the task
-	if(losMacs[cual].theBuffer)
-		free(losMacs[cual].theBuffer); //free the buffer
 	if(losMacs[cual].theSock>=3)
 		close(losMacs[cual].theSock); //close the socket
+	if(losMacs[cual].timerH)			// delete TimerControl
+	{
+		xTimerStop(losMacs[cual].timerH,0);
+		xTimerDelete(losMacs[cual].timerH,0);
+		losMacs[cual].timerH=NULL;
+	}
+
 
 	if(cual==vanMacs-1)
 	{
@@ -989,7 +1007,7 @@ static void initialize_sntp(void)
 static void updateDateTime(loginT loginData)
 {
     struct tm timeinfo;
-
+    return;
 	localtime_r(&loginData.thedate, &timeinfo);
 	diaHoraTarifa=loginData.theTariff;// Host will give us Hourly Tariff. No need to store
 
@@ -1093,19 +1111,23 @@ static void update_ip()
 
 static void update_mac(u32 newmac)
 {
+	int este;
 
-
-	 int este=find_mac(newmac);
+	do { //in case multiple instances which SHOULDNT happend but....
+	 este=find_mac(newmac);
  	 if(este>=0)
  		close_mac(este);
+	} while(este>=0);
 
- 	 losMacs[vanMacs].trans=0;
+//	 int este=find_mac(newmac);
+// 	 if(este>=0)
+// 		close_mac(este);
+
+		memset((void*)&losMacs[vanMacs],0,sizeof(losMacs[0]));
  	 losMacs[vanMacs].theIp=0;
  	 losMacs[vanMacs].theHandle=NULL;
- 	 losMacs[vanMacs].theBuffer=NULL;
  	 losMacs[vanMacs].theSock=-1;
  	 losMacs[vanMacs++].macAdd=newmac;
-	//now add it
 }
 
 static void ip_event_handler(void* arg, esp_event_base_t event_base,
@@ -1439,7 +1461,7 @@ static void mqtt_app_start(void)
 }
 
 //load firmware. Rather expensive task. Should shutdown everyting
-void firmwareCmd()
+void firmwareCmd(parg *pArg)
 {
 
 		xTaskCreate(&firmUpdate,"U571",10240,NULL, 5, NULL);
@@ -1453,21 +1475,63 @@ void firmwareCmd()
 	send(argument->pComm, &loginData, sizeof(loginData), 0);
 }
 
+ void monitorCallback( TimerHandle_t xTimer )
+ {
+	 u32 cualf = ( uint32_t ) pvTimerGetTimerID( xTimer );
+	 printf("Timer for Meter %d triggered\n",cualf); //should report to ControlQueue advicing posible problem with this MeterId
+
+ }
+
  void statusCmd(parg *argument)
 {
 	loginT loginData;
+	bool answer=false;
 
-		cJSON *lmac= cJSON_GetObjectItem((cJSON*)argument->pMessage,"macn");
 		cJSON *lpos= cJSON_GetObjectItem((cJSON*)argument->pMessage,"Pos");
-		if(lmac && lpos)
+		cJSON *rep= cJSON_GetObjectItem((cJSON*)argument->pMessage,"reply");
+		cJSON *kwh= cJSON_GetObjectItem((cJSON*)argument->pMessage,"KwH");
+		cJSON *mid= cJSON_GetObjectItem((cJSON*)argument->pMessage,"mid");
+		cJSON *beats= cJSON_GetObjectItem((cJSON*)argument->pMessage,"beats");
+
+		if(rep)
+			answer=rep->valueint;
+
+		if((argument->macn!=0) && lpos)
 		{
 			int pos=lpos->valueint;
-			double dmacc=lmac->valuedouble;
-			u32 macc=(u32)dmacc;
-			int cual=find_mac(macc);
+		//	u32 macc=(u32)argument->macn;
+			int cual=find_mac(argument->macn);
 			if(cual>=0)
 			{
 				tallies[cual][pos]++;
+				if(mid)
+					strcpy(losMacs[cual].meterSerial[pos],mid->valuestring);
+				time(&losMacs[cual].lastUpdate);	//lastupdate time for this station. Used by the StationGuard
+				if(kwh)
+					losMacs[cual].controlLastKwH[pos]=kwh->valueint;
+				losMacs[cual].trans[pos]++;
+				if(beats)
+					losMacs[cual].controlLastBeats[pos]=beats->valueint;
+
+
+				if(!losMacs[cual].timerH)
+				{
+					if(theConf.traceflag & (1<<CMDD))
+						printf("%sStarting timer for meterController %d\n",CMDDT,cual);
+					losMacs[cual].timerH=xTimerCreate("Monitor",61000 /portTICK_PERIOD_MS,pdTRUE,( void * )cual,&monitorCallback);
+					if(losMacs[cual].timerH==NULL)
+						printf("Failed to create HourChange timer\n");
+					xTimerStart(losMacs[cual].timerH,0); //Start it
+					//kill timer and start a new one
+				}
+				else
+				{
+					if(theConf.traceflag & (1<<CMDD))
+						printf("%sreseting timer for meterController %d\n",CMDDT,cual);
+					xTimerReset(losMacs[cual].timerH,0); //Start it weith new
+
+					//start a new one
+				}
 #ifdef DEBUGX
 				if(theConf.traceflag & (1<<CMDD))
 					printf("%sMeter[%d][%d]=%d\n",CMDDT,cual,pos,tallies[cual][pos]);
@@ -1477,7 +1541,7 @@ void firmwareCmd()
 			{
 #ifdef DEBUGX
 				if(theConf.traceflag & (1<<CMDD))
-					printf("%sMac not found %x\n",CMDDT,macc);
+					printf("%sMac not found %x\n",CMDDT,argument->macn);
 #endif
 			}
 		}//lmac && lpos
@@ -1514,9 +1578,12 @@ void firmwareCmd()
 			}
 		}
 #endif
-		time(&loginData.thedate);
-		loginData.theTariff=100;
-		send(argument->pComm, &loginData, sizeof(loginData), 0);
+		if(answer)
+		{
+			time(&loginData.thedate);
+			loginData.theTariff=100;
+			send(argument->pComm, &loginData, sizeof(loginData), 0);
+		}
 }
 
  // Messages form Host Controller managed here
@@ -1543,10 +1610,10 @@ static void cmdManager(void* arg)
 			if(elcmd)
 			{
 				cJSON *monton= cJSON_GetObjectItem(elcmd,"Batch");
+				cJSON *ddmac= cJSON_GetObjectItem(elcmd,"macn");
 				if(monton)
 				{
 					int son=cJSON_GetArraySize(monton);
-					losMacs[cmd.pos].trans+=son;
 					time(&losMacs[cmd.pos].lastUpdate);
 					for (int a=0;a<son;a++)
 					{
@@ -1563,6 +1630,8 @@ static void cmdManager(void* arg)
 							argument->pMessage=(void*)cmdIteml;
 							argument->typeMsg=1;
 							argument->pComm=cmd.fd;
+							if(ddmac)
+								argument->macn=ddmac->valueint;
 							(*cmds[cualf].code)(argument);
 							free(argument);
 						}
@@ -2008,17 +2077,6 @@ static void pcntManager(void * pArg)
 
 				totalPulses+=count;
 
-// At this point timer is irrelevant. Kill it if active
-				if(theMeters[evt.unit].lowThresHandle)
-				{
-#ifdef DEBUGX
-					if(theConf.traceflag & (1<<INTD))
-						printf("%sKilling task unit %d\n",INTDT,evt.unit);
-#endif
-					vTaskDelete(theMeters[evt.unit].lowThresHandle);
-					theMeters[evt.unit].lowThresHandle=NULL;
-				}
-
 				// THE counters. the whole point is this
 				theMeters[evt.unit].saveit=false;
 				theMeters[evt.unit].currentBeat+=count;
@@ -2048,24 +2106,6 @@ static void pcntManager(void * pArg)
 				if(mqttQ)
 					xQueueSend( mqttQ,&theMeters[evt.unit],0 );// send the message to the Meter Manager
 			}
-			else
-				if (evt.status & PCNT_EVT_THRES_0) // minimum to consider firing a timer
-				{
-				//	delay(300);// see any more coming before firing timer
-#ifdef WITHWATCH
-					pcnt_get_counter_value((pcnt_unit_t)evt.unit,(short int *) &count1);
-					if(!(count1>count)) //used if delay(300) else dumb
-					{	// nope, fire the timer. For now immediate
-#ifdef DEBUGX
-						if(theConf.traceflag & (1<<INTD))
-							printf("%sFire Watch Th1 ThresMain %d count %d\n",INTDT,count1,count);
-#endif
-						pcnt_event_disable((pcnt_unit_t)evt.unit, PCNT_EVT_THRES_0);
-						xTaskCreate(&watchGuard,"wguard",2048,(void*)evt.unit, 4, &theMeters[evt.unit].lowThresHandle);// launch task. 2048 if Printf
-					}
-#endif
-
-				}
         } else
             printf("PCNT Failed Queue\n");
 	}
@@ -2078,6 +2118,7 @@ static void init_vars()
 	vanadd=0;
 	llevoMsg=0;
 	memset(&losMacs,0,sizeof(losMacs));
+	memset(&setupHost,0,sizeof(setupHost));
 	vanMacs=0;
     qwait=QDELAY;
     qdelay=qwait*1000;
@@ -2130,7 +2171,6 @@ static void erase_config() //do the dirty work
 	theConf.centinel=CENTINEL;
 	theConf.ssl=0;
 	theConf.beatsPerKw[0]=800;//old way
-	theConf.bounce[0]=100;
 	//    fram.write_tarif_bpw(0, 800); // since everything is going to be 0, BPW[0]=800 HUMMMMMM????? SHould load Tariffs after this
 
 	write_to_flash();
@@ -2155,6 +2195,168 @@ static void erase_config() //do the dirty work
 #endif
 }
 
+static const httpd_uri_t setup = {
+    .uri       = "/setup",
+    .method    = HTTP_GET,
+    .handler   = setup_get_handler,
+	.user_ctx	= NULL
+};
+
+static esp_err_t setup_get_handler(httpd_req_t *req)
+{
+    char*  buf;
+    size_t buf_len;
+    int cualm=0;
+    time_t now;
+    struct tm timeinfo;
+    char strftime_buf[64];
+
+    buf_len = httpd_req_get_url_query_len(req) + 1;
+    if (buf_len > 1)
+    {
+        buf = (char*)malloc(buf_len);
+        if (httpd_req_get_url_query_str(req, buf, buf_len) == ESP_OK)
+        {
+            char param[32];
+            if (httpd_query_key_value(buf, "meter", param, sizeof(param)) == ESP_OK)
+            {
+            	 cualm=atoi(param);
+            	 sprintf(tempb,"Invalid Meter range %d",cualm);
+            	 if (cualm>=MAXDEVS)
+            		 goto exit;
+            }
+            if (httpd_query_key_value(buf, "mid", param, sizeof(param)) == ESP_OK)
+            	 strcpy((char*)&setupHost[cualm].meterid,param);
+
+            if (httpd_query_key_value(buf, "kwh", param, sizeof(param)) == ESP_OK)
+            	 setupHost[cualm].startKwh=atoi(param);
+
+            if (httpd_query_key_value(buf, "bpk", param, sizeof(param)) == ESP_OK)
+            	 setupHost[cualm].bpkwh=atoi(param);
+
+            if (httpd_query_key_value(buf, "duedate", param, sizeof(param)) == ESP_OK)
+            	 setupHost[cualm].diaCorte=atoi(param);
+
+            if (httpd_query_key_value(buf, "tariff", param, sizeof(param)) == ESP_OK)
+            	 setupHost[cualm].tariff=atoi(param);
+        }
+        free(buf);
+    }
+
+    if(setupHost[cualm].bpkwh>0 && setupHost[cualm].diaCorte>0 && setupHost[cualm].startKwh>0 && setupHost[cualm].tariff>0 && strlen(setupHost[cualm].meterid)>0)
+    {
+		time(&now);
+		localtime_r(&now, &timeinfo);
+		strftime(strftime_buf, sizeof(strftime_buf), "%c", &timeinfo);
+    	setupHost[cualm].valid=true;
+    	sprintf(tempb,"[%s]Meter:%d Id=%s kWh=%d BPK=%d Corte=%d Tariff=%d Challenge=123456",strftime_buf,cualm,setupHost[cualm].meterid,setupHost[cualm].startKwh,setupHost[cualm].bpkwh,
+    			setupHost[cualm].diaCorte,setupHost[cualm].tariff);
+    }
+    else
+    {
+    	exit:
+    	setupHost[cualm].valid=false;
+        strcpy(tempb,"Invalid parameters");
+    }
+
+	httpd_resp_send(req, tempb, strlen(tempb));
+
+    return ESP_OK;
+}
+
+static const httpd_uri_t challenge = {
+    .uri       = "/challenge",
+    .method    = HTTP_GET,
+    .handler   = challenge_get_handler,
+	.user_ctx	= NULL
+};
+
+static esp_err_t challenge_get_handler(httpd_req_t *req)
+{
+    char*  buf;
+    size_t buf_len;
+    int cualm,valor;
+    time_t now;
+    struct tm timeinfo;
+    char strftime_buf[64];
+
+    buf_len = httpd_req_get_url_query_len(req) + 1;
+    if (buf_len > 1)
+    {
+		sprintf(tempb,"Invalid parameters");
+        buf = (char*)malloc(buf_len);
+        if (httpd_req_get_url_query_str(req, buf, buf_len) == ESP_OK)
+        {
+            char param[32];
+            if (httpd_query_key_value(buf, "meter", param, sizeof(param)) == ESP_OK)
+            {
+            	 cualm=atoi(param);
+            	 if (cualm<MAXDEVS)
+            	 {
+            		 if (setupHost[cualm].valid)
+            		 {
+            			if (httpd_query_key_value(buf, "value", param, sizeof(param)) == ESP_OK)
+            			{
+            				valor=atoi(param);
+            				if (valor==654321)
+            				{
+            						time(&now);
+            						localtime_r(&now, &timeinfo);
+            						strftime(strftime_buf, sizeof(strftime_buf), "%c", &timeinfo);
+
+            				    	sprintf(tempb,"[%s]Meter:%d Id:%s kWh=%d BPK=%d Corte=%d Tariff=%d Registered",strftime_buf,cualm,setupHost[cualm].meterid,
+            				    			setupHost[cualm].startKwh,setupHost[cualm].bpkwh,setupHost[cualm].diaCorte,setupHost[cualm].tariff);
+            				    	memset(&setupHost[cualm],0,sizeof(setupHost[0]));
+            				    	theMeters[cualm].beatsPerkW=setupHost[cualm].bpkwh;
+            				    	memcpy((void*)&theMeters[cualm].serialNumber,(void*)&setupHost[cualm].meterid,sizeof(theMeters[cualm].serialNumber));
+            				    	theMeters[cualm].curLife=setupHost[cualm].startKwh;
+            				    	time((time_t*)&theMeters[cualm].ampTime);
+
+            				    	theConf.beatsPerKw[cualm]=setupHost[cualm].bpkwh;
+            				    	memcpy(theConf.medidor_id[cualm],(void*)&setupHost[cualm].meterid,sizeof(theConf.medidor_id[cualm]));
+            				    	time((time_t*)&theConf.bornDate[cualm]);
+            				    	theConf.beatsPerKw[cualm]=setupHost[cualm].bpkwh;
+            				    	theConf.bornKwh[cualm]=setupHost[cualm].startKwh;
+            				    	theConf.diaDeCorte[cualm]=setupHost[cualm].tariff;
+            				    	write_to_flash();
+            				}
+            				else
+            					sprintf(tempb,"Invalid challenge");
+            			}
+            			else
+            				sprintf(tempb,"Invalid Challenge value or missing");
+            		 }
+            		 else
+         				sprintf(tempb,"Meter %d not in setup Mode",cualm);
+            	 }
+            	 else
+     				sprintf(tempb,"Invalid Meter %d",cualm);
+            }
+        }
+        free(buf);
+       }
+	httpd_resp_send(req, tempb, strlen(tempb));
+
+    return ESP_OK;
+}
+
+static void start_webserver(void)
+{
+    httpd_handle_t server = NULL;
+    httpd_config_t config = HTTPD_DEFAULT_CONFIG();
+
+    if(theConf.traceflag & (1<<WEBD))
+    	printf("%sStarting server on port:%d\n",WEBDT, config.server_port);
+    if (httpd_start(&server, &config) == ESP_OK) {
+        // Set URI handlers
+        httpd_register_uri_handler(server, &setup);
+        httpd_register_uri_handler(server, &challenge);
+    }
+
+    printf("WebServer Started\n");
+    vTaskDelete(NULL);
+}
+
 void app_main()
 {
 
@@ -2163,6 +2365,8 @@ void app_main()
 	//#else
 	esp_log_level_set("*", ESP_LOG_WARN);
 	//#endif
+	char theMac[6];
+	esp_efuse_mac_get_default(theMac);
 
 	printf("Version Direct2 Tarifadia %d\n",TARIFADIA);
 
@@ -2263,14 +2467,19 @@ void app_main()
 		if(ttar==0) // load tariffs
 		{
 			printf("%sLoading Tariffs from host%s %s%s\n",RED,MAGENTA,"http://feediot.c1.biz/tarifasPer.txt",RESETC);
-			loadit();
+			loadit(NULL);
 		}
 		pcnt_init();// initialize it. Several tricks apply. Read there
+		if(theConf.traceflag & (1<<BOOTD))
+			printf("%sStarting Webserver\n",BOOTDT);
+		xTaskCreate(&start_webserver,"web",10240,(void*)1, 4, &webHandle);// Messages from the Meters. Controller Section socket manager
+
+	//	start_webserver();
 
 #ifdef DEBUGX
-		if(theConf.traceflag & (1<<CMDD))
+		if(theConf.traceflag & (1<<BOOTD))
 		{
-			printf("%sDay[%d]",CMDDT,yearDay);
+			printf("%sDay[%d]",BOOTDT,yearDay);
 			for (int aa=0;aa<24;aa++)
 				printf("[%02d]=%02x ",aa,tarifasDia[aa]);
 			printf("\nHora %d Tarifa %02x\n",horag,tarifasDia[horag]);
@@ -2285,4 +2494,5 @@ void app_main()
 		fram.readMany(FRAMDATE,(uint8_t*)&now.thedate,sizeof(now.thedate));
 		updateDateTime(now);
 	}
+
 }

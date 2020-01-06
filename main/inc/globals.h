@@ -22,7 +22,7 @@ EXTERN esp_mqtt_client_handle_t 		clientCloud;
 EXTERN float							ttemp;
 EXTERN FramSPI							fram;
 EXTERN gpio_config_t 					io_conf;
-EXTERN int 								socket_id,binary_file_length,numsensors,diaHoraTarifa,vanMacs,vanadd,vanvueltas,van;
+EXTERN int 								socket_id,binary_file_length,numsensors,diaHoraTarifa,vanMacs,vanadd,vanvueltas,van,globalSocks;
 EXTERN macControl						losMacs[MAXSTAS];
 EXTERN meterType						theMeters[MAXDEVS],algo;
 EXTERN nvs_handle 						nvshandle;
@@ -35,6 +35,8 @@ EXTERN u16 								qdelay,llevoMsg,mesg,diag,horag,yearg,wDelay,tarifasDia[24],o
 EXTERN u32								sentTotal,llevo,tallies[MAXSTAS][MAXDEVS];
 EXTERN u8								qwait,lastalign,lastFont;
 EXTERN uint32_t							totalPulses;
+EXTERN host_t							setupHost[MAXDEVS];
+EXTERN TaskHandle_t						webHandle;
 
 #ifdef KBD
 EXTERN char								lookuptable[NKEYS][10];

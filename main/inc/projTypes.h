@@ -7,8 +7,9 @@ typedef struct macC{
 	time_t			lastUpdate;
 	u32				theIp;
 	uint32_t 		macAdd;
-	uint32_t 		trans;
-	uint8_t 		*theBuffer;
+	uint32_t 		trans[MAXDEVS],controlLastKwH[MAXDEVS],controlLastBeats[MAXDEVS];
+	TimerHandle_t	timerH;
+	char			meterSerial[MAXDEVS][20];
 } macControl;
 
 typedef struct taskp{
@@ -22,7 +23,7 @@ typedef struct meterType{
 	 u16 beatsPerkW,curMonth,curMonthRaw,curDay,curDayRaw;
 	 u32 curLife,curCycle,lastKwHDate,msNow, minamps,maxamps,currentBeat,vanMqtt,ampTime,beatSave;
 	 u8 curHour,cycleMonth,curHourRaw,pos,pin,pinB;
-	 TaskHandle_t lowThresHandle;
+
 } meterType;
 
 typedef struct mqttMsg{
@@ -52,6 +53,7 @@ typedef struct pcomm{
     int pComm;
     uint8_t typeMsg;
     void *pMessage;
+    uint32_t macn;
 }parg;
 
 typedef void (*functrsn)(parg *);
@@ -62,15 +64,19 @@ typedef struct cmdRecord{
 }cmdRecord;
 
 typedef struct config {
-    bool 	corteSent[MAXDEVS];
     char 	medidor_id[MAXDEVS][MAXCHARS],meterName[MAXCHARS];
     time_t 	lastUpload,lastTime,preLastTime,bornDate[MAXDEVS],lastBootDate;
-    u16 	beatsPerKw[MAXDEVS],bootcount,bounce[MAXDEVS],diaDeCorte[MAXDEVS],lastResetCode;
-    u16 	ssl,traceflag; // to make it mod 16 for AES encryption
-    u32 	bornKwh[MAXDEVS],centinel;
-    u8 		breakers[MAXDEVS],statusSend;
+    u16 	beatsPerKw[MAXDEVS],bootcount,diaDeCorte[MAXDEVS],lastResetCode;
+    u16 	ssl,traceflag;
+    u32 	bornKwh[MAXDEVS],centinel,connTime;
+    u8 		breakers[MAXDEVS],statusSend,serverId;
 } config_flash;
 
+typedef struct conId{
+	u8		altDay;
+	u8		dDay;
+	u16		connSlot;
+}connStruct;
 typedef struct framq{
 	int whichMeter;
 	bool addit;
@@ -80,4 +86,13 @@ typedef struct pcntt{
     int unit;  // the PCNT unit that originated an interrupt
     uint32_t status; // information on the event type that caused the interrupt
 } pcnt_evt_t;
+
+typedef struct internalHost{
+	char		meterid[20];
+	uint32_t	startKwh;
+	uint16_t	bpkwh;
+	uint16_t	diaCorte;
+	uint16_t	tariff;
+	bool		valid;
+}host_t;
 #endif

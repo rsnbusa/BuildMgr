@@ -43,6 +43,7 @@ extern "C"{
 #include "SSD1306.h"
 #include "tcpip_adapter.h"
 #include "driver/pcnt.h"
+#include <esp_http_server.h>
 
 void app_main();
 }
