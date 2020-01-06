@@ -47,7 +47,9 @@ typedef enum displayType {NODISPLAY,DISPLAYIT} displayType;
 typedef enum overType {NOREP,REPLACE} overType;
 typedef enum resetType {ONCE,TIMER,REPEAT,TIMEREPEAT} resetType;
 typedef enum sendType {NOTSENT,SENT} sendType;
-enum debugflags{BOOTD,WIFID,MQTTD,PUBSUBD,OTAD,CMDD,WEBD,GEND,MQTTT,HEAPD,INTD,FRAMD,MSGD};
+//enum debugflags{BOOTD,WIFID,MQTTD,PUBSUBD,OTAD,CMDD,WEBD,GEND,MQTTT,HEAPD,INTD,FRAMD,MSGD};
+enum debugflags{BOOTD,WIFID,MQTTD,PUBSUBD,OTAD,CMDD,WEBD,GEND,MQTTT,FRMCMD,INTD,FRAMD,MSGD,TIMED,SIMD};
+
 
 typedef struct pcomm{
     int pComm;
@@ -64,13 +66,15 @@ typedef struct cmdRecord{
 }cmdRecord;
 
 typedef struct config {
+    bool 	corteSent[MAXDEVS];
     char 	medidor_id[MAXDEVS][MAXCHARS],meterName[MAXCHARS];
     time_t 	lastUpload,lastTime,preLastTime,bornDate[MAXDEVS],lastBootDate;
-    u16 	beatsPerKw[MAXDEVS],bootcount,diaDeCorte[MAXDEVS],lastResetCode;
-    u16 	ssl,traceflag;
-    u32 	bornKwh[MAXDEVS],centinel,connTime;
-    u8 		breakers[MAXDEVS],statusSend,serverId;
+    u16 	beatsPerKw[MAXDEVS],bootcount,bounce[MAXDEVS],diaDeCorte[MAXDEVS],lastResetCode;
+    u16 	ssl,traceflag; // to make it mod 16 for AES encryption
+    u32 	bornKwh[MAXDEVS],centinel;
+    u8 		configured[MAXDEVS],active;
 } config_flash;
+
 
 typedef struct conId{
 	u8		altDay;

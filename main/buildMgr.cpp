@@ -9,8 +9,8 @@ static void submode(void * pArg);
 void kbd(void *pArg);
 static void update_mac(u32 newmac);
 static void write_to_fram(u8 meter,bool addit);
-static esp_err_t setup_get_handler(httpd_req_t *req);
-static esp_err_t challenge_get_handler(httpd_req_t *req);
+
+extern void start_webserver(void* pArg);
 
 #ifdef DISPLAY
 void clearScreen();
@@ -1545,39 +1545,7 @@ void firmwareCmd(parg *pArg)
 #endif
 			}
 		}//lmac && lpos
-#ifdef DISPLAY
-		if(displayf)
-		{
-			clearScreen();
-			cJSON *meter= cJSON_GetObjectItem((cJSON*)argument->pMessage,"MeterId");
-			cJSON *tran= cJSON_GetObjectItem((cJSON*)argument->pMessage,"Transactions");
-			cJSON *pulse= cJSON_GetObjectItem((cJSON*)argument->pMessage,"Pulse");
-			cJSON *beats= cJSON_GetObjectItem((cJSON*)argument->pMessage,"Beats");
 
-			if(xSemaphoreTake(I2CSem, portMAX_DELAY))
-			{
-				display.clear();
-				if(meter)
-					drawString(64,1,meter->valuestring,16,TEXT_ALIGN_CENTER,NODISPLAY,NOREP);
-				if(tran)
-				{
-					sprintf(text,"Trans:%d",tran->valueint);
-					drawString(64,18,text,12,TEXT_ALIGN_CENTER,NODISPLAY,NOREP);
-				}
-				if(beats)
-				{
-					sprintf(text,"Beats:%d",beats->valueint);
-					drawString(64,32,text,12,TEXT_ALIGN_CENTER,NODISPLAY,NOREP);
-				}
-				if(pulse)
-				{
-					sprintf(text,"Pulse:%d",pulse->valueint);
-					drawString(64,48,text,12,TEXT_ALIGN_CENTER,DISPLAYIT,NOREP);
-				}
-				xSemaphoreGive(I2CSem);
-			}
-		}
-#endif
 		if(answer)
 		{
 			time(&loginData.thedate);
@@ -1682,7 +1650,7 @@ void initScreen()
 		display.init();
 		display.flipScreenVertically();
 		display.clear();
-		drawString(64,10,"WiFi",24,TEXT_ALIGN_CENTER,DISPLAYIT,NOREP);
+		drawString(64,10,"ConnMgr",24,TEXT_ALIGN_CENTER,DISPLAYIT,NOREP);
 		xSemaphoreGive(I2CSem);
 	}
 	else
@@ -2148,10 +2116,12 @@ static void init_vars()
 	strcpy(lookuptable[6],"WEBD");
 	strcpy(lookuptable[7],"GEND");
 	strcpy(lookuptable[8],"MQTTT");
-	strcpy(lookuptable[9],"HEAPD");
+	strcpy(lookuptable[9],"FRMCMD");
 	strcpy(lookuptable[10],"INTD");
 	strcpy(lookuptable[11],"FRAMD");
 	strcpy(lookuptable[12],"MSGD");
+	strcpy(lookuptable[13],"TIMED");
+	strcpy(lookuptable[14],"SIMD");
 
 	string debugs;
 
@@ -2194,7 +2164,7 @@ static void erase_config() //do the dirty work
 		printf("%sCentinel %x\n",BOOTDT,theConf.centinel);
 #endif
 }
-
+/*
 static const httpd_uri_t setup = {
     .uri       = "/setup",
     .method    = HTTP_GET,
@@ -2356,7 +2326,7 @@ static void start_webserver(void)
     printf("WebServer Started\n");
     vTaskDelete(NULL);
 }
-
+*/
 void app_main()
 {
 
@@ -2494,5 +2464,6 @@ void app_main()
 		fram.readMany(FRAMDATE,(uint8_t*)&now.thedate,sizeof(now.thedate));
 		updateDateTime(now);
 	}
+
 
 }

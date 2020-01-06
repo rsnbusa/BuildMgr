@@ -5,7 +5,7 @@
 //#define TEMP
 //#define WITHMETERS
 //#define MQT
-//#define DISPLAY
+#define DISPLAY
 #define MQTTLOCAL
 #define KBD			// only for testing build
 #define DEBUGX
@@ -38,6 +38,8 @@
 #define	PUPD0							0x06
 #define	PUPD1							0x07
 #define READ_BIT 						I2C_MASTER_READ              	/*!< I2C master read */
+#endif
+#ifdef DISPLAY
 #define SCLW                			22      // SCL for Wire service
 //#define MUXPIN							27
 //#define MUXPIN1							26
@@ -47,13 +49,6 @@
 #define WRITE_BIT 						I2C_MASTER_WRITE              	/*!< I2C master write */
 
 #endif
-
-
-#define BREAK0							13
-#define BREAK1							14
-#define BREAK2							25
-#define BREAK3							26
-#define BREAK4							27
 
 #define BUFFSIZE 						4096
 #define BUILDMGRPORT					30000
@@ -77,10 +72,16 @@
 #define MAXWIFI							100
 
 #define METER0							4
-#define METER1							22
+#define METER1							14 //22
 #define METER2							16
 #define METER3							17
-#define METER4							21
+#define METER4							13 //21
+
+#define BREAK0							13
+#define BREAK1							14
+#define BREAK2							25
+#define BREAK3							26
+#define BREAK4							27
 
 //FRAM pins SPI
 #define FMOSI							23
@@ -88,7 +89,7 @@
 #define FCLK							18
 #define FCS								5
 
-#define NKEYS							26
+#define NKEYS							30
 #define QDELAY							10
 #define TEXT_BUFFSIZE 					4096
 #define u16								uint16_t
@@ -108,6 +109,7 @@
 //37	White
 
 #define BOOTDT							"\e[31m[BOOTD]\e[0m"
+#define BOOTDT							"\e[31m[BOOTD]\e[0m"
 #define WIFIDT							"\e[31m[WIFID]\e[0m"
 #define MQTTDT							"\e[32m[MQQTD]\e[0m"
 #define MQTTTT							"\e[32m[MQTTT]\e[0m"
@@ -120,6 +122,9 @@
 #define GENDT							"\e[37m[GEND]\e[0m"
 #define HEAPDT							"\e[37m[HEAPD]\e[0m"
 #define FRAMDT							"\e[37m[FRAMD]\e[0m"
+#define FRMCMDT							"\e[35m[FRMCMDT]\e[0m"
+#define TIEMPOT							"\e[31m[TIMED]\e[0m"
+#define SIMDT							"\e[36m[SIMD]\e[0m"
 #define ERASET							"\e[2J"
 
 #define BLACKC							"\e[30m"

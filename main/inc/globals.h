@@ -34,7 +34,7 @@ EXTERN TimerHandle_t					hourChangeT;
 EXTERN u16 								qdelay,llevoMsg,mesg,diag,horag,yearg,wDelay,tarifasDia[24],oldMesg,oldDiag,oldHorag,yearDay;
 EXTERN u32								sentTotal,llevo,tallies[MAXSTAS][MAXDEVS];
 EXTERN u8								qwait,lastalign,lastFont;
-EXTERN uint32_t							totalPulses;
+EXTERN uint32_t							totalPulses,oldCurBeat[MAXDEVS],oldCurLife[MAXDEVS];
 EXTERN host_t							setupHost[MAXDEVS];
 EXTERN TaskHandle_t						webHandle;
 
@@ -44,11 +44,11 @@ EXTERN char								lookuptable[NKEYS][10];
 
 #ifdef MULTIX
 EXTERN QueueHandle_t					muxQueue;
-EXTERN SemaphoreHandle_t				I2CSem;
-EXTERN u16								icadd[2];
 #endif
 
 #ifdef DISPLAY
+EXTERN SemaphoreHandle_t				I2CSem;
+EXTERN u16								icadd[2];
 EXTERN I2C								miI2C;
 EXTERN i2ctype 							i2cp;
 #ifdef GLOBAL

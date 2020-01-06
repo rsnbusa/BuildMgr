@@ -84,21 +84,65 @@ void drawString(int x, int y, string que, int fsize, int align,displayType showi
 	if (showit==DISPLAYIT)
 		display.display();
 }
+
+static void displayBeats()
+{
+	uint8_t posx[MAXDEVS]={0,70,45,0,70},posy[MAXDEVS]={1,1,16,34,34};
+	char textt[20];
+	uint16_t count;
+
+	for(int a=0;a<MAXDEVS;a++)
+	{
+		if(theMeters[a].currentBeat>oldCurBeat[a])
+		{
+			pcnt_get_counter_value((pcnt_unit_t)a,(short int *) &count);
+			sprintf(textt," %5d-%d  ",theMeters[a].currentBeat,count);
+			drawString(posx[a], posy[a],string(textt), 10, TEXT_ALIGN_LEFT,DISPLAYIT, REPLACE);
+			oldCurBeat[a]=theMeters[a].currentBeat;
+		}
+	}
+}
+
+static void displayKwH()
+{
+
+	char textt[20];
+	uint8_t posx[MAXDEVS]={0,70,35,0,70},posy[MAXDEVS]={1,1,16,34,34};
+	uint16_t count;
+
+	for(int a=0;a<MAXDEVS;a++)
+	{
+		//if(theMeters[a].curLife>oldCurLife[a])
+		//{
+			pcnt_get_counter_value((pcnt_unit_t)a,(short int *) &count);
+			sprintf(textt," %5d-%d  ",theMeters[a].curLife,count);
+			drawString(posx[a], posy[a],string(textt), 16, TEXT_ALIGN_LEFT,DISPLAYIT, REPLACE);
+		//	oldCurLife[a]=theMeters[a].curLife;
+		//}
+	}
+}
+
 void displayManager(void *arg) {
 	time_t t = 0;
 	struct tm timeinfo ;
 	char textd[20],textt[20];
 
+	bool displayMode=true;// kwh
+
+	memset(oldCurBeat,0,sizeof(oldCurBeat));
+	memset(oldCurLife,0,sizeof(oldCurLife));
 	clearScreen();
-
-	while(1)
-		vTaskDelay(1000/portTICK_PERIOD_MS);
-
-
 
 	while(true)
 	{
 		vTaskDelay(1000/portTICK_PERIOD_MS);
+		if(!gpio_get_level((gpio_num_t)0))
+		{
+			displayMode=!displayMode;
+			memset(oldCurBeat,0,sizeof(oldCurBeat));
+			memset(oldCurLife,0,sizeof(oldCurLife));
+			clearScreen();
+		}
 		time(&t);
 		localtime_r(&t, &timeinfo);
 
@@ -107,10 +151,12 @@ void displayManager(void *arg) {
 		sprintf(textt,"%02d:%02d:%02d",timeinfo.tm_hour,timeinfo.tm_min,timeinfo.tm_sec);
 		if(xSemaphoreTake(I2CSem, portMAX_DELAY))
 		{
-		//	drawString(16, 5, mqttf?string("m"):string("   "), 10, TEXT_ALIGN_LEFT,NODISPLAY, REPLACE);
 			drawString(0, 51, string(textd), 10, TEXT_ALIGN_LEFT,NODISPLAY, REPLACE);
-			drawString(86, 51, string(textt), 10, TEXT_ALIGN_LEFT,NODISPLAY, REPLACE);
-		//	drawString(61, 51, aqui.working?"On  ":"Off", 10, TEXT_ALIGN_LEFT,DISPLAYIT, REPLACE);
+			drawString(86, 51, string(textt), 10, TEXT_ALIGN_LEFT,DISPLAYIT, REPLACE);
+			if(displayMode)
+				displayBeats();
+			else
+				displayKwH();
 			xSemaphoreGive(I2CSem);
 		}
 	}
