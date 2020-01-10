@@ -14,11 +14,14 @@
 static esp_err_t challenge_get_handler(httpd_req_t *req);
 static esp_err_t setup_get_handler(httpd_req_t *req);
 static esp_err_t setupend_get_handler(httpd_req_t *req);
+static esp_err_t conn_setup_get_handler(httpd_req_t *req);
+static esp_err_t conn_sendsetup_handler(httpd_req_t *req);
 
+extern void delay(uint32_t a);
 extern void write_to_flash();
 
 static const httpd_uri_t setup = {
-    .uri       = "/setup",
+    .uri       = "/cmsetup",
     .method    = HTTP_GET,
     .handler   = setup_get_handler,
 	.user_ctx	= NULL
@@ -59,25 +62,18 @@ static esp_err_t setup_get_handler(httpd_req_t *req)
 
             if (httpd_query_key_value(buf, "bpk", param, sizeof(param)) == ESP_OK)
             	 setupHost[cualm].bpkwh=atoi(param);
-
-            if (httpd_query_key_value(buf, "duedate", param, sizeof(param)) == ESP_OK)
-            	 setupHost[cualm].diaCorte=atoi(param);
-
-            if (httpd_query_key_value(buf, "tariff", param, sizeof(param)) == ESP_OK)
-            	 setupHost[cualm].tariff=atoi(param);
         }
         free(buf);
     }
 
-    if(setupHost[cualm].bpkwh>0 && setupHost[cualm].diaCorte>0 && setupHost[cualm].startKwh>0 && setupHost[cualm].tariff>0 && strlen(setupHost[cualm].meterid)>0)
+    if(setupHost[cualm].bpkwh>0 && setupHost[cualm].startKwh>0 && strlen(setupHost[cualm].meterid)>0)
     {
 		time(&now);
 		localtime_r(&now, &timeinfo);
 		strftime(strftime_buf, sizeof(strftime_buf), "%c", &timeinfo);
     	setupHost[cualm].valid=true;
     	theConf.configured[cualm]=1; //in transit mode
-    	sprintf(tempb,"[%s]Meter:%d Id=%s kWh=%d BPK=%d Corte=%d Tariff=%d",strftime_buf,cualm,setupHost[cualm].meterid,setupHost[cualm].startKwh,setupHost[cualm].bpkwh,
-    			setupHost[cualm].diaCorte,setupHost[cualm].tariff);
+    	sprintf(tempb,"[%s]Meter:%d Id=%s kWh=%d BPK=%d ",strftime_buf,cualm,setupHost[cualm].meterid,setupHost[cualm].startKwh,setupHost[cualm].bpkwh);
     }
     else
     {
@@ -92,7 +88,7 @@ static esp_err_t setup_get_handler(httpd_req_t *req)
 }
 
 static const httpd_uri_t challenge = {
-    .uri       = "/challenge",
+    .uri       = "/cmchallenge",
     .method    = HTTP_GET,
     .handler   = challenge_get_handler,
 	.user_ctx	= NULL
@@ -106,6 +102,7 @@ static esp_err_t challenge_get_handler(httpd_req_t *req)
     time_t now;
     struct tm timeinfo;
     char strftime_buf[64];
+    bool rebf=false;
 
 	time(&now);
 	localtime_r(&now, &timeinfo);
@@ -129,18 +126,14 @@ static esp_err_t challenge_get_handler(httpd_req_t *req)
 					{
 						if(theConf.configured[a]==2)
 						{
-							theMeters[a].beatsPerkW=setupHost[a].bpkwh;
-							memcpy((void*)&theMeters[a].serialNumber,(void*)&setupHost[a].meterid,sizeof(theMeters[a].serialNumber));
-							theMeters[a].curLife=setupHost[a].startKwh;
-							time((time_t*)&theMeters[a].ampTime);
-
-							theConf.beatsPerKw[a]=setupHost[a].bpkwh;
-							memcpy(theConf.medidor_id[a],(void*)&setupHost[a].meterid,sizeof(theConf.medidor_id[cualm]));
+							strcpy(theConf.medidor_id[a],setupHost[a].meterid);
 							time((time_t*)&theConf.bornDate[a]);
 							theConf.beatsPerKw[a]=setupHost[a].bpkwh;
 							theConf.bornKwh[a]=setupHost[a].startKwh;
-							theConf.diaDeCorte[a]=setupHost[a].tariff;
-							theConf.configured[a]=3;					//final status configured
+							theConf.configured[a]=3;						//final status configured
+							fram.formatMeter(a);
+							fram.write_lifekwh(a,setupHost[a].startKwh);	// write to Fram. Its beginning of life KWH
+							printf("Writing life Meter %d= %d\n",a,setupHost[a].startKwh);
 						}
 						else
 							theConf.configured[a]=0; //reset it
@@ -148,9 +141,8 @@ static esp_err_t challenge_get_handler(httpd_req_t *req)
 					theConf.active=1;				// theConf is now ACTIVE and Certified
 					write_to_flash();
 					memset(&setupHost,0,sizeof(setupHost));
-
-
-					sprintf(tempb,"[%s]Meters were saved permanently",strftime_buf);
+					sprintf(tempb,"[%s]Meters were saved permanently...rebooting in 3 secs",strftime_buf);
+					rebf=true;
 				}
 				else
 					sprintf(tempb,"[%s]Invalid challenge",strftime_buf);
@@ -162,11 +154,17 @@ static esp_err_t challenge_get_handler(httpd_req_t *req)
        }
 	httpd_resp_send(req, tempb, strlen(tempb));
 
+	if(rebf)
+	{
+		delay(3000);
+		esp_restart();
+	}
+
     return ESP_OK;
 }
 
 static const httpd_uri_t setupend = {
-    .uri       = "/setupend",
+    .uri       = "/cmsetupend",
     .method    = HTTP_GET,
     .handler   = setupend_get_handler,
 	.user_ctx	= NULL
@@ -222,18 +220,112 @@ exit:
     return ESP_OK;
 }
 
+static const httpd_uri_t csetup = {
+    .uri       = "/csetup",
+    .method    = HTTP_GET,
+    .handler   = conn_setup_get_handler,
+	.user_ctx	= NULL
+};
+
+static esp_err_t conn_setup_get_handler(httpd_req_t *req)
+{
+		char*  buf;
+	    size_t buf_len;
+	    time_t now;
+	    struct tm timeinfo;
+	    char strftime_buf[64];
+
+		time(&now);
+		localtime_r(&now, &timeinfo);
+		strftime(strftime_buf, sizeof(strftime_buf), "%c", &timeinfo);
+
+	    buf_len = httpd_req_get_url_query_len(req) + 1;
+	    if (buf_len > 1)
+	    {
+	        buf = (char*)malloc(buf_len);
+	        if (httpd_req_get_url_query_str(req, buf, buf_len) == ESP_OK)
+	        {
+	            char param[32];
+	            if (httpd_query_key_value(buf, "conn", param, sizeof(param)) == ESP_OK)
+	            	strcpy(theConf.meterConnName,param);
+
+	            if (httpd_query_key_value(buf, "slot", param, sizeof(param)) == ESP_OK)
+	            	theConf.slot_Server.slot_time=atoi(param);
+
+	            if (httpd_query_key_value(buf, "server", param, sizeof(param)) == ESP_OK)
+	            	theConf.slot_Server.server_num=atoi(param);
+
+	            if (httpd_query_key_value(buf, "AltDay", param, sizeof(param)) == ESP_OK)
+	            	theConf.connId.altDay=atoi(param);
+
+	            if (httpd_query_key_value(buf, "DDay", param, sizeof(param)) == ESP_OK)
+	            	theConf.connId.dDay=atoi(param);
+
+	            if (httpd_query_key_value(buf, "SlotSlice", param, sizeof(param)) == ESP_OK)
+	            	theConf.connId.connSlot=atoi(param);
+	        }
+	        free(buf);
+	    }
+
+	    if(1)
+	    {
+			time(&now);
+			localtime_r(&now, &timeinfo);
+			strftime(strftime_buf, sizeof(strftime_buf), "%c", &timeinfo);
+	    	sprintf(tempb,"[%s]Conn:%s SlotDuration=%d MqttServer=%d AltDay=%d DDAY %d Slice=%d",strftime_buf,theConf.meterConnName,theConf.slot_Server.slot_time,
+	    			theConf.slot_Server.server_num,theConf.connId.altDay,theConf.connId.dDay,theConf.connId.connSlot);
+	    	write_to_flash();
+	    }
+	    else
+	    {
+
+	        sprintf(tempb,"[%s]Invalid parameters",strftime_buf);
+	    }
+
+		httpd_resp_send(req, tempb, strlen(tempb));
+
+	    return ESP_OK;
+}
+
+static const httpd_uri_t rsetup = {
+    .uri       = "/cgetsetup",
+    .method    = HTTP_GET,
+    .handler   = conn_sendsetup_handler,
+	.user_ctx	= NULL
+};
+
+static esp_err_t conn_sendsetup_handler(httpd_req_t *req)
+{
+	    time_t now;
+	    struct tm timeinfo;
+	    char strftime_buf[64];
+
+
+		time(&now);
+		localtime_r(&now, &timeinfo);
+		strftime(strftime_buf, sizeof(strftime_buf), "%c", &timeinfo);
+		sprintf(tempb,"[%s]Setup is Conn:%s SlotDuration=%d MqttServer=%d AltDay=%d DDAY %d Slice=%d",strftime_buf,theConf.meterConnName,theConf.slot_Server.slot_time,
+				theConf.slot_Server.server_num,theConf.connId.altDay,theConf.connId.dDay,theConf.connId.connSlot);
+
+		httpd_resp_send(req, tempb, strlen(tempb));
+
+	    return ESP_OK;
+}
+
+
 void start_webserver(void *pArg)
 {
     httpd_handle_t server = NULL;
     httpd_config_t config = HTTPD_DEFAULT_CONFIG();
-    config.server_port=91;
 
     if(theConf.traceflag & (1<<WEBD))
     	printf("%sStarting server on port:%d\n",WEBDT, config.server_port);
     if (httpd_start(&server, &config) == ESP_OK) {
         // Set URI handlers
-        httpd_register_uri_handler(server, &setup); 		//setup upto 5 meters
+        httpd_register_uri_handler(server, &setup); 		//setup up to 5 meters
         httpd_register_uri_handler(server, &setupend);		//end setup and send challenge
+        httpd_register_uri_handler(server, &csetup);		//connmgr setup
+        httpd_register_uri_handler(server, &rsetup);		//send connmgr setup
         httpd_register_uri_handler(server, &challenge);		//confirm challenge and store in flash
     }
     if(theConf.traceflag & (1<<WEBD))

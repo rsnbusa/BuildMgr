@@ -1,15 +1,8 @@
 
 #ifndef _FramSPI_H_
 #define _FramSPI_H_
-#include <stdint.h>
 #include "includes.h"
-extern "C"{
-#include "driver/spi_master.h"
-}
-//#include "spi_master.h"
-#include <stdio.h>
-#include <stdlib.h>
-#include <string.h>
+
 #define MB85RC_DEFAULT_ADDRESS          (0x50) /* 1010 + A2 + A1 + A0 = 0x50 default */
 #define MB85RC_SLAVE_ID                 (0xF8)
 #define ACK 							true
@@ -59,7 +52,7 @@ public:
     int 		format(uint8_t valor, uint8_t *buffer,uint32_t len,bool all);
     int 		formatSlow(uint8_t valor);
 
-    int			formatMeter(uint8_t cual,uint8_t * buffer,uint16_t len);
+    int			formatMeter(uint8_t cual);
     int 		writeMany (uint32_t framAddr, uint8_t *valores,uint32_t son);
     int			readMany (uint32_t framAddr, uint8_t *valores,uint32_t son);
 
@@ -79,22 +72,25 @@ public:
     int	        write_pago(uint8_t medidor, float value);
     int	        write_month(uint8_t medidor,uint8_t month,uint16_t value);
     int	        write_monthraw(uint8_t medidor,uint8_t month,uint16_t value);
-    int	        write_day(uint8_t medidor,uint16_t yearl,uint8_t month,uint8_t dia,uint16_t value);
-    int	        write_dayraw(uint8_t medidor,uint16_t yearl,uint8_t month,uint8_t dia,uint16_t value);
-    int	        write_hour(uint8_t medidor,uint16_t yearl,uint8_t month,uint8_t dia,uint8_t hora,uint8_t value);
-    int	        write_hourraw(uint8_t medidor,uint16_t yearl,uint8_t month,uint8_t dia,uint8_t hora,uint8_t value);
+    int	        write_day(uint8_t medidor,uint16_t yearDay,uint16_t value);
+    int	        write_dayraw(uint8_t medidor,uint16_t yearDay,uint16_t value);
+    int	        write_hour(uint8_t medidor,uint16_t yearDay,uint8_t hora,uint8_t value);
+    int	        write_hourraw(uint8_t medidor,uint16_t yearDay,uint8_t hora,uint8_t value);
     int	        write_lifedate(uint8_t medidor, uint32_t value);
     int	        write_recover(scratchTypespi value);
+    int	        write_cycle(uint8_t mes, uint32_t value);
+
     int	        read_beat(uint8_t medidor, uint8_t*  value);
     int	        read_month(uint8_t medidor,uint8_t month,uint8_t*  value);
     int	        read_monthraw(uint8_t medidor,uint8_t month,uint8_t*  value);
-    int	        read_day(uint8_t medidor,uint16_t yearl,uint8_t month,uint8_t dia,uint8_t*  value);
-    int	        read_dayraw(uint8_t medidor,uint16_t yearl,uint8_t month,uint8_t dia,uint8_t*  value);
-    int	        read_hour(uint8_t medidor,uint16_t yearl,uint8_t month,uint8_t dia,uint8_t hora,uint8_t*  value);
-    int	        read_hourraw(uint8_t medidor,uint16_t yearl,uint8_t month,uint8_t dia,uint8_t hora,uint8_t*  value);
+    int	        read_day(uint8_t medidor,uint16_t yearDay,uint8_t*  value);
+    int	        read_dayraw(uint8_t medidor,uint16_t yearDay,uint8_t*  value);
+    int	        read_hour(uint8_t medidor,uint16_t yearDay,uint8_t hora,uint8_t*  value);
+    int	        read_hourraw(uint8_t medidor,uint16_t yearDay,uint8_t hora,uint8_t*  value);
     int	        read_lifedate(uint8_t medidor,uint8_t*  value);
     int	        read_lifekwh(uint8_t medidor, uint8_t*  value);
     int	        read_recover(scratchTypespi *value);
+    int 		read_cycle(uint8_t mes, uint8_t*  value);
 
 public:
     bool _framInitialised;

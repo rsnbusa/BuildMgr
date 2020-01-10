@@ -66,7 +66,7 @@
 
 #define MAXBUFFER						2500
 #define MAXCHARS						40
-#define MAXCMDS							20
+#define MAXCMDS							23
 #define MAXDEVS							5
 #define MAXSTAS							20
 #define MAXWIFI							100

@@ -1,35 +1,41 @@
 #define GLOBAL
-#include "includes.h"
 #include "defines.h"
-#include "projTypes.h"
+#include "includes.h"
 #include "globals.h"
+#include "projTypes.h"
+#include <bits/stdc++.h>
 
-#ifdef DISPLAY
-extern void drawString(int x, int y, string que, int fsize, int align,displayType showit,overType erase);
-#endif
+#define KBDT	"\e[36m[KBD]\e[0m"
 
+extern void delay(uint32_t a);
 extern void write_to_flash();
+extern void sendStatusMeterAll();
 extern void load_from_fram(u8 meter);
-extern void firmwareCmd(parg *pArg);
-extern void loadit(parg *pArg);
+extern void write_to_fram(u8 meter,bool addit);
+extern void connMgr(void *pArg);
+extern void timeKeeper(void *pArg);
 
-void printStationList()
-{
-	uint8_t them[4];
-	struct tm timeinfo;
-	char strftime_buf[64];
+using namespace std;
 
-	for (int a=0;a<vanMacs;a++)
-	{
-		localtime_r(&losMacs[a].lastUpdate, &timeinfo);
-			strftime(strftime_buf, sizeof(strftime_buf), "%c", &timeinfo);
-		memcpy(&them,&losMacs[a].macAdd,4);
-		printf("Mac[%d][%d]:%.2x:%.2x:%.2x:%.2x Ip:%s (%s)\n",a,losMacs[a].trans[0],
-		them[0],them[1],them[2],them[3],(char*)ip4addr_ntoa((ip4_addr_t *)&losMacs[a].theIp),strftime_buf);
-	}
+typedef void (*functkbd)();
+
+typedef struct cmd_kbd_t{
+    char comando[20];
+    functkbd code;
+}cmdRecord_t;
+
+cmdRecord_t cmdds[MAXCMDS];
+
+uint16_t date2days(uint16_t y, uint8_t m, uint8_t d) {
+	uint8_t daysInMonth [12] ={ 31,28,31,30,31,30,31,31,30,31,30,31 };//offsets 0,31,59,90,120,151,181,212,243,273,304,334, +1 if leap year
+	uint16_t days = d;
+	for (uint8_t i = 0; i < m; i++)
+		days += daysInMonth[ i];
+	if (m > 1 && y % 4 == 0)
+		++days;
+	return days ;
+
 }
-
-
 int get_string(uart_port_t uart_num,uint8_t cual,char *donde)
 {
 	uint8_t ch;
@@ -45,6 +51,7 @@ int get_string(uart_port_t uart_num,uint8_t cual,char *donde)
 				*donde=0;
 				return son;
 			}
+
 			else
 			{
 				*donde=(char)ch;
@@ -56,57 +63,888 @@ int get_string(uart_port_t uart_num,uint8_t cual,char *donde)
 	}
 }
 
+
 int cmdfromstring(string key)
 {
-    for (int i=0; i <NKEYS; i++)
-    {
-    	string s1=string(lookuptable[i]);
-    	if(strstr(s1.c_str(),key.c_str())!=NULL)
-            return i;
-    }
-    return -1;
-}
-
-
-int keyfromstring(char *key)
-{
-
-    int i;
-    for (i=0; i < NKEYS; i++) {
-
-        if (strcmp(lookuptable[i], key) == 0)
-            return i;
-    }
-    return 100;
-}
-
-static void printControllers()
-{
-	printf("Listing %d Active Controllers\n",vanMacs);
-	for (int a=0;a<vanMacs;a++)
+	for (int i=0; i <NKEYS; i++)
 	{
-		printf("Controller[%d] Mac %06x seen %s\n",a,losMacs[a].macAdd,ctime(&losMacs[a].lastUpdate));
-		for (int b=0;b<MAXDEVS;b++)
-			printf("Meter[%d]=%s KwH %6d Beats %9d\n",b,losMacs[a].meterSerial[b],losMacs[a].controlLastKwH[b],losMacs[a].controlLastBeats[b]);
+		string s1=string(lookuptable[i]);
+		if(strstr(s1.c_str(),key.c_str())!=NULL)
+			return i;
+	}
+	return -1;
+}
+
+int kbdCmd(string key)
+{
+	string s1,s2,skey;
+	s1=s2=skey="";
+
+//	printf("Key %s\n",key.c_str());
+	skey=string(key);
+
+	for(int a=0;a<key.length();a++)
+		skey[a]=toupper(skey[a]);
+
+//	printf("Kbdin =%s=\n",skey.c_str());
+
+	for (int i=0; i <MAXCMDS; i++)
+	{
+		s1=string(cmdds[i].comando);
+
+		for(int a=0;a<s1.length();a++)
+			s2[a]=toupper(s1[a]);
+	//	printf("Cmd =%s=\n",s2.c_str());
+		if(strstr(s2.c_str(),skey.c_str())!=NULL)
+			return i;
+		s1=s2="";
+	}
+	return -1;
+}
+
+
+int askMeter()
+{
+	int len;
+	char s1[20];
+
+	printf("Meter:");
+	fflush(stdout);
+	len=get_string(UART_NUM_0,10,s1);
+	if(len<=0)
+	{
+		printf("\n");
+		return -1;
+	}
+	len= atoi(s1);
+	if(len<MAXDEVS)
+		return len;
+	else
+	{
+		printf("%sMeter out of range 0-%d%s\n",MAGENTA,MAXDEVS-1,RESETC);
+		return -1;
 	}
 }
 
+int askMonth()
+{
+	int len;
+	char s1[20];
 
-void kbd(void *arg) {
-	int len,cualf,a;
-	uart_port_t uart_num = UART_NUM_0 ;
-	char s1[20],s2[20];
-	char data[20];
+	printf("Month(0-11):");
+	fflush(stdout);
+	len=get_string(UART_NUM_0,10,s1);
+	if(len<=0)
+	{
+		printf("\n");
+		return -1;
+	}
+	len= atoi(s1);
+	if(len<12)
+		return len;
+	else
+	{
+		printf("%sMonth out of range 0-11%s\n",MAGENTA,RESETC);
+		return -1;
+	}
+}
+
+int askHour()
+{
+	int len;
+	char s1[20];
+
+	printf("Hour(0-23):");
+	fflush(stdout);
+	len=get_string(UART_NUM_0,10,s1);
+	if(len<=0)
+	{
+		printf("\n");
+		return -1;
+	}
+	len= atoi(s1);
+	if(len<24)
+		return len;
+	else
+	{
+		printf("%sHour out of range 0-23%s\n",MAGENTA,RESETC);
+		return -1;
+	}
+}
+
+int askDay(int month)
+{
+	int len;
+	char s1[20];
+
+	printf("Day(0-%d):",daysInMonth[month]-1);
+	fflush(stdout);
+	len=get_string(UART_NUM_0,10,s1);
+	if(len<=0)
+	{
+		printf("\n");
+		return -1;
+	}
+	len= atoi(s1);
+	if(len<daysInMonth[month])
+		return len;
+	else
+	{
+		printf("%sDay out of range 0-%d%s\n",MAGENTA,daysInMonth[month]-1,RESETC);
+		return -1;
+	}
+}
+
+int askValue(char *title)
+{
+	int len;
+	char s1[20];
+
+	printf("%s:",title);
+	fflush(stdout);
+	len=get_string(UART_NUM_0,10,s1);
+	if(len<=0)
+	{
+		printf("\n");
+		return -1;
+	}
+
+	return atoi(s1);
+}
+
+void confStatus()
+{
+	struct tm timeinfo;
+	char strftime_buf[64];
+
+	printf("%s====================\nConfiguration Status\n",KBDT);
+
+	printf("ConnMgr DDay %d AltDay %d SlotTime %d SlotAssigned %d\n",theConf.connId.dDay,theConf.connId.altDay,
+							theConf.slot_Server.slot_time,theConf.connId.connSlot);
+
+	printf("%sConfiguration BootCount %d LReset %x RunStatus[%s] Trace %x\n",YELLOW,theConf.bootcount,theConf.lastResetCode,
+			theConf.active?"Run":"Setup",theConf.traceflag);
+
+	for (int a=0;a<MAXDEVS;a++)
+	{
+		localtime_r(&theConf.bornDate[a], &timeinfo);
+		strftime(strftime_buf, sizeof(strftime_buf), "%c", &timeinfo);
+		printf("%sMeter[%d] Serial %s BPW %d Born %s BornkWh %d Active %s\n",(a % 2)?CYAN:GREEN,a,theConf.medidor_id[a],theConf.beatsPerKw[a],
+				strftime_buf,theConf.bornKwh[a],theConf.configured[a]==3?"Yes":"No");
+	}
+	printf("====================%s\n",KBDT);
+
+}
+
+void meterStatus()
+{
+	uint32_t valr;
+
+
+	printf("%s============\nMeter status\n",KBDT);
+	int meter=askMeter();
+	if(meter<0)
+		return;
+	printf("============%s\n\n",YELLOW);
+
+	if(xSemaphoreTake(framSem, portMAX_DELAY/  portTICK_RATE_MS))
+	{
+		printf("Meter Compare test Year %d Month %d Day %d Hour %d YDAY %d\n",yearg,mesg,diag,horag,yearDay);
+		valr=0;
+		fram.read_beat(meter,(uint8_t*)&valr);
+		printf("Beat[%d]=%d %d\n",meter,valr,theMeters[meter].currentBeat);
+		valr=0;
+		fram.read_lifekwh(meter,(uint8_t*)&valr);
+		printf("LastKwh[%d]=%d %d\n",meter,valr,theMeters[meter].curLife);
+		valr=0;
+		fram.read_lifedate(meter,(uint8_t*)&valr);
+		printf("LifeDate[%d]=%d %d %s",meter,valr,theMeters[meter].lastKwHDate,ctime((time_t*)&theMeters[meter].lastKwHDate));
+		valr=0;
+		fram.read_month(meter,mesg,(uint8_t*)&valr);
+		printf("Month[%d]Mes[%d]=%d %d\n",meter,mesg,valr,theMeters[meter].curMonth);
+		valr=0;
+		fram.read_monthraw(meter,mesg,(uint8_t*)&valr);
+		printf("MonthRaw[%d]Mes[%d]=%d %d\n",meter,mesg,valr,theMeters[meter].curMonthRaw);
+		valr=0;
+		fram.read_day(meter,yearDay,(uint8_t*)&valr);
+		printf("Day[%d]Mes[%d]Dia[%d]=%d %d\n",meter,mesg,diag,valr,theMeters[meter].curDay);
+		valr=0;
+		fram.read_dayraw(meter,yearDay,(uint8_t*)&valr);
+		printf("DayRaw[%d]Mes[%d]Dia[%d]=%d %d\n",meter,mesg,diag,valr,theMeters[meter].curDayRaw);
+		valr=0;
+		fram.read_hour(meter,yearDay,horag,(uint8_t*)&valr);
+		printf("Hour[%d]Mes[%d]Dia[%d]Hora[%d]=%d %d\n",meter,mesg,diag,horag,valr,theMeters[meter].curHour);
+		valr=0;
+		fram.read_hourraw(meter,yearDay,horag,(uint8_t*)&valr);
+		printf("HourRaw[%d]Mes[%d]Dia[%d]Hora[%d]=%d %d%s\n",meter,mesg,diag,horag,valr,theMeters[meter].curHourRaw,RESETC);
+
+		xSemaphoreGive(framSem);
+		printf("%s============\n",KBDT);
+
+	}
+}
+
+void meterTest()
+{
+	printf("%s================\nTest Write Meter\n",KBDT);
+
+	int meter=askMeter();
+	int val=askValue((char*)"Value");
+	printf("================%s\n\n",RESETC);
+	if(meter<0 || val<0)
+		return;
+
+	uint32_t valr;
+
+	if(xSemaphoreTake(framSem, portMAX_DELAY/  portTICK_RATE_MS))
+	{
+		printf("Fram Write Meter %d Year %d Month %d Day %d Hour %d Value %d YDAY %d\n",meter,yearg,mesg,diag,horag,val,yearDay);
+
+		fram.write_beat(meter,val);
+		fram.write_lifekwh(meter,val);
+		fram.write_lifedate(meter,val);
+		fram.write_month(meter,mesg,val);
+		fram.write_monthraw(meter,mesg,val);
+		fram.write_day(meter,yearDay,val);
+		fram.write_dayraw(meter,yearDay,val);
+		fram.write_hour(meter,yearDay,horag,val);
+		fram.write_hourraw(meter,yearDay,horag,val);
+
+		valr=0;
+		printf("Reading now\n");
+		fram.read_beat(meter,(uint8_t*)&valr);
+		printf("Beat[%d]=%d\n",meter,valr);
+		fram.read_lifekwh(meter,(uint8_t*)&valr);
+		printf("LifeKwh[%d]=%d\n",meter,valr);
+		fram.read_lifedate(meter,(uint8_t*)&valr);
+		printf("LifeDate[%d]=%d\n",meter,valr);
+		fram.read_month(meter,mesg,(uint8_t*)&valr);
+		printf("Month[%d]=%d\n",meter,valr);
+		fram.read_monthraw(meter,mesg,(uint8_t*)&valr);
+		printf("MonthRaw[%d]=%d\n",meter,valr);
+		fram.read_day(meter,yearDay,(uint8_t*)&valr);
+		printf("Day[%d]=%d\n",meter,valr);
+		fram.read_dayraw(meter,yearDay,(uint8_t*)&valr);
+		printf("DayRaw[%d]=%d\n",meter,valr);
+		fram.read_hour(meter,yearDay,horag,(uint8_t*)&valr);
+		printf("Hour[%d]=%d\n",meter,valr);
+		fram.read_hourraw(meter,yearDay,horag,(uint8_t*)&valr);
+		printf("HourRaw[%d]=%d\n",meter,valr);
+
+		xSemaphoreGive(framSem);
+	}
+}
+
+void webReset()
+{
+	theConf.active=!theConf.active;
+	printf("%sWeb %s\n",KBDT,theConf.active?"RunConf":"SetupConf");
+	printf("===========%s\n",KBDT);
+	if(theConf.active)
+		memset(theConf.configured,3,sizeof(theConf.configured));
+	else
+		memset(theConf.configured,0,sizeof(theConf.configured));
+	write_to_flash();
+}
+
+void meterCount()
+{
+	time_t timeH;
+
+	int tots=0;
+	printf("%s==============\nMeter Counters%s\n",KBDT,RESETC);
+
+	for (int a=0;a<MAXDEVS;a++)
+	{
+		tots+=theMeters[a].currentBeat;
+		printf("%sMeter[%d]=%s Beats %d kWh %d BPK %d\n",(a % 2)?GREEN:CYAN,a,RESETC,theMeters[a].currentBeat,theMeters[a].curLife,
+				theMeters[a].beatsPerkW);
+	}
+	printf("%sTotal Pulses rx=%s %d (%s)\n",RED,RESETC,totalPulses,tots==totalPulses?"Ok":"No");
+	fram.readMany(FRAMDATE,(uint8_t*)&timeH,sizeof(timeH));//last known date
+	printf("Last Date %s",ctime(&timeH));
+	printf("==============%s\n\n",KBDT);
+
+}
+
+void dumpCore()
+{
 	u8 *p;
+	printf("%sDumping core ins 3 secs%s\n",RED,RESETC);
+	delay(3000);
+	p=0;
+	*p=0;
+}
+
+void formatFram()
+{
+	printf("%s===========\nFormat FRAM\n",KBDT);
+
+	int val=askValue((char*)"Init value");
+	printf("===========%s\n\n",KBDT);
+
+	if(val<0)
+		return;
+
+	fram.format(val,NULL,1000,true);
+	printf("Format done\n");
+
+	for(int a=0;a<MAXDEVS;a++)
+		load_from_fram(a);
+}
+
+
+void readFram()
+{
+	printf("%s=========\nRead FRAM\n",KBDT);
+
+	int framAddress=askValue((char*)"Address");
+	int fueron=askValue((char*)"Count");
+	printf("=========%s\n\n",KBDT);
+	if(fueron<0 || framAddress<0)
+		return;
+
+	fram.readMany(framAddress,(uint8_t*)tempb,fueron);
+	for (int a=0;a<fueron;a++)
+		printf("%02x-",tempb[a]);
+	printf("\n");
+
+}
+
+void writeFram()
+{
+	printf("%s==========\nWrite FRAM\n",KBDT);
+
+	int framAddress=askValue((char*)"Address");
+	int fueron=askValue((char*)"Value");
+	printf("==========%s\n\n",KBDT);
+	if(fueron<0 || framAddress<0)
+		return;
+
+	fram.write8(framAddress,fueron);
+
+}
+
+void logLevel()
+{
+	char s1[10];
+
+	printf("%sLOG level:(N)one (I)nfo (E)rror (V)erbose (W)arning:",KBDT);
+	fflush(stdout);
+	int len=get_string(UART_NUM_0,10,s1);
+	if(len<=0)
+	{
+		printf("\n");
+		return;
+	}
+		switch (s1[0])
+		{
+			case 'n':
+			case 'N':
+					esp_log_level_set("*", ESP_LOG_NONE);
+					break;
+			case 'i':
+			case 'I':
+					esp_log_level_set("*", ESP_LOG_INFO);
+					break;
+			case 'e':
+			case 'E':
+					esp_log_level_set("*", ESP_LOG_ERROR);
+					break;
+			case 'v':
+			case 'V':
+					esp_log_level_set("*", ESP_LOG_VERBOSE);
+					break;
+			case 'w':
+			case 'W':
+					esp_log_level_set("*", ESP_LOG_WARN);
+					break;
+		}
+
+}
+
+void framDays()
+{
+	uint16_t valor;
+	uint32_t tots=0;
+
+	printf("%s==================\nFram Days in Month\n",KBDT);
+
+
+	int meter=askMeter();
+	if(meter<0)
+		return;
+	int month=askMonth();
+	if(month<0)
+		return;
+
+	if(xSemaphoreTake(framSem, portMAX_DELAY))
+	{
+		int startday=date2days(yearg,month,0);//this year, this month, first day
+
+		for (int a=0;a<daysInMonth[month];a++)
+		{
+			fram.read_day(meter,startday+a, (u8*)&valor);
+			if(valor>0 || (startday==yearDay && theMeters[meter].curDay>0 ))
+			{
+				if(startday==yearDay && theMeters[meter].curDay>0 )
+					printf("M[%d]D[%d]=%d RAM=%d ",month,a,valor,theMeters[meter].curDay);
+				else
+					printf("M[%d]D[%d]=%d ",month,a,valor);
+			}
+			tots+=valor;
+		}
+		xSemaphoreGive(framSem);
+		printf(" Total=%d\n",tots);
+		printf("==================%s\n",KBDT);
+	}
+
+}
+
+void framHours()
+{
+	uint8_t valor;
+	uint32_t tots=0;
+
+	printf("%s=================\nFram Hours in Day\n",KBDT);
+
+	int meter=askMeter();
+	if(meter<0)
+		return;
+	int month=askMonth();
+	if(month<0)
+		return;
+	int dia=askDay(month);
+	if(dia<0)
+		return;
+
+
+	if(xSemaphoreTake(framSem, portMAX_DELAY))
+	{
+		int startday=date2days(yearg,month,dia);//this year, this month, this day
+
+		for(int a=0;a<24;a++)
+		{
+			fram.read_hour(meter, startday, a, (u8*)&valor);
+				if(valor>0 || (startday==yearDay && horag==a && theMeters[meter].curHour>0))
+				{
+					if(startday==yearDay && horag==a && theMeters[meter].curHour>0)
+						printf("%sM[%d]D[%d]H[%d]=%d RAM=%d ",(a % 2)?CYAN:GREEN,month,dia,a,valor,theMeters[meter].curHour);
+					else
+						printf("%sM[%d]D[%d]H[%d]=%d ",(a % 2)?CYAN:GREEN,month,dia,a,valor);
+				}
+				tots+=valor;
+		}
+		xSemaphoreGive(framSem);
+		printf(" Total=%d\n",tots);
+		printf("=================%s\n",KBDT);
+	}
+}
+
+void framMonthsHours()
+{
+	uint8_t valor;
+	uint32_t tots=0;
+	bool was;
+
+	printf("%s=================\nFram Hours in Month\n",KBDT);
+
+	int meter=askMeter();
+	if(meter<0)
+		return;
+	int month=askMonth();
+	if(month<0)
+		return;
+
+
+	if(xSemaphoreTake(framSem, portMAX_DELAY))
+	{
+		for(int b=0;b<daysInMonth[month];b++)
+		{
+			int startday=date2days(yearg,month,b);//this year, this month, this day
+			was=false;
+			for(int a=0;a<24;a++)
+			{
+				fram.read_hour(meter, startday, a, (u8*)&valor);
+					if(valor>0 || (startday==yearDay && a==horag && theMeters[meter].curHour>0))
+					{
+						was=true;
+						if(startday==yearDay && a==horag && theMeters[meter].curHour>0)
+							printf("%sM[%d]D[%d]H[%d]=%d RAM=%d ",(a % 2)?CYAN:GREEN,month,b,a,valor,theMeters[meter].curHour);
+						else
+							printf("%sM[%d]D[%d]H[%d]=%d ",(a % 2)?CYAN:GREEN,month,b,a,valor);
+					}
+					tots+=valor;
+			}
+			if(was)
+				printf(" Total=%d\n",tots);
+		}
+			xSemaphoreGive(framSem);
+			printf("=================%s\n",KBDT);
+
+	}
+}
+
+void framHourSearch()
+{
+	uint8_t valor;
+
+	printf("%s================\nFram Hour Search\n",KBDT);
+
+	int meter=askMeter();
+	if(meter<0)
+		return;
+	int month=askMonth();
+	if(month<0)
+		return;
+	int dia=askDay(month);
+	if(dia<0)
+		return;
+	int hora=askHour();
+	if(hora<0)
+		return;
+
+
+	if(xSemaphoreTake(framSem, portMAX_DELAY))
+	{
+		int startday=date2days(yearg,month,dia);//this year, this month, first day
+
+		fram.read_hour(meter, startday, hora,(u8*)&valor);
+		xSemaphoreGive(framSem);
+		if(valor>0 || (horag==horag && startday==yearDay && theMeters[meter].curHour>0))
+			{
+			if(horag==horag && startday==yearDay && theMeters[meter].curHour>0)
+				printf("Date %d/%d/%d %d:00:00=%d RAM=%d\n",yearg,month,dia,hora,valor,theMeters[meter].curHour);
+			else
+				printf("Date %d/%d/%d %d:00:00=%d\n",yearg,month,dia,hora,valor);
+			}
+	}
+	printf("================%s\n",KBDT);
+
+}
+
+
+void framDaySearch()
+{
+	uint16_t valor;
+
+	printf("%s===============\nFram Day Search\n",KBDT);
+
+	int meter=askMeter();
+	if(meter<0)
+		return;
+	int month=askMonth();
+	if(month<0)
+		return;
+	int dia=askDay(month);
+	if(dia<0)
+		return;
+
+
+	if(xSemaphoreTake(framSem, portMAX_DELAY))
+	{
+		int startday=date2days(yearg,month,dia);//this year, this month, first day
+
+		fram.read_day(meter, startday,(u8*)&valor);
+		xSemaphoreGive(framSem);
+		if(valor>0 || (theMeters[meter].curDay>0 && startday==yearDay))
+		{
+		if(theMeters[meter].curDay>0 && startday==yearDay)
+			printf("Date %d/%d/%d =%d RAM=%d\n",yearg,month,dia,valor,theMeters[meter].curDay);
+		else
+			printf("Date %d/%d/%d =%d\n",yearg,month,dia,valor);
+
+		}
+	}
+	printf("===============%s\n",KBDT);
+
+}
+
+void framMonthSearch()
+{
+	uint16_t valor;
+
+	printf("%s=================\nFram Month Search\n",KBDT);
+
+	int meter=askMeter();
+	if(meter<0)
+		return;
+	int month=askMonth();
+	if(month<0)
+		return;
+
+	if(xSemaphoreTake(framSem, portMAX_DELAY))
+	{
+		fram.read_month(meter,month,(u8*)&valor);
+		xSemaphoreGive(framSem);
+		if(valor>0 || (theMeters[meter].curMonth>0 && mesg==month))
+		{
+			if(theMeters[meter].curMonth>0 && mesg==month)
+				printf("Month[%d] =%d RAM=%d\n",month,valor,theMeters[meter].curMonth);
+			else
+				printf("Month[%d] =%d\n",month,valor);
+		}
+	}
+	printf("\n=================%s\n",KBDT);
+}
+
+void framMonths()
+{
+	uint16_t valor;
+	uint32_t tots=0;
+
+	printf("%s=================\nFram Month All\n",KBDT);
+	int meter=askMeter();
+	if(meter<0)
+		return;
+
+	if(xSemaphoreTake(framSem, portMAX_DELAY))
+	{
+		printf("Meter[%d]",meter);
+		for(int a=0;a<12;a++)
+		{
+			fram.read_month(meter,a,(u8*)&valor);
+			if(valor>0)
+			{
+			if(theMeters[meter].curMonth>0 && a==mesg)
+				printf("%s[%d]=%d RAM=%d ",(a % 2)?CYAN:GREEN,a,valor,theMeters[meter].curMonth);
+			else
+				printf("%s[%d]=%d ",(a % 2)?CYAN:GREEN,a,valor);
+			}
+			tots+=valor;
+		}
+		printf(" Total=%d\n",tots);
+		printf("=================%s\n",KBDT);
+
+		xSemaphoreGive(framSem);
+	}
+	printf("\n");
+}
+
+void flushFram()
+{
+	printf("%s=============\nFlushing Fram\n",KBDT);
+	for(int a=0;a<MAXDEVS;a++)
+		write_to_fram(a,false);
+	printf("%d meters flushed\n",MAXDEVS);
+	printf("=============%s\n",KBDT);
+}
+
+void msgCount()
+{
+	printf("%s=============\nMessage Count\n",KBDT);
+	for (int a=0;a<MAXDEVS;a++)
+		//printf("TotalMsg[%d] sent msgs %d\n",a,totalMsg[a]);
+	printf("TotalMsg[%d] sent msgs %d\n",a,1);
+	printf("Controller Total %d\n",sentTotal);
+	printf("=============%s\n",KBDT);
+
+}
+
+void traceFlags()
+{
+	char s1[60],s2[20];
+	char traces[20][20];
 	string ss;
-	char lastcmd=10;
-	uint32_t tots=0,totsp;
-	uint16_t count,th1;
-	u32 framAddress;
-	u8 fueron;
-    time_t now;
-    struct tm timeinfo;
-    char strftime_buf[64];
+
+	printf("%sTrace Flags:%s",KBDT,CYAN);
+
+	for (int a=0;a<NKEYS/2;a++)
+	if (theConf.traceflag & (1<<a))
+		printf("%s ",lookuptable[a]);
+
+	printf("%s\nEnter TRACE FLAG:%s",RED,RESETC);
+	fflush(stdout);
+	memset(s1,0,sizeof(s1));
+	get_string(UART_NUM_0,10,s1);
+	memset(s2,0,sizeof(s2));
+	for(int a=0;a<strlen(s1);a++)
+		s2[a]=toupper(s1[a]);
+
+	if(strlen(s2)<=1)
+		return;
+
+	  char *ch;
+	  ch = strtok(s2, ",");
+	  while (ch != NULL)
+	  {
+		  ss=string(ch);
+	//	  printf("%s\n", ch);
+		  ch = strtok(NULL, " ,");
+
+		if(strcmp(ss.c_str(),"NONE")==0)
+		{
+			theConf.traceflag=0;
+			write_to_flash();
+			return;
+		}
+
+		if(strcmp(ss.c_str(),"ALL")==0)
+		{
+			theConf.traceflag=0xFFFF;
+			write_to_flash();
+			return;
+		}
+
+		int cualf=cmdfromstring((char*)ss.c_str());
+		if(cualf<0)
+		{
+			printf("Invalid Debug Option\n");
+			return;
+		}
+		if(cualf<NKEYS/2 )
+		{
+			printf("%s%s+ ",GREEN,lookuptable[cualf]);
+			theConf.traceflag |= 1<<cualf;
+			write_to_flash();
+		}
+		else
+		{
+			cualf=cualf-NKEYS/2;
+			printf("%s%s- ",RED,lookuptable[cualf]);
+			theConf.traceflag ^= (1<<cualf);
+			write_to_flash();
+		}
+
+	  }
+	  printf("%s\n",KBDT);
+}
+
+
+//void waitDelay()
+//{
+//	printf("%s==============\nWait Delay(%dms)\n",KBDT,1);
+//	printf("==============%s\n",KBDT);
+//	int sendTcp=askValue((char*)"Value");
+//}
+//
+//void msgDelay()
+//{
+//	printf("%s=============\nMsg Delay(%dms)\n",KBDT,qdelay);
+//	printf("=============%s\n",KBDT);
+//	qdelay=askValue((char*)"Value");
+//}
+
+bool compareCmd(cmdRecord_t r1, cmdRecord_t r2)
+{
+	int a=strcmp(r1.comando,r2.comando);
+	if (a<0)
+		return true;
+	else
+		return false;
+}
+
+void showHelp()
+{
+    int n = sizeof(cmdds)/sizeof(cmdds[0]);
+
+    std::sort(cmdds, cmdds+n, compareCmd);
+
+	printf("%s======CMDS======\n",RED);
+	for (int a=0;a<MAXCMDS;a++)
+	{
+		if(a % 2)
+			printf("%s%s ",CYAN,cmdds[a].comando);
+		else
+			printf("%s%s ",GREEN,cmdds[a].comando);
+	}
+	printf("\n======CMDS======%s\n",RESETC);
+}
+
+//void startSim()
+//{
+//	int cuanto=0;
+//	int len;
+//	char s1[10];
+//	if(timeHandle)
+//	{
+//		vTaskDelete(timeHandle);
+//		timeHandle=NULL;
+//	}
+//		if(simHandle)
+//		{
+//			vTaskDelete(simHandle);
+//			simHandle=NULL;
+//			printf("%sEnding Time Simulator and restarting TimeKeeper%s\n",CYAN,RESETC);
+//			xTaskCreate(&timeKeeper,"tmSim",4096,NULL, 10, &timeHandle);			// Due to Tariffs, we need to check hour,day and month changes
+//		}
+//		else
+//		{
+//			printf("%sStarting Time Simulator%s\n",GREEN,RESETC);
+//			printf("%s==============\nHour Delay(ms)\n",RED);
+//			cuanto=askValue((char*)"Value");
+//			printf("\nFormat?");
+//			fflush(stdout);
+//			len=get_string(UART_NUM_0,10,s1);
+//			if(len>0)
+//			{
+//				if(s1[0]=='y' || s1[0]=='Y')
+//					formatFram();
+//
+//			}
+//			printf("==============%s\n",RESETC);
+//
+//			xTaskCreate(&timeKeeperSim,"tmSim",4096,(void*)cuanto, 10, &simHandle);			// Due to Tariffs, we need to check hour,day and month changes
+//		}
+//}
+
+static void printControllers()
+{
+	printf("%sListing %d Active Controllers%s\n",KBDT,vanMacs,RESETC);
+
+	printf("%sLocal Meters%s\n",MAGENTA,RESETC);
+	for (int a=0;a<MAXDEVS;a++)
+		printf("%sMeter[%d]=%s KwH %6d Beats %9d\n",a%2?CYAN:GREEN,a,theMeters[a].serialNumber,theMeters[a].curLife,theMeters[a].currentBeat);
+	printf("\n");
+
+	for (int a=0;a<vanMacs;a++)
+	{
+		printf("%sController[%d] Mac %06x seen %s login %s\n",YELLOW,a,losMacs[a].macAdd,ctime(&losMacs[a].lastUpdate),losMacs[a].loginf?"Y":"N");
+		for (int b=0;b<MAXDEVS;b++)
+			printf("%sMeter[%d]=%s KwH %6d Beats %9d\n",b%2?CYAN:GREEN,b,losMacs[a].meterSerial[b],losMacs[a].controlLastKwH[b],losMacs[a].controlLastBeats[b]);
+	}
+	printf("%s\n",KBDT);
+}
+
+static void sendTelemetry()
+{
+	printf("%sSend Telemetry\n",KBDT);
+	xTaskCreate(&connMgr,"cnmgr",4096,(void*)123, 4, NULL);
+}
+
+void init_kbd_commands()
+{
+	strcpy((char*)&cmdds[0].comando,"Config");			cmdds[ 0].code=confStatus;
+	strcpy((char*)&cmdds[1].comando,"WebReset");		cmdds[ 1].code=webReset;
+	strcpy((char*)&cmdds[2].comando,"Controllers");		cmdds[ 2].code=printControllers;
+	strcpy((char*)&cmdds[3].comando,"MeterStat");		cmdds[ 3].code=meterStatus;
+	strcpy((char*)&cmdds[4].comando,"MeterTest");		cmdds[ 4].code=meterTest;
+	strcpy((char*)&cmdds[5].comando,"MeterCount");		cmdds[ 5].code=meterCount;
+	strcpy((char*)&cmdds[6].comando,"DumpCore");		cmdds[ 6].code=dumpCore;
+	strcpy((char*)&cmdds[7].comando,"FormatFram");		cmdds[ 7].code=formatFram;
+	strcpy((char*)&cmdds[8].comando,"ReadFram");		cmdds[ 8].code=readFram;
+	strcpy((char*)&cmdds[9].comando,"WriteFram");		cmdds[ 9].code=writeFram;
+	strcpy((char*)&cmdds[10].comando,"LogLevel");		cmdds[10].code=logLevel;
+	strcpy((char*)&cmdds[11].comando,"FramDaysAll");	cmdds[11].code=framDays;
+	strcpy((char*)&cmdds[12].comando,"FramHoursAll");	cmdds[12].code=framHours;
+	strcpy((char*)&cmdds[13].comando,"FramHour");		cmdds[13].code=framHourSearch;
+	strcpy((char*)&cmdds[14].comando,"FramDay");		cmdds[14].code=framDaySearch;
+	strcpy((char*)&cmdds[15].comando,"FramMonth");		cmdds[15].code=framMonthSearch;
+	strcpy((char*)&cmdds[16].comando,"Flush");			cmdds[16].code=flushFram;
+	strcpy((char*)&cmdds[17].comando,"MessageCount");	cmdds[17].code=msgCount;
+	strcpy((char*)&cmdds[18].comando,"Help");			cmdds[18].code=showHelp;
+	strcpy((char*)&cmdds[19].comando,"Trace");			cmdds[19].code=traceFlags;
+	strcpy((char*)&cmdds[20].comando,"FramMonthsAll");	cmdds[20].code=framMonths;
+	strcpy((char*)&cmdds[21].comando,"FramMonthHours");	cmdds[21].code=framMonthsHours;
+	strcpy((char*)&cmdds[22].comando,"Telemetry");		cmdds[22].code=sendTelemetry;
+}
+
+void kbd(void *arg)
+{
+	int len,cualf;
+	uart_port_t uart_num = UART_NUM_0 ;
+	char kbdstr[30],oldcmd[30];
+	string ss;
 
 	uart_config_t uart_config = {
 			.baud_rate = 460800,
@@ -117,250 +955,25 @@ void kbd(void *arg) {
 			.rx_flow_ctrl_thresh = 122,
 	};
 	uart_param_config(uart_num, &uart_config);
+	uart_set_pin(uart_num, UART_PIN_NO_CHANGE, UART_PIN_NO_CHANGE, UART_PIN_NO_CHANGE, UART_PIN_NO_CHANGE);
 	esp_err_t err= uart_driver_install(uart_num, 1024 , 1024, 10, NULL, 0);
 	if(err!=ESP_OK)
-	{
 		printf("Error UART Install %d\n",err);
-		vTaskDelete(NULL);
-	}
 
-	printf("Kbd Ready\n");
+	init_kbd_commands();
+
 	while(1)
 	{
-		len = uart_read_bytes((uart_port_t)uart_num, (uint8_t*)data, sizeof(data),20);
-		if(len>0)
-		{
-			if(data[0]==10)
-				data[0]=lastcmd;
-			lastcmd=data[0];
+			len=get_string(UART_NUM_0,10,kbdstr);
+			if(len<=0)
+				strcpy(kbdstr,oldcmd);
 
-			switch(data[0])
+			cualf=kbdCmd(string(kbdstr));
+			if(cualf>=0)
 			{
-			case '+':
-				printControllers();
-				break;
-			case'-':
-				for (int a=0;a<24;a++)
-					printf("Tarifa[%d]=%d\n",a,tarifasDia[a]);
-				break;
-			case 'u':
-			case 'U':
-				fram.readMany(FRAMDATE,(uint8_t*)&now,sizeof(now));
-				setenv("TZ", LOCALTIME, 1);
-				tzset();
-				localtime_r(&now, &timeinfo);
-				strftime(strftime_buf, sizeof(strftime_buf), "%c", &timeinfo);
-				printf("The recovered date/time in %s is: %s day of Year %d\n", LOCALTIME,strftime_buf,timeinfo.tm_yday);
-				break;
-			case 'W':
-				printf("Firmware \n");
-				firmwareCmd(NULL);
-				break;
-			case 'w':
-				printf("Tariffs\n");
-				loadit(NULL);
-				break;
-			case 'd':
-			case 'D':
-				printf("WatchDog delay(%d):",wDelay);
-				fflush(stdout);
-				len=get_string((uart_port_t)uart_num,10,s1);
-				if(len<=0)
-				{
-					printf("\n");
-					break;
-				}
-				wDelay=atoi(s1);
-				break;
-			case 'f':
-			case 'F':
-				printf("Format FRAM initValue:");
-				fflush(stdout);
-				len=get_string((uart_port_t)uart_num,10,s1);
-				if(len<=0)
-				{
-					printf("\n");
-					break;
-				}
-				fram.format(atoi(s1),tempb,sizeof(tempb),true);
-				printf("Format done\n");
-				totalPulses=0;
-				for(int a=0;a<MAXDEVS;a++)
-					load_from_fram(a);
-				break;
-			case '0':
-				printf("Dumping core...\n");
-				vTaskDelay(3000/portTICK_PERIOD_MS);
-				p=0;
-				*p=0;
-				break;
-			case 't':
-			case 'T':
-				tots=totsp=0;
-				for (int a=0;a<MAXDEVS;a++)
-				{
-					if(theMeters[a].currentBeat>0)
-					{
-						pcnt_get_counter_value((pcnt_unit_t)a,(short int *) &count);
-						tots+=theMeters[a].currentBeat;
-						totsp+=count;
-						pcnt_get_event_value((pcnt_unit_t)a, PCNT_EVT_THRES_1, &th1);
-						printf("%sMeter[%d]=%s Beats %d kWh %d \n",YELLOW,a,RESETC,theMeters[a].currentBeat,theMeters[a].curLife);
-					}
-				}
-				printf("%sTotal Pulses rx=%s %d (%s) Pending %d\n",RED,RESETC,totalPulses,tots==totalPulses?"Ok":"No",totsp);
-				break;
-			case '9':
-				for (int a=0;a<50;a++)
-				{
-					if(tallies[a][0]>0)
-					{
-						printf("\nController[%d]",a);
-						for(int b=0;b<5;b++)
-						{
-							if(tallies[a][b]>0)
-								printf(" [%d]=%d",b,tallies[a][b]);
-						}
-					}
-				}
-				printf("\nTotal Received Msgs %d\n",llevoMsg);
-				break;
-			case 'm':
-			case 'M':
-					printStationList();
-					break;
-#ifdef DISPLAY
-			case 'S':
-			case 's':
-					displayf=!displayf;
-					if(!displayf)
-					{
-						display.clear();
-						drawString(64,12,"MeterIoT",24,TEXT_ALIGN_CENTER,DISPLAYIT,NOREP);
-					}
-					break;
-#endif
-			case 'l':
-			case 'L':
-					printf("LOG level:(N)one (I)nfo (E)rror (V)erbose (W)arning:");
-					fflush(stdout);
-					len=get_string((uart_port_t)uart_num,10,s1);
-					if(len<=0)
-					{
-						printf("\n");
-						break;
-					}
-						switch (s1[0])
-						{
-							case 'n':
-							case 'N':
-									esp_log_level_set("*", ESP_LOG_NONE);
-									break;
-							case 'i':
-							case 'I':
-									esp_log_level_set("*", ESP_LOG_INFO);
-									break;
-							case 'e':
-							case 'E':
-									esp_log_level_set("*", ESP_LOG_ERROR);
-									break;
-							case 'v':
-							case 'V':
-									esp_log_level_set("*", ESP_LOG_VERBOSE);
-									break;
-							case 'w':
-							case 'W':
-									esp_log_level_set("*", ESP_LOG_WARN);
-									break;
-						}
-					break;
-					case 'r':
-					case 'R':
-						printf("Read FRAM address:");
-						fflush(stdout);
-						len=get_string((uart_port_t)uart_num,10,s1);
-						if(len<=0)
-						{
-							printf("\n");
-							break;
-						}
-						framAddress=atoi(s1);
-						printf("Count:");
-						fflush(stdout);
-						len=get_string((uart_port_t)uart_num,10,s1);
-						if(len<=0)
-						{
-							printf("\n");
-							break;
-						}
-						fueron=atoi(s1);
-						fram.readMany(framAddress,tempb,fueron);
-						for (int a=0;a<fueron;a++)
-							printf("%02x-",tempb[a]);
-						printf("\n");
-						break;
-			case 'v':
-			case 'V':{
-				printf("Trace Flags ");
-				for (int a=0;a<NKEYS/2;a++)
-					if (theConf.traceflag & (1<<a))
-					{
-						if(a<(NKEYS/2)-1)
-							printf("%s-",lookuptable[a]);
-						else
-							printf("%s",lookuptable[a]);
-					}
-				printf("\nEnter TRACE FLAG:");
-				fflush(stdout);
-				memset(s1,0,sizeof(s1));
-				get_string((uart_port_t)uart_num,10,s1);
-				memset(s2,0,sizeof(s2));
-				for(a=0;a<strlen(s1);a++)
-					s2[a]=toupper(s1[a]);
-				ss=string(s2);
-				if(strlen(s2)<=1)
-					break;
-				if(strcmp(ss.c_str(),"NONE")==0)
-				{
-					theConf.traceflag=0;
-					write_to_flash();
-					break;
-				}
-				if(strcmp(ss.c_str(),"ALL")==0)
-				{
-					theConf.traceflag=0xFFFF;
-					write_to_flash();
-					break;
-				}
-				cualf=cmdfromstring((char*)ss.c_str());
-				if(cualf<0)
-				{
-					printf("Invalid Debug Option\n");
-					break;
-				}
-				if(cualf<NKEYS/2 )
-				{
-					printf("Debug Key %s added\n",lookuptable[cualf]);
-					theConf.traceflag |= 1<<cualf;
-					write_to_flash();
-					break;
-				}
-				else
-				{
-					cualf=cualf-NKEYS/2;
-					printf("Debug Key %s removed\n",lookuptable[cualf]);
-					theConf.traceflag ^= (1<<cualf);
-					write_to_flash();
-					break;
-				}
-
-				}
-
-			default:
-				break;
+				(*cmdds[cualf].code)();
+				strcpy(oldcmd,kbdstr);
 			}
-
-		}
 		vTaskDelay(100 / portTICK_PERIOD_MS);
 	}
 }

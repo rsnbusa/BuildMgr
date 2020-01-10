@@ -30,14 +30,14 @@ EXTERN OneWireBus 						*owb;
 EXTERN owb_rmt_driver_info 				rmt_driver_info;
 EXTERN QueueHandle_t 					mqttQ,mqttR,framQ,pcnt_evt_queue;
 EXTERN SemaphoreHandle_t 				wifiSem,framSem;
-EXTERN TimerHandle_t					hourChangeT;
+EXTERN TimerHandle_t					hourChangeT,connHandle;
 EXTERN u16 								qdelay,llevoMsg,mesg,diag,horag,yearg,wDelay,tarifasDia[24],oldMesg,oldDiag,oldHorag,yearDay;
-EXTERN u32								sentTotal,llevo,tallies[MAXSTAS][MAXDEVS];
+EXTERN u32								sentTotal,llevo,tallies[MAXSTAS][MAXDEVS],theMacNum;
 EXTERN u8								qwait,lastalign,lastFont;
 EXTERN uint32_t							totalPulses,oldCurBeat[MAXDEVS],oldCurLife[MAXDEVS];
 EXTERN host_t							setupHost[MAXDEVS];
-EXTERN TaskHandle_t						webHandle;
-
+EXTERN TaskHandle_t						webHandle,timeHandle,simHandle;
+EXTERN uint8_t 							daysInMonth [12];
 #ifdef KBD
 EXTERN char								lookuptable[NKEYS][10];
 #endif

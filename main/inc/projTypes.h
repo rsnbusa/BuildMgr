@@ -1,6 +1,8 @@
 #ifndef projTypes_h
 #define projTypes_h
 
+typedef void (*mqttp)();
+
 typedef struct macC{
 	int				theSock;
 	TaskHandle_t 	theHandle;
@@ -10,6 +12,7 @@ typedef struct macC{
 	uint32_t 		trans[MAXDEVS],controlLastKwH[MAXDEVS],controlLastBeats[MAXDEVS];
 	TimerHandle_t	timerH;
 	char			meterSerial[MAXDEVS][20];
+	bool			loginf;
 } macControl;
 
 typedef struct taskp{
@@ -23,7 +26,7 @@ typedef struct meterType{
 	 u16 beatsPerkW,curMonth,curMonthRaw,curDay,curDayRaw;
 	 u32 curLife,curCycle,lastKwHDate,msNow, minamps,maxamps,currentBeat,vanMqtt,ampTime,beatSave;
 	 u8 curHour,cycleMonth,curHourRaw,pos,pin,pinB;
-
+	 mqttp code;
 } meterType;
 
 typedef struct mqttMsg{
@@ -47,7 +50,6 @@ typedef enum displayType {NODISPLAY,DISPLAYIT} displayType;
 typedef enum overType {NOREP,REPLACE} overType;
 typedef enum resetType {ONCE,TIMER,REPEAT,TIMEREPEAT} resetType;
 typedef enum sendType {NOTSENT,SENT} sendType;
-//enum debugflags{BOOTD,WIFID,MQTTD,PUBSUBD,OTAD,CMDD,WEBD,GEND,MQTTT,HEAPD,INTD,FRAMD,MSGD};
 enum debugflags{BOOTD,WIFID,MQTTD,PUBSUBD,OTAD,CMDD,WEBD,GEND,MQTTT,FRMCMD,INTD,FRAMD,MSGD,TIMED,SIMD};
 
 
@@ -55,7 +57,7 @@ typedef struct pcomm{
     int pComm;
     uint8_t typeMsg;
     void *pMessage;
-    uint32_t macn;
+    double macn;
 }parg;
 
 typedef void (*functrsn)(parg *);
@@ -65,22 +67,27 @@ typedef struct cmdRecord{
     functrsn code;
 }cmdRecord;
 
+typedef struct conId{
+	int8_t		altDay;
+	u8			dDay;
+	u16			connSlot;
+}connStruct;
+
+typedef struct slot{
+	u8			slot_time;
+	u8			server_num;
+}slt_t;
+
 typedef struct config {
-    bool 	corteSent[MAXDEVS];
-    char 	medidor_id[MAXDEVS][MAXCHARS],meterName[MAXCHARS];
-    time_t 	lastUpload,lastTime,preLastTime,bornDate[MAXDEVS],lastBootDate;
-    u16 	beatsPerKw[MAXDEVS],bootcount,bounce[MAXDEVS],diaDeCorte[MAXDEVS],lastResetCode;
-    u16 	ssl,traceflag; // to make it mod 16 for AES encryption
-    u32 	bornKwh[MAXDEVS],centinel;
-    u8 		configured[MAXDEVS],active;
+    char 		medidor_id[MAXDEVS][MAXCHARS],meterConnName[MAXCHARS];
+    time_t 		bornDate[MAXDEVS];
+    u16 		beatsPerKw[MAXDEVS],bootcount,lastResetCode,traceflag;
+    slt_t 		slot_Server;
+    u32 		bornKwh[MAXDEVS],centinel;
+    u8 			configured[MAXDEVS],active;
+    connStruct	connId;
 } config_flash;
 
-
-typedef struct conId{
-	u8		altDay;
-	u8		dDay;
-	u16		connSlot;
-}connStruct;
 typedef struct framq{
 	int whichMeter;
 	bool addit;
