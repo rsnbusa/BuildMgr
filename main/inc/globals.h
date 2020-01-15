@@ -12,7 +12,8 @@
 #include "includes.h"
 using namespace std;
 
-EXTERN bool								isrf,connf,wifif,apstaf,displayf;
+EXTERN esp_mqtt_client_config_t 		mqtt_cfg;
+EXTERN bool								isrf,connf,wifif,apstaf,displayf,miscanf;
 EXTERN char								http_request[100],tempb[5000],texto[101];
 EXTERN cmdRecord 						cmds[MAXCMDS];
 EXTERN cmdType							theCmd;
@@ -22,7 +23,7 @@ EXTERN esp_mqtt_client_handle_t 		clientCloud;
 EXTERN float							ttemp;
 EXTERN FramSPI							fram;
 EXTERN gpio_config_t 					io_conf;
-EXTERN int 								socket_id,binary_file_length,numsensors,diaHoraTarifa,vanMacs,vanadd,vanvueltas,van,globalSocks;
+EXTERN int 								socket_id,binary_file_length,numsensors,diaHoraTarifa,vanMacs,vanadd,vanvueltas,globalSocks;
 EXTERN macControl						losMacs[MAXSTAS];
 EXTERN meterType						theMeters[MAXDEVS],algo;
 EXTERN nvs_handle 						nvshandle;
@@ -31,13 +32,14 @@ EXTERN owb_rmt_driver_info 				rmt_driver_info;
 EXTERN QueueHandle_t 					mqttQ,mqttR,framQ,pcnt_evt_queue;
 EXTERN SemaphoreHandle_t 				wifiSem,framSem;
 EXTERN TimerHandle_t					hourChangeT,connHandle;
-EXTERN u16 								qdelay,llevoMsg,mesg,diag,horag,yearg,wDelay,tarifasDia[24],oldMesg,oldDiag,oldHorag,yearDay;
+EXTERN u16 								qdelay,llevoMsg,mesg,diag,horag,yearg,wDelay,tarifasDia[24],oldMesg,oldDiag,oldHorag,yearDay,oldYearDay;
 EXTERN u32								sentTotal,llevo,tallies[MAXSTAS][MAXDEVS],theMacNum;
-EXTERN u8								qwait,lastalign,lastFont;
+EXTERN u8								qwait,lastalign,lastFont,workingDevs;
 EXTERN uint32_t							totalPulses,oldCurBeat[MAXDEVS],oldCurLife[MAXDEVS];
 EXTERN host_t							setupHost[MAXDEVS];
-EXTERN TaskHandle_t						webHandle,timeHandle,simHandle;
+EXTERN TaskHandle_t						webHandle,timeHandle,simHandle,blinkHandle;
 EXTERN uint8_t 							daysInMonth [12];
+EXTERN string							controlQueue,cmdQueue;
 #ifdef KBD
 EXTERN char								lookuptable[NKEYS][10];
 #endif

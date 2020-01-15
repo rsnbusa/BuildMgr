@@ -187,7 +187,8 @@ void displayManager(void *arg) {
 
 	memset(oldCurBeat,0,sizeof(oldCurBeat));
 	memset(oldCurLife,0,sizeof(oldCurLife));
-	clearScreen();
+	if(workingDevs)
+		clearScreen();
 
 	while(true)
 	{

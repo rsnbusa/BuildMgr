@@ -1,62 +1,21 @@
 #ifndef defines_h
 #define defines_h
 
-//#define MULTIX		// if we are going to have 9575 GPIO Expanders
-//#define TEMP
-//#define WITHMETERS
-//#define MQT
 #define DISPLAY
 #define MQTTLOCAL
 #define KBD			// only for testing build
 #define DEBUGX
 
-#ifdef MULTIX
-
-#define ACK_CHECK_DIS 					0x0                       		/*!< I2C master will not check ack from slave */
-#define ACK_CHECK_EN 					0x1                        		/*!< I2C master will check ack from slave*/
-#define ACK_VAL 						0x0                             /*!< I2C ack value */
-#define	BKEN0							0x04
-#define	BKEN1							0x05
-#define	CFG0							0x08
-#define	CFG1							0x09
-#define DSPIN							23		// ds18b20
-#define I2CPORT 						I2C_NUM_0
-#define I2CSPEED						400000
-
-// PCA9575 commands
-#define IN0	 							0x00
-#define IN1								0x01
-#define	INTS0							0x0e
-#define	INTS1							0x0f
-#define	INVRT0							0x02
-#define	INVRT1							0x03
-#define	MSK0							0x0c
-#define	MSK1							0x0d
-#define NACK_VAL 						0x1                            	/*!< I2C nack value */
-#define	OUT0							0x0a
-#define	OUT1							0x0b
-#define	PUPD0							0x06
-#define	PUPD1							0x07
-#define READ_BIT 						I2C_MASTER_READ              	/*!< I2C master read */
-#endif
 #ifdef DISPLAY
 #define SCLW                			22      // SCL for Wire service
-//#define MUXPIN							27
-//#define MUXPIN1							26
-
 #define SDAW                			21      // SDA
-
-#define WRITE_BIT 						I2C_MASTER_WRITE              	/*!< I2C master write */
-
 #endif
 
 #define BUFFSIZE 						4096
 #define BUILDMGRPORT					30000
 
 #define CENTINEL						0x12345678
-#define EXAMPLE_FILENAME 				"http://feediot.c1.biz/buildMgrOled.bin"
-#define EXAMPLE_SERVER_IP   			"185.176.43.60"
-#define EXAMPLE_SERVER_PORT 			"80"
+#define OTA_BIN_FILE	 				"http://feediot.c1.biz/buildMgrOled.bin"
 
 #define GETMT							2048 //getmessage task stack size
 
@@ -66,7 +25,7 @@
 
 #define MAXBUFFER						2500
 #define MAXCHARS						40
-#define MAXCMDS							23
+#define MAXCMDS							5
 #define MAXDEVS							5
 #define MAXSTAS							20
 #define MAXWIFI							100
@@ -89,15 +48,13 @@
 #define FCLK							18
 #define FCS								5
 
-#define NKEYS							30
+#define NKEYS							32
 #define QDELAY							10
 #define TEXT_BUFFSIZE 					4096
 #define u16								uint16_t
 #define u32								uint32_t
 #define u8								uint8_t
 #define WIFILED							2
-#define TIMEWAITPCNT 					60000 // 1 minute
-#define MIN30							TIMEWAITPCNT*30 //30 minutes
 
 //30	Black
 //31	Red
@@ -108,7 +65,6 @@
 //36	Cyan
 //37	White
 
-#define BOOTDT							"\e[31m[BOOTD]\e[0m"
 #define BOOTDT							"\e[31m[BOOTD]\e[0m"
 #define WIFIDT							"\e[31m[WIFID]\e[0m"
 #define MQTTDT							"\e[32m[MQQTD]\e[0m"
@@ -125,6 +81,7 @@
 #define FRMCMDT							"\e[35m[FRMCMDT]\e[0m"
 #define TIEMPOT							"\e[31m[TIMED]\e[0m"
 #define SIMDT							"\e[36m[SIMD]\e[0m"
+#define HOSTDT							"\e[31m[HOSTD]\e[0m"
 #define ERASET							"\e[2J"
 
 #define BLACKC							"\e[30m"

@@ -1,3 +1,4 @@
 CXXFLAGS += -fpermissive 
 COMPONENT_SRCDIRS = . src HW
 COMPONENT_ADD_INCLUDEDIRS = . inc HW
+COMPONENT_EMBED_TXTFILES :=  ${PROJECT_PATH}/server_certs/ca_cert.pem

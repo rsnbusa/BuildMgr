@@ -52,10 +52,10 @@ bool FramSPI::begin(int MOSI, int MISO, int CLK, int CS,SemaphoreHandle_t *framS
 	if (ret==ESP_OK)
 	{
 		getDeviceID(&manufID, &prodId);
-
+#ifdef DEBUGX
 		if(theConf.traceflag & (1<<FRAMD))
 			printf("%sManufacturerId %04x ProductId %04x\n",FRAMDT,manufID,prodId);
-
+#endif
 		//Set write enable after chip is identified
 		switch(prodId)
 		{
@@ -371,8 +371,6 @@ int FramSPI::read_tarif_day(uint16_t dia,uint8_t*  donde) //Read 24 Hours of cur
 {
 	int ret;
 	uint32_t add=TARIFADIA+dia*24*MWORD;
-//	if(theConf.traceflag & (1<<FRMCMD))
-//		printf("%sR TarDay %d Add %d\n",FRMCMDT,dia,add);
 	ret=read_tarif_bytes(add,donde,24*MWORD);
 	return ret;
 }
@@ -381,8 +379,6 @@ int FramSPI::read_tarif_hour(uint16_t dia,uint8_t hora,uint8_t*  donde) //Read s
 {
 	int ret;
 	uint32_t add=TARIFADIA+dia*24*MWORD+hora;
-//	if(theConf.traceflag & (1<<FRMCMD))
-//	printf("%sR TarHour Day %d Hour %d Add %d\n",FRMCMDT,dia,hora,add);
 	ret=read_tarif_bytes(add,donde,MWORD);
 	return ret;
 }

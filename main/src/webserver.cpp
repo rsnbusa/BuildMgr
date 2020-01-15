@@ -16,9 +16,13 @@ static esp_err_t setup_get_handler(httpd_req_t *req);
 static esp_err_t setupend_get_handler(httpd_req_t *req);
 static esp_err_t conn_setup_get_handler(httpd_req_t *req);
 static esp_err_t conn_sendsetup_handler(httpd_req_t *req);
+static esp_err_t conn_firmware(httpd_req_t *req);
+static esp_err_t conn_tariff(httpd_req_t *req);
 
 extern void delay(uint32_t a);
 extern void write_to_flash();
+extern void firmUpdate(void* pArg);
+extern void loadit(void* pArg);
 
 static const httpd_uri_t setup = {
     .uri       = "/cmsetup",
@@ -26,6 +30,163 @@ static const httpd_uri_t setup = {
     .handler   = setup_get_handler,
 	.user_ctx	= NULL
 };
+
+static const httpd_uri_t challenge = {
+    .uri       = "/cmchallenge",
+    .method    = HTTP_GET,
+    .handler   = challenge_get_handler,
+	.user_ctx	= NULL
+};
+
+static const httpd_uri_t setupend = {
+    .uri       = "/cmsetupend",
+    .method    = HTTP_GET,
+    .handler   = setupend_get_handler,
+	.user_ctx	= NULL
+};
+
+
+static const httpd_uri_t csetup = {
+    .uri       = "/csetup",
+    .method    = HTTP_GET,
+    .handler   = conn_setup_get_handler,
+	.user_ctx	= NULL
+};
+
+
+static const httpd_uri_t cmdFW = {
+    .uri       = "/cfirmware",
+    .method    = HTTP_GET,
+    .handler   = conn_firmware,
+	.user_ctx	= NULL
+};
+
+static const httpd_uri_t cmdTariff = {
+    .uri       = "/ctariff",
+    .method    = HTTP_GET,
+    .handler   = conn_tariff,
+	.user_ctx	= NULL
+};
+
+
+static esp_err_t conn_firmware(httpd_req_t *req)
+{
+    char*  buf=NULL;
+    size_t buf_len;
+    time_t now;
+    struct tm timeinfo;
+    char strftime_buf[64];
+
+	time(&now);
+	localtime_r(&now, &timeinfo);
+	strftime(strftime_buf, sizeof(strftime_buf), "%c", &timeinfo);
+
+    buf_len = httpd_req_get_url_query_len(req) + 1;
+    if (buf_len > 1)
+    {
+        buf = (char*)malloc(buf_len);
+        if (httpd_req_get_url_query_str(req, buf, buf_len) == ESP_OK)
+        {
+            char param[32];
+            if (httpd_query_key_value(buf, "password", param, sizeof(param)) == ESP_OK)
+            {
+            	sprintf(tempb,"[%s]Invalid password",strftime_buf);
+            	 if(strcmp(param,"ZiPo")!=0)
+            		 	goto exit;
+            }
+        }
+    	sprintf(tempb,"[%s]Firmware update in progress...",strftime_buf);
+    	xTaskCreate(&firmUpdate,"U571",10240,NULL, 5, NULL);
+    }
+    else
+    	sprintf(tempb,"Invalid parameters");
+	exit:
+	if(buf)
+		free(buf);
+	httpd_resp_send(req, tempb, strlen(tempb));
+
+    return ESP_OK;
+}
+
+static esp_err_t conn_tariff(httpd_req_t *req)
+{
+    char*  buf=NULL;
+    size_t buf_len;
+    int tariff=0;
+    time_t now;
+    struct tm timeinfo;
+    char strftime_buf[64];
+    cmdType cmd;
+    cJSON * root=NULL;
+    char *lmessage=NULL;
+
+	time(&now);
+	localtime_r(&now, &timeinfo);
+	strftime(strftime_buf, sizeof(strftime_buf), "%c", &timeinfo);
+
+    buf_len = httpd_req_get_url_query_len(req) + 1;
+    if (buf_len > 1)
+    {
+        buf = (char*)malloc(buf_len);
+        if (httpd_req_get_url_query_str(req, buf, buf_len) == ESP_OK)
+        {
+            char param[32];
+            if (httpd_query_key_value(buf, "password", param, sizeof(param)) == ESP_OK)
+            {
+            	sprintf(tempb,"[%s]Invalid password",strftime_buf);
+            	 if(strcmp(param,"ZiPo")!=0)
+            		 	goto exit;
+            }
+        	root=cJSON_CreateObject();
+			cJSON *ar = cJSON_CreateArray();
+
+			if(root==NULL || ar==NULL)
+			{
+				printf("cannot create root tariff\n");
+				return -1;
+			}
+            if (httpd_query_key_value(buf, "tariff", param, sizeof(param)) == ESP_OK)
+            	theConf.slot_Server.tariff_id=atoi(param);
+
+			cJSON *cmdJ=cJSON_CreateObject();
+			cJSON_AddStringToObject(cmdJ,"cmd","/ga_tariff");
+			cJSON_AddNumberToObject(cmdJ,"tariff",theConf.slot_Server.tariff_id);
+			cJSON_AddItemToArray(ar, cmdJ);
+			cJSON_AddItemToObject(root,"Batch", ar);
+			lmessage=cJSON_Print(root);
+			if(lmessage==NULL)
+			{
+				sprintf(tempb,"Error creating JSON Tariff");
+				cJSON_Delete(root);
+				goto exit;
+			}
+            write_to_flash();
+        }
+    	sprintf(tempb,"[%s]Tariff %d loading process started...",strftime_buf,tariff);
+
+   // 	xTaskCreate(&loadit,"loadT",10240,(void*)tariff, 5, NULL);
+    	cmd.mensaje=lmessage;
+    	cmd.fd=3;//send from internal
+    	cmd.pos=0;
+    	xQueueSend( mqttR,&cmd,0 );
+
+    }
+    else
+    	sprintf(tempb,"Invalid parameters");
+	exit:
+	if(buf)
+		free(buf);
+	if(root)
+		cJSON_Delete(root);
+	//======================
+	//lmessage will be freed by the calling routine
+	//======================
+
+	httpd_resp_send(req, tempb, strlen(tempb));
+
+    return ESP_OK;
+}
+
 
 static esp_err_t setup_get_handler(httpd_req_t *req)
 {
@@ -87,18 +248,12 @@ static esp_err_t setup_get_handler(httpd_req_t *req)
     return ESP_OK;
 }
 
-static const httpd_uri_t challenge = {
-    .uri       = "/cmchallenge",
-    .method    = HTTP_GET,
-    .handler   = challenge_get_handler,
-	.user_ctx	= NULL
-};
 
 static esp_err_t challenge_get_handler(httpd_req_t *req)
 {
     char*  buf;
     size_t buf_len;
-    int cualm,valor;
+    int valor;
     time_t now;
     struct tm timeinfo;
     char strftime_buf[64];
@@ -163,12 +318,7 @@ static esp_err_t challenge_get_handler(httpd_req_t *req)
     return ESP_OK;
 }
 
-static const httpd_uri_t setupend = {
-    .uri       = "/cmsetupend",
-    .method    = HTTP_GET,
-    .handler   = setupend_get_handler,
-	.user_ctx	= NULL
-};
+
 
 static esp_err_t setupend_get_handler(httpd_req_t *req)
 {
@@ -220,12 +370,6 @@ exit:
     return ESP_OK;
 }
 
-static const httpd_uri_t csetup = {
-    .uri       = "/csetup",
-    .method    = HTTP_GET,
-    .handler   = conn_setup_get_handler,
-	.user_ctx	= NULL
-};
 
 static esp_err_t conn_setup_get_handler(httpd_req_t *req)
 {
@@ -318,8 +462,10 @@ void start_webserver(void *pArg)
     httpd_handle_t server = NULL;
     httpd_config_t config = HTTPD_DEFAULT_CONFIG();
 
+#ifdef DEBUGX
     if(theConf.traceflag & (1<<WEBD))
     	printf("%sStarting server on port:%d\n",WEBDT, config.server_port);
+#endif
     if (httpd_start(&server, &config) == ESP_OK) {
         // Set URI handlers
         httpd_register_uri_handler(server, &setup); 		//setup up to 5 meters
@@ -327,9 +473,13 @@ void start_webserver(void *pArg)
         httpd_register_uri_handler(server, &csetup);		//connmgr setup
         httpd_register_uri_handler(server, &rsetup);		//send connmgr setup
         httpd_register_uri_handler(server, &challenge);		//confirm challenge and store in flash
+        httpd_register_uri_handler(server, &cmdFW);		//confirm challenge and store in flash
+        httpd_register_uri_handler(server, &cmdTariff);		//confirm challenge and store in flash
     }
+#ifdef DEBUGX
     if(theConf.traceflag & (1<<WEBD))
     	printf("WebServer Started\n");
+#endif
     vTaskDelete(NULL);
 }
 

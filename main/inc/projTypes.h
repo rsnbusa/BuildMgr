@@ -48,9 +48,10 @@ typedef struct loginTarif{
 typedef enum displayModeType {DISPLAYPULSES,DISPLAYKWH,DISPLAYUSER,DISPLAYALL,DISPLAYALLK,DISPLAYAMPS,DISPLAYRSSI,DISPLAYNADA} displayModeType;
 typedef enum displayType {NODISPLAY,DISPLAYIT} displayType;
 typedef enum overType {NOREP,REPLACE} overType;
-typedef enum resetType {ONCE,TIMER,REPEAT,TIMEREPEAT} resetType;
+//typedef enum resetType {ONCE,TIMER,REPEAT,TIMEREPEAT} resetType;
 typedef enum sendType {NOTSENT,SENT} sendType;
-enum debugflags{BOOTD,WIFID,MQTTD,PUBSUBD,OTAD,CMDD,WEBD,GEND,MQTTT,FRMCMD,INTD,FRAMD,MSGD,TIMED,SIMD};
+enum sourceFlags{HOSTT,LOCALT};
+enum debugflags{BOOTD,WIFID,MQTTD,PUBSUBD,OTAD,CMDD,WEBD,GEND,MQTTT,FRMCMD,INTD,FRAMD,MSGD,TIMED,SIMD,HOSTD};
 
 
 typedef struct pcomm{
@@ -64,6 +65,7 @@ typedef void (*functrsn)(parg *);
 
 typedef struct cmdRecord{
     char comando[20];
+    uint8_t source;
     functrsn code;
 }cmdRecord;
 
@@ -76,16 +78,18 @@ typedef struct conId{
 typedef struct slot{
 	u8			slot_time;
 	u8			server_num;
+	u8			tariff_id;
 }slt_t;
 
 typedef struct config {
     char 		medidor_id[MAXDEVS][MAXCHARS],meterConnName[MAXCHARS];
     time_t 		bornDate[MAXDEVS];
-    u16 		beatsPerKw[MAXDEVS],bootcount,lastResetCode,traceflag;
+    u16 		beatsPerKw[MAXDEVS],bootcount,lastResetCode;
     slt_t 		slot_Server;
-    u32 		bornKwh[MAXDEVS],centinel;
+    u32 		bornKwh[MAXDEVS],centinel,traceflag;
     u8 			configured[MAXDEVS],active;
     connStruct	connId;
+    char		free[20];//so as to not erase confi during development
 } config_flash;
 
 typedef struct framq{
@@ -94,8 +98,8 @@ typedef struct framq{
 }framMeterType;
 
 typedef struct pcntt{
-    int unit;  // the PCNT unit that originated an interrupt
-    uint32_t status; // information on the event type that caused the interrupt
+    int unit;  				// the PCNT unit that originated an interrupt
+    uint32_t status; 		// information on the event type that caused the interrupt
 } pcnt_evt_t;
 
 typedef struct internalHost{
