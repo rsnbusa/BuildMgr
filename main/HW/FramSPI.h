@@ -62,7 +62,7 @@ public:
     int        	write_tarif_bpw(uint8_t tarNum, uint16_t valor);
     int        	read_tarif_day(uint16_t dia,uint8_t*  donde);
     int	       	read_tarif_hour(uint16_t dia,uint8_t hora,uint8_t*  donde);
-    
+    int 		erase_tarif();
     int         write_bytes(uint8_t meter,uint32_t add,uint8_t*  desde,uint32_t cuantos);
     int         read_bytes(uint8_t meter,uint32_t add,uint8_t*  donde,uint32_t cuantos);
     
@@ -77,8 +77,8 @@ public:
     int	        write_hour(uint8_t medidor,uint16_t yearDay,uint8_t hora,uint8_t value);
     int	        write_hourraw(uint8_t medidor,uint16_t yearDay,uint8_t hora,uint8_t value);
     int	        write_lifedate(uint8_t medidor, uint32_t value);
-    int	        write_recover(scratchTypespi value);
     int	        write_cycle(uint8_t mes, uint32_t value);
+    int			write_macs(uint8_t* value,uint16_t numSlotsUsed);
 
     int	        read_beat(uint8_t medidor, uint8_t*  value);
     int	        read_month(uint8_t medidor,uint8_t month,uint8_t*  value);
@@ -89,9 +89,8 @@ public:
     int	        read_hourraw(uint8_t medidor,uint16_t yearDay,uint8_t hora,uint8_t*  value);
     int	        read_lifedate(uint8_t medidor,uint8_t*  value);
     int	        read_lifekwh(uint8_t medidor, uint8_t*  value);
-    int	        read_recover(scratchTypespi *value);
     int 		read_cycle(uint8_t mes, uint8_t*  value);
-
+    int			read_macs(uint8_t * value, uint8_t* numUsedSlots);
 public:
     bool _framInitialised;
     spi_device_handle_t spi;

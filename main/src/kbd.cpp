@@ -8,10 +8,8 @@
 #define KBDT		"\e[36m[KBD]\e[0m"
 #define MAXCMDSK	26
 
-extern esp_err_t mqtt_event_handler(esp_mqtt_event_handle_t event);
 extern void delay(uint32_t a);
 extern void write_to_flash();
-extern void load_from_fram(u8 meter);
 extern void write_to_fram(u8 meter,bool addit);
 extern void connMgr(void *pArg);
 extern void firmUpdate(void *pArg);
@@ -221,8 +219,8 @@ void confStatus()
 
 	printf("%s====================\nConfiguration Status\n",KBDT);
 
-	printf("ConnMgr %s DDay %d AltDay %d SlotTime %d SlotAssigned %d\n",theConf.meterConnName, theConf.connId.dDay,theConf.connId.altDay,
-							theConf.slot_Server.slot_time,theConf.connId.connSlot);
+	printf("ConnMgr %s DDay %d AltDay %d SlotTime %d SlotAssigned %d Reserved %d\n",theConf.meterConnName, theConf.connId.dDay,theConf.connId.altDay,
+							theConf.slot_Server.slot_time,theConf.connId.connSlot,usedMacs);
 
 	printf("%sConfiguration BootCount %d LReset %x RunStatus[%s] Trace %x\n",YELLOW,theConf.bootcount,theConf.lastResetCode,
 			theConf.active?"Run":"Setup",theConf.traceflag);
@@ -775,12 +773,12 @@ void traceFlags()
 		return;
 
 	  char *ch;
-	  ch = strtok(s2, ",");
+	  ch = strtok(s2, " ");
 	  while (ch != NULL)
 	  {
 		  ss=string(ch);
 	//	  printf("%s\n", ch);
-		  ch = strtok(NULL, " ,");
+		  ch = strtok(NULL, " ");
 
 		if(strcmp(ss.c_str(),"NONE")==0)
 		{
@@ -862,6 +860,12 @@ static void printControllers()
 		for (int b=0;b<MAXDEVS;b++)
 			printf("%sMeter[%d]=%s KwH %6d Beats %9d\n",b%2?CYAN:GREEN,b,losMacs[a].meterSerial[b],losMacs[a].controlLastKwH[b],losMacs[a].controlLastBeats[b]);
 	}
+
+	printf("Slots Reserved\n");
+
+	for(int a=0;a<vanMacs;a++)
+		printf("%sReserved Slot[%d]%s=%06x %s",GREEN,a,CYAN,reservedMacs[a].dMac,ctime(&reservedMacs[a].when));
+
 	printf("%s\n",KBDT);
 }
 
@@ -984,7 +988,7 @@ static void scan()
 	    miscanf=true;
 	    ESP_ERROR_CHECK(esp_wifi_stop());
 	    ESP_ERROR_CHECK(esp_wifi_set_mode(WIFI_MODE_STA));
-	    int err=esp_wifi_start();
+	    esp_wifi_start();
 	   	ESP_ERROR_CHECK(esp_wifi_scan_start(NULL, true));
 	    ESP_ERROR_CHECK(esp_wifi_scan_get_ap_records(&number, ap_info));
 	    ESP_ERROR_CHECK(esp_wifi_scan_get_ap_num(&ap_count));
@@ -1002,10 +1006,15 @@ static void scan()
 	    miscanf=false;
 	    ESP_ERROR_CHECK(esp_wifi_stop());
 	    ESP_ERROR_CHECK(esp_wifi_set_mode(WIFI_MODE_APSTA));
-	    err=esp_wifi_start();
+	    esp_wifi_start();
 	    clientCloud = esp_mqtt_client_init(&mqtt_cfg);
 }
 
+void eraseTariff()
+{
+	fram.erase_tarif();
+	printf("%sTariffs erased\n",KBDT);
+}
 
 void init_kbd_commands()
 {
@@ -1013,7 +1022,7 @@ void init_kbd_commands()
 	strcpy((char*)&cmdds[1].comando,"WebReset");		cmdds[ 1].code=webReset;
 	strcpy((char*)&cmdds[2].comando,"Controllers");		cmdds[ 2].code=printControllers;
 	strcpy((char*)&cmdds[3].comando,"MeterStat");		cmdds[ 3].code=meterStatus;
-	strcpy((char*)&cmdds[4].comando,"MeterTest");		cmdds[ 4].code=meterTest;
+	strcpy((char*)&cmdds[4].comando,"EraseTariff");		cmdds[ 4].code=eraseTariff;
 	strcpy((char*)&cmdds[5].comando,"MeterCount");		cmdds[ 5].code=meterCount;
 	strcpy((char*)&cmdds[6].comando,"DumpCore");		cmdds[ 6].code=dumpCore;
 	strcpy((char*)&cmdds[7].comando,"FormatFram");		cmdds[ 7].code=formatFram;

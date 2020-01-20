@@ -375,6 +375,18 @@ int FramSPI::read_tarif_day(uint16_t dia,uint8_t*  donde) //Read 24 Hours of cur
 	return ret;
 }
 
+int FramSPI::erase_tarif()
+{
+	int ret;
+	uint32_t add=TARIFADIA;
+	void *buf=malloc(FINTARIFA-TARIFADIA);
+	if(!buf)
+		return -1;
+	memset(buf,0,FINTARIFA-TARIFADIA);
+	ret=writeMany(add,(uint8_t*)buf,FINTARIFA-TARIFADIA);
+	return ret;
+}
+
 int FramSPI::read_tarif_hour(uint16_t dia,uint8_t hora,uint8_t*  donde) //Read specific Hour in a Day. Day 0-365 and Hour 0-23
 {
 	int ret;
@@ -405,12 +417,11 @@ int FramSPI::read_bytes(uint8_t meter,uint32_t add,uint8_t*  donde,uint32_t cuan
 	return ret;
 }
 
-int FramSPI::write_recover(scratchTypespi value)
+int FramSPI::write_macs( uint8_t  *value,uint16_t numSlotsUsed)
 {
-	uint32_t add=SCRATCH;
-	uint8_t*  desde=(uint8_t* )&value;
-	uint8_t cuantos=sizeof(scratchTypespi);
-	int ret=writeMany(add,desde,cuantos);
+	int ret,son=numSlotsUsed;
+	ret=writeMany(STATIONS,value,STATIONSEND-STATIONS);
+	ret=writeMany(USEDMACS,(uint8_t*)&son,2);
 	return ret;
 }
 
@@ -524,6 +535,14 @@ int FramSPI::write_hourraw(uint8_t meter,uint16_t days,uint8_t hora,uint8_t valu
 	return ret;
 }
 
+int FramSPI::read_macs( uint8_t  *theMacs, uint8_t *numUsedSlots)
+{
+	int ret;
+	ret=readMany(STATIONS,theMacs,STATIONSEND-STATIONS);
+	ret=readMany(USEDMACS,numUsedSlots,MWORD);
+	return ret;
+}
+
 int FramSPI::read_cycle(uint8_t mes, uint8_t*  value)
 {
 	int ret;
@@ -544,19 +563,6 @@ int FramSPI::read_lifedate(uint8_t meter, uint8_t*  value)
 	ret=read_bytes(meter,badd,value,LLONG);
 	return ret;
 }
-
-int FramSPI::read_recover(scratchTypespi* aqui)
-{
-	int ret;
-	uint8_t*  donde=(uint8_t* )aqui;
-	uint16_t cuantos = sizeof(scratchTypespi);
-	uint32_t add=SCRATCH;
-	ret=readMany(add,donde,cuantos);
-	if (ret!=0)
-		printf("Read REcover error %d\n",ret);
-	return ret;
-}
-
 
 int FramSPI::read_lifekwh(uint8_t meter, uint8_t*  value)
 {

@@ -3,7 +3,7 @@
 #define framDef_h
 
 #define HOST
-#define TXL 				SOC_SPI_MAXIMUM_BUFFER_SIZE-4
+#define TXL 				SOC_SPI_MAXIMUM_BUFFER_SIZE
 #define MAXDEVSUP           (5)
 #define MAXDEVSS            (5)
 #define MWORD				(2)
@@ -11,17 +11,17 @@
 
 #define FRAMDATE			0
 #define METERVER			(FRAMDATE+LLONG)
-#define FREEFRAM			(METERVER+LLONG)
-#define MCYCLE				(FREEFRAM+MWORD)
-#define SCRATCH          	(MCYCLE+12*LLONG)
-#define SCRATCHEND          (SCRATCH+100)
+#define USEDMACS			(METERVER+LLONG)
+#define MCYCLE				(USEDMACS+MWORD)
+#define STATIONS          	(MCYCLE+12*LLONG)		//STORE for Reserved MACs (u32 MAC and U32 time +2 free)*10=100
+#define STATIONSEND         (STATIONS+100)
 
 #ifdef HOST
-#define TARIFADIA           (SCRATCHEND)
+#define TARIFADIA           (STATIONSEND)
 #define FINTARIFA           (TARIFADIA+366*24*MWORD)
 #else
-#define TARIFADIA			SCRATCHEND
-#define FINTARIFA			SCRATCHEND
+#define TARIFADIA			STATIONSEND
+#define FINTARIFA			STATIONSEND
 #endif
 
 #define BEATSTART           (FINTARIFA)

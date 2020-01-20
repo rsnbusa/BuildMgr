@@ -17,7 +17,7 @@
 #define CENTINEL						0x12345678
 #define OTA_BIN_FILE	 				"http://feediot.c1.biz/buildMgrOled.bin"
 
-#define GETMT							2048 //getmessage task stack size
+#define GETMT							4096 //getmessage task stack size
 
 #define INTERNET						"Porton"
 #define INTERNETPASS					"csttpstt"
@@ -25,9 +25,9 @@
 
 #define MAXBUFFER						2500
 #define MAXCHARS						40
-#define MAXCMDS							5
+#define MAXCMDS							6
 #define MAXDEVS							5
-#define MAXSTAS							20
+#define MAXSTA							20
 #define MAXWIFI							100
 
 #define METER0							4

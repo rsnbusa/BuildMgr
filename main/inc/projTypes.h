@@ -15,9 +15,16 @@ typedef struct macC{
 	bool			loginf;
 } macControl;
 
+typedef struct reserv{
+	uint32_t	dMac;
+	time_t		when;
+	uint16_t	free;
+}mac_reserved;
+
 typedef struct taskp{
 	int	sock_p;
 	int pos_p;
+	int macf;
 } task_param;
 
 typedef struct meterType{

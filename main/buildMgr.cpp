@@ -11,6 +11,7 @@ void write_to_fram(u8 meter,bool addit);
 void testMqtt();
 static void sendTelemetry();
 void start_webserver(void* pArg);
+static void reserveSlot(parg* argument);
 
 #define OTA_URL_SIZE 1024
 extern const uint8_t server_cert_pem_start[] asm("_binary_ca_cert_pem_start");
@@ -30,11 +31,27 @@ const static int PUB_BIT 	= BIT2;
 const static int DONE_BIT 	= BIT3;
 const static int SNTP_BIT 	= BIT4;
 
+void nada()
+{
+	ip4_addr_t *ip=0;
+
+	dhcp_search_ip_on_mac((uint8_t*)&theMacNum,ip);
+}
 static int find_mac(uint32_t esteMac)
 {
 	for (int a=0;a<vanMacs;a++)
 	{
 		if(losMacs[a].macAdd==esteMac)
+			return a;
+	}
+	return -1;
+}
+
+static int find_mac_slot(uint32_t esteMac)
+{
+	for (int a=0;a<reservedCnt;a++)
+	{
+		if(reservedMacs[a].dMac==esteMac)
 			return a;
 	}
 	return -1;
@@ -514,6 +531,8 @@ static void getMessage(void *pArg)
     int len;
     cmdType comando;
     task_param *theP=(task_param*)pArg;
+    char s1[10];
+    parg argument;
 
 
     int sock =theP->sock_p;
@@ -545,6 +564,27 @@ static void getMessage(void *pArg)
 #endif
 				   goto exit;
 				} else {
+					// check special reserve msg
+					if(theP->macf<0) //no mac found in buildmgr
+					{
+						if(strstr(comando.mensaje,"rsvp")==NULL)
+						{
+							if(theConf.traceflag & (1<<CMDD))
+								printf("%sTask Killed No MAC \n", CMDDT);
+							goto exit;
+						}
+						else
+						{
+							*(comando.mensaje+len)=0;
+							// reserve cmd rx. Process it without queue
+							// msg struct simple = rsvp123456789 rsvp=key numbers are macn in chars
+							memcpy(s1,comando.mensaje+4,len-4);
+							argument.macn=atof(s1);
+							argument.pComm=sock;
+							reserveSlot(&argument);
+							goto exit; //done
+						}
+					}
 					llevoMsg++;
 					comando.mensaje[len] = 0;
 					comando.pos=pos;
@@ -649,6 +689,8 @@ static void buildMgr(void *pvParameters)
 			losMacs[a].theSock=sock;
 			theP.pos_p=a;
 			theP.sock_p=sock;
+			theP.macf=a;
+
 			xTaskCreate(&getMessage,tt,GETMT,(void*)&theP, 4, &losMacs[a].theHandle);
 			globalSocks++;
         }
@@ -670,36 +712,7 @@ static void buildMgr(void *pvParameters)
     vTaskDelete(NULL);
 }
 
-static void close_mac(int cual)
-{
-#ifdef DEBUGX
-	if(theConf.traceflag & (1<<CMDD))
-		printf("%sClosing[%d] FD %d\n",CMDDT,cual,losMacs[cual].theSock);
-#endif
-	if(losMacs[cual].theHandle)
-		vTaskDelete(losMacs[cual].theHandle);// kill the task
-	if(losMacs[cual].theSock>=3)
-		close(losMacs[cual].theSock); //close the socket
-	if(losMacs[cual].timerH)			// delete TimerControl
-	{
-		xTimerStop(losMacs[cual].timerH,0);
-		xTimerDelete(losMacs[cual].timerH,0);
-		losMacs[cual].timerH=NULL;
-	}
 
-	if(cual==vanMacs-1)
-	{
-		memset((void*)&losMacs[cual],0,sizeof(losMacs[cual]));
-		vanMacs--;
-		if (vanMacs<0)//just in case
-			vanMacs=0;
-		return;
-	}
-	memmove(&losMacs[cual],&losMacs[cual+1],(vanMacs-cual-1)*sizeof(losMacs[0]));
-	vanMacs--;
-	if (vanMacs<0)//just in case
-		vanMacs=0;
-}
 
 static void wifi_event_handler(void* arg, esp_event_base_t event_base,
                                 int32_t event_id, void* event_data)
@@ -854,6 +867,37 @@ static void update_ip()
 	}
 }
 
+static void close_mac(int cual)
+{
+#ifdef DEBUGX
+	if(theConf.traceflag & (1<<CMDD))
+		printf("%sClosing[%d] FD %d\n",CMDDT,cual,losMacs[cual].theSock);
+#endif
+	if(losMacs[cual].theHandle)
+		vTaskDelete(losMacs[cual].theHandle);// kill the task for rx
+	if(losMacs[cual].theSock>=3)
+		close(losMacs[cual].theSock); //close the socket
+	if(losMacs[cual].timerH)			// delete TimerControl
+	{
+		xTimerStop(losMacs[cual].timerH,0);
+		xTimerDelete(losMacs[cual].timerH,0);
+		losMacs[cual].timerH=NULL;
+	}
+
+	if(cual==vanMacs-1)
+	{
+		memset((void*)&losMacs[cual],0,sizeof(losMacs[cual]));
+		vanMacs--;
+		if (vanMacs<0)//just in case
+			vanMacs=0;
+		return;
+	}
+	memmove(&losMacs[cual],&losMacs[cual+1],(vanMacs-cual-1)*sizeof(losMacs[0]));
+	vanMacs--;
+	if (vanMacs<0)//just in case
+		vanMacs=0;
+}
+
 static void update_mac(u32 newmac)
 {
 	int este;
@@ -861,7 +905,7 @@ static void update_mac(u32 newmac)
 #ifdef DEBUGX
 
 	if(theConf.traceflag & (1<<CMDD))
-		printf("update mac %x\n",newmac);
+		printf("%supdate mac %x\n",CMDDT,newmac);
 #endif
 
 	do { //in case multiple instances which SHOULDNT happend but....
@@ -870,11 +914,26 @@ static void update_mac(u32 newmac)
  		close_mac(este);
 	} while(este>=0);
 
-	memset((void*)&losMacs[vanMacs],0,sizeof(losMacs[0]));
-	losMacs[vanMacs].theIp=0;
-	losMacs[vanMacs].theHandle=NULL;
-	losMacs[vanMacs].theSock=-1;
-	losMacs[vanMacs++].macAdd=newmac;
+	// check if this mac has reserved a slot else do no put it in the Active Macs
+
+	este=find_mac_slot(newmac);
+	if(este<0)
+	{
+		if(theConf.traceflag & (1<<CMDD))
+				printf("%sRejecting MAC %04x\n",CMDDT,newmac);
+		return; //not in our reserved list
+	}
+
+	losMacs[vanMacs].macAdd=newmac;
+	time(&losMacs[vanMacs].lastUpdate);
+	vanMacs++;
+
+
+	memset((void*)&losMacs[este],0,sizeof(losMacs[0]));
+	losMacs[este].theIp=0;
+	losMacs[este].theHandle=NULL;
+	losMacs[este].theSock=-1;
+	losMacs[este].macAdd=newmac;
 }
 
 static void ip_event_handler(void* arg, esp_event_base_t event_base,
@@ -945,13 +1004,15 @@ static void wifi_init(void)
 
     //AP section
     memset(&wifi_config,0,sizeof(wifi_config));//very important
-    sprintf(tempb,"MeterIoT%04x",theMacNum);
+    sprintf(tempb,"CmgrIoT%04x",theMacNum);
     strcpy((char*)wifi_config.ap.ssid,tempb);
     strcpy((char*)wifi_config.ap.password,tempb);
-    strcpy((char*)wifi_config.ap.ssid,"Meteriot"); //until we define how to configure MeterController to connect to a network, leave fixed SSID
-	strcpy((char*)wifi_config.ap.password,"Meteriot");
 	wifi_config.ap.authmode=WIFI_AUTH_WPA_PSK;
-	wifi_config.ap.ssid_hidden=false;
+	if(usedMacs<MAXSTA)
+		wifi_config.ap.ssid_hidden=false;
+	else
+		wifi_config.ap.ssid_hidden=true;
+
 	wifi_config.ap.beacon_interval=400;
 	wifi_config.ap.max_connection=50;
 	wifi_config.ap.ssid_len=0;
@@ -959,7 +1020,7 @@ static void wifi_init(void)
 	ESP_ERROR_CHECK(esp_wifi_set_config(ESP_IF_WIFI_AP, &wifi_config));
 
 	//STA section
-	memset(&wifi_config,0,sizeof(wifi_config));//very important
+	memset(&wifi_config,0,sizeof(wifi_config));//very important, do it again for sta else corrupted for ESP_IF_WIFI_STA
 	strcpy((char*)wifi_config.sta.ssid,INTERNET);
 	strcpy((char*)wifi_config.sta.password,INTERNETPASS);
 
@@ -1160,7 +1221,7 @@ void firmwareCmd(parg *pArg) //called by cmdManager
 	xTaskCreate(&firmUpdate,"U571",10240,NULL, 5, NULL);
 }
 
- static void loginCmd(parg* argument)
+static void loginCmd(parg* argument)
 {
 	loginT loginData;
 
@@ -1173,6 +1234,32 @@ void firmwareCmd(parg *pArg) //called by cmdManager
 	loginData.theTariff=100;
 	send(argument->pComm, &loginData, sizeof(loginData), 0);
 }
+
+static void reserveSlot(parg* argument)
+{
+	uint8_t yes=1;
+	u32 macc=(u32)argument->macn;
+
+	if(theConf.traceflag & (1<<CMDD))
+		printf("%sReserve slot for %x\n",CMDDT,macc);
+
+	for(int a=0;a<reservedCnt;a++)
+	{
+		if(reservedMacs[a].dMac==macc)
+		{
+			yes=-2;
+			send(argument->pComm, &yes, sizeof(yes), 0);//already registered
+			return;
+		}
+	}
+//add it
+	reservedMacs[reservedCnt].dMac=macc;
+	time(&reservedMacs[reservedCnt].when);
+	yes=reservedCnt++;
+	send(argument->pComm, &yes, sizeof(yes), 0);
+	fram.write_macs((uint8_t*)&reservedMacs,reservedCnt);
+}
+
 
  void monitorCallback( TimerHandle_t xTimer )
  {
@@ -1570,6 +1657,7 @@ static void pcntManager(void * pArg)
 				{
 					//force it to 10s. No idea how this happens but this is required else it will never have a Residuo of 0 and hence inc kwh
 					//shouldnt happen often I guess
+					//very important safeguard DO NOT REMOVE
 					float theFloat=theMeters[evt.unit].currentBeat/10;
 					int rounded=(int)round(theFloat)*10;
 					theMeters[evt.unit].currentBeat=rounded;
@@ -1666,6 +1754,7 @@ static void init_vars()
 	strcpy((char*)&cmds[2].comando,"/ga_status");			cmds[2].code=statusCmd;				cmds[2].source=LOCALT;	//from local
 	strcpy((char*)&cmds[3].comando,"/ga_login");			cmds[3].code=loginCmd;				cmds[3].source=LOCALT;	//from local
 	strcpy((char*)&cmds[4].comando,"/ga_telemetry");		cmds[4].code=sendTelemetryCmd;		cmds[4].source=HOSTT;	//from Host
+	strcpy((char*)&cmds[5].comando,"/ga_reserve");			cmds[5].code=reserveSlot;			cmds[5].source=LOCALT;	//from local
 
 	//debug trace flags
 #ifdef KBD
@@ -1855,11 +1944,11 @@ void init_boot()
 	{
 		printf("%s=============== FRAM ===============%s\n",RED,YELLOW);
 		printf("FRAMDATE(%s%d%s)=%s%d%s\n",GREEN,FRAMDATE,YELLOW,CYAN,METERVER-FRAMDATE,RESETC);
-		printf("METERVER(%s%d%s)=%s%d%s\n",GREEN,METERVER,YELLOW,CYAN,FREEFRAM-METERVER,RESETC);
-		printf("FREEFRAM(%s%d%s)=%s%d%s\n",GREEN,FREEFRAM,YELLOW,CYAN,MCYCLE-FREEFRAM,RESETC);
-		printf("MCYCLE(%s%d%s)=%s%d%s\n",GREEN,MCYCLE,YELLOW,CYAN,SCRATCH-MCYCLE,RESETC);
-		printf("SCRATCH(%s%d%s)=%s%d%s\n",GREEN,SCRATCH,YELLOW,CYAN,SCRATCHEND-SCRATCH,RESETC);
-		printf("SCRATCHEND(%s%d%s)=%s%d%s\n",GREEN,SCRATCHEND,YELLOW,CYAN,TARIFADIA-SCRATCHEND,RESETC);
+		printf("METERVER(%s%d%s)=%s%d%s\n",GREEN,METERVER,YELLOW,CYAN,USEDMACS-METERVER,RESETC);
+		printf("FREEFRAM(%s%d%s)=%s%d%s\n",GREEN,USEDMACS,YELLOW,CYAN,MCYCLE-USEDMACS,RESETC);
+		printf("MCYCLE(%s%d%s)=%s%d%s\n",GREEN,MCYCLE,YELLOW,CYAN,STATIONS-MCYCLE,RESETC);
+		printf("STATIONS(%s%d%s)=%s%d%s\n",GREEN,STATIONS,YELLOW,CYAN,STATIONSEND-STATIONS,RESETC);
+		printf("STATIONSEND(%s%d%s)=%s%d%s\n",GREEN,STATIONSEND,YELLOW,CYAN,TARIFADIA-STATIONSEND,RESETC);
 		printf("TARIFADIA(%s%d%s)=%s%d%s\n",GREEN,TARIFADIA,YELLOW,CYAN,FINTARIFA-TARIFADIA,RESETC);
 		printf("FINTARIFA(%s%d%s)=%s%d%s\n",GREEN,FINTARIFA,YELLOW,CYAN,BEATSTART-FINTARIFA,RESETC);
 		printf("BEATSTART(%s%d%s)=%s%d%s\n",GREEN,BEATSTART,YELLOW,CYAN,LIFEKWH-BEATSTART,RESETC);
@@ -1911,6 +2000,16 @@ static void loadDefaultTariffs()
 	xQueueSend( mqttR,&cmd,0 );
 }
 
+static void load_reservedMacs()
+{
+	fram.read_macs((uint8_t*)&reservedMacs,(uint8_t*)&reservedCnt);
+	printf("Reserves loaded %d\n",reservedCnt);
+	for (int a=0;a<reservedCnt;a++)
+	{
+		printf("Macs[%d]=%x %s",a,reservedMacs[a].dMac,ctime(reservedMacs[a].when));
+	}
+}
+
 void app_main()
 {
 
@@ -1940,11 +2039,12 @@ void app_main()
 	if (theConf.centinel!=CENTINEL || !gpio_get_level((gpio_num_t)0))
 		erase_config();//start fresh
 
-	init_vars();		// setup initial values
-	init_fram();		// connect to fram to save readings
-    init_boot();		// print boot stuff if defined
-    wifi_init();		// this a Master Controller.
-    mqtt_app_start();	// Start MQTT configuration and DO NOT connect. Connection will be on demand
+	init_vars();			// setup initial values
+	init_fram();			// connect to fram to save readings
+	load_reservedMacs();	// reserved macs
+    init_boot();			// print boot stuff if defined
+    wifi_init();			// this a Master Controller.
+    mqtt_app_start();		// Start MQTT configuration and DO NOT connect. Connection will be on demand
 
 #ifdef KBD
 	xTaskCreate(&kbd,"kbd",10240,NULL, 4, NULL);
