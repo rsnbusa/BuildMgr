@@ -220,7 +220,7 @@ void confStatus()
 	printf("%s====================\nConfiguration Status\n",KBDT);
 
 	printf("ConnMgr %s DDay %d AltDay %d SlotTime %d SlotAssigned %d Reserved %d\n",theConf.meterConnName, theConf.connId.dDay,theConf.connId.altDay,
-							theConf.slot_Server.slot_time,theConf.connId.connSlot,usedMacs);
+							theConf.slot_Server.slot_time,theConf.connId.connSlot,reservedCnt);
 
 	printf("%sConfiguration BootCount %d LReset %x RunStatus[%s] Trace %x\n",YELLOW,theConf.bootcount,theConf.lastResetCode,
 			theConf.active?"Run":"Setup",theConf.traceflag);
@@ -863,7 +863,7 @@ static void printControllers()
 
 	printf("Slots Reserved\n");
 
-	for(int a=0;a<vanMacs;a++)
+	for(int a=0;a<reservedCnt;a++)
 		printf("%sReserved Slot[%d]%s=%06x %s",GREEN,a,CYAN,reservedMacs[a].dMac,ctime(&reservedMacs[a].when));
 
 	printf("%s\n",KBDT);

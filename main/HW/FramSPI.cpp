@@ -127,6 +127,14 @@ int  FramSPI::sendCmd (uint8_t cmd)
 
 }
 
+int FramSPI::read_guard(uint8_t*  value)
+{
+	int ret;
+	uint32_t badd=GUARDM;
+	ret=readMany(badd,value,MWORD);
+	return ret;
+}
+
 int  FramSPI::readStatus ( uint8_t* donde)
 {
 	esp_err_t ret;
@@ -414,6 +422,14 @@ int FramSPI::read_bytes(uint8_t meter,uint32_t add,uint8_t*  donde,uint32_t cuan
 	add+=METERSIZE*meter;
 	int ret;
 	ret=readMany(add,donde,cuantos);
+	return ret;
+}
+
+int FramSPI::write_guard(uint16_t  value)
+{
+	int ret;
+	uint32_t badd=GUARDM;
+	ret=writeMany(badd,(uint8_t*)&value,MWORD);
 	return ret;
 }
 

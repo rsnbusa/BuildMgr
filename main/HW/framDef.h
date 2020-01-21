@@ -10,8 +10,8 @@
 #define LLONG               (4)
 
 #define FRAMDATE			0
-#define METERVER			(FRAMDATE+LLONG)
-#define USEDMACS			(METERVER+LLONG)
+#define GUARDM				(FRAMDATE+LLONG)
+#define USEDMACS			(GUARDM+MWORD)
 #define MCYCLE				(USEDMACS+MWORD)
 #define STATIONS          	(MCYCLE+12*LLONG)		//STORE for Reserved MACs (u32 MAC and U32 time +2 free)*10=100
 #define STATIONSEND         (STATIONS+100)

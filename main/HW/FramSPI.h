@@ -79,6 +79,7 @@ public:
     int	        write_lifedate(uint8_t medidor, uint32_t value);
     int	        write_cycle(uint8_t mes, uint32_t value);
     int			write_macs(uint8_t* value,uint16_t numSlotsUsed);
+    int	        write_guard(uint16_t value);
 
     int	        read_beat(uint8_t medidor, uint8_t*  value);
     int	        read_month(uint8_t medidor,uint8_t month,uint8_t*  value);
@@ -91,7 +92,9 @@ public:
     int	        read_lifekwh(uint8_t medidor, uint8_t*  value);
     int 		read_cycle(uint8_t mes, uint8_t*  value);
     int			read_macs(uint8_t * value, uint8_t* numUsedSlots);
-public:
+    int	        read_guard(uint8_t*  value);
+
+    public:
     bool _framInitialised;
     spi_device_handle_t spi;
     uint8_t addressBytes;

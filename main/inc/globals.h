@@ -32,7 +32,7 @@ EXTERN owb_rmt_driver_info 				rmt_driver_info;
 EXTERN QueueHandle_t 					mqttQ,mqttR,framQ,pcnt_evt_queue;
 EXTERN SemaphoreHandle_t 				wifiSem,framSem;
 EXTERN TimerHandle_t					hourChangeT,connHandle;
-EXTERN u16 								qdelay,llevoMsg,mesg,diag,horag,yearg,wDelay,tarifasDia[24],oldMesg,oldDiag,oldHorag,yearDay,oldYearDay;
+EXTERN u16 								theGuard,qdelay,llevoMsg,mesg,diag,horag,yearg,wDelay,tarifasDia[24],oldMesg,oldDiag,oldHorag,yearDay,oldYearDay;
 EXTERN u32								sentTotal,llevo,tallies[MAXSTA][MAXDEVS],theMacNum;
 EXTERN u8								qwait,lastalign,lastFont,workingDevs;
 EXTERN uint32_t							totalPulses,oldCurBeat[MAXDEVS],oldCurLife[MAXDEVS];

@@ -31,12 +31,6 @@ const static int PUB_BIT 	= BIT2;
 const static int DONE_BIT 	= BIT3;
 const static int SNTP_BIT 	= BIT4;
 
-void nada()
-{
-	ip4_addr_t *ip=0;
-
-	dhcp_search_ip_on_mac((uint8_t*)&theMacNum,ip);
-}
 static int find_mac(uint32_t esteMac)
 {
 	for (int a=0;a<vanMacs;a++)
@@ -111,33 +105,36 @@ void hourChange()
 		if(theConf.traceflag & (1<<CMDD))
 			printf("%sHour change meter %d val %d\n",CMDDT,a,theMeters[a].curHour);
 #endif
-		if(xSemaphoreTake(framSem, portMAX_DELAY))
+		if(framSem)
 		{
-			fram.write_hour(a, oldYearDay,oldHorag, theMeters[a].curHour);//write old one before init new
-			fram.write_hourraw(a, oldYearDay,oldHorag, theMeters[a].curHourRaw);//write old one before init new
-			xSemaphoreGive(framSem);
+			if(xSemaphoreTake(framSem, portMAX_DELAY))
+			{
+				fram.write_hour(a, oldYearDay,oldHorag, theMeters[a].curHour);//write old one before init new
+				fram.write_hourraw(a, oldYearDay,oldHorag, theMeters[a].curHourRaw);//write old one before init new
+				xSemaphoreGive(framSem);
+			}
+
+			theMeters[a].curHour=0; //init it
+			theMeters[a].curHourRaw=0;
+			u16 oldt=tarifasDia[oldHorag];
+
+			if (diag !=oldDiag)
+			{
+				int err=fram.read_tarif_day(yearDay,(u8*)&tarifasDia);
+				if(err!=0)
+					printf("Error reading tarifadia %d...using same\n",yearDay);
+			}
+
+			// calculate remaining Beats to convert to next Tariff IF different
+			if(oldt!=tarifasDia[horag])
+			{
+				u16 oldBeats=theMeters[a].beatsPerkW*tarifasDia[oldHorag]/100;
+				float oldTarRemain=(float)(theMeters[a].beatSave-oldBeats);
+				float perc=(float)oldTarRemain/(float)oldBeats;
+				theMeters[a].beatSave=(int)(perc*(float)(theMeters[a].beatsPerkW*tarifasDia[horag]/100));
+			} //else keep counting in the same fashion
+			oldHorag=horag;
 		}
-
-		theMeters[a].curHour=0; //init it
-		theMeters[a].curHourRaw=0;
-		u16 oldt=tarifasDia[oldHorag];
-
-		if (diag !=oldDiag)
-		{
-			int err=fram.read_tarif_day(yearDay,(u8*)&tarifasDia);
-			if(err!=0)
-				printf("Error reading tarifadia %d...using same\n",yearDay);
-		}
-
-		// calculate remaining Beats to convert to next Tariff IF different
-		if(oldt!=tarifasDia[horag])
-		{
-			u16 oldBeats=theMeters[a].beatsPerkW*tarifasDia[oldHorag]/100;
-			float oldTarRemain=(float)(theMeters[a].beatSave-oldBeats);
-			float perc=(float)oldTarRemain/(float)oldBeats;
-			theMeters[a].beatSave=(int)(perc*(float)(theMeters[a].beatsPerkW*tarifasDia[horag]/100));
-		} //else keep counting in the same fashion
-		oldHorag=horag;
 	}
 }
 
@@ -148,19 +145,20 @@ void dayChange()
 		printf("%sDay change Old %d New %d\n",CMDDT,oldDiag,diag);
 #endif
 
-//	return;
-
-	for (int a=0;a<MAXDEVS;a++)
+	if(framSem)
 	{
-#ifdef DEBUGX
-		if(theConf.traceflag & (1<<CMDD))
-			printf("%sDay change mes %d day %d oldday %d\n",CMDDT,oldMesg,diag,oldDiag);
-#endif
-		if(xSemaphoreTake(framSem, portMAX_DELAY))
+		for (int a=0;a<MAXDEVS;a++)
 		{
-			fram. write_day(a,oldYearDay, theMeters[a].curDay);
-			theMeters[a].curDay=0;
-			xSemaphoreGive(framSem);
+	#ifdef DEBUGX
+			if(theConf.traceflag & (1<<CMDD))
+				printf("%sDay change mes %d day %d oldday %d\n",CMDDT,oldMesg,diag,oldDiag);
+	#endif
+			if(xSemaphoreTake(framSem, portMAX_DELAY))
+			{
+				fram. write_day(a,oldYearDay, theMeters[a].curDay);
+				theMeters[a].curDay=0;
+				xSemaphoreGive(framSem);
+			}
 		}
 	}
 
@@ -175,15 +173,16 @@ void monthChange()
 		printf("%sMonth change Old %d New %d\n",CMDDT,oldMesg,mesg);
 #endif
 
-//	return;
-
-	for (int a=0;a<MAXDEVS;a++)
+	if(framSem)
 	{
-		if(xSemaphoreTake(framSem, portMAX_DELAY))
+		for (int a=0;a<MAXDEVS;a++)
 		{
-			fram.write_month(a, oldMesg, theMeters[a].curMonth);
-			xSemaphoreGive(framSem);
-			theMeters[a].curMonth=0;
+			if(xSemaphoreTake(framSem, portMAX_DELAY))
+			{
+				fram.write_month(a, oldMesg, theMeters[a].curMonth);
+				xSemaphoreGive(framSem);
+				theMeters[a].curMonth=0;
+			}
 		}
 	}
 	oldMesg=mesg;
@@ -341,42 +340,43 @@ void loadit(parg *pArg)
 	esp_http_client_handle_t client = esp_http_client_init(&lconfig);
 	if(client)
 	{
-		if(xSemaphoreTake(framSem, portMAX_DELAY/  portTICK_RATE_MS))	//reserve our Fram just for this operation
-		{
-			esp_err_t err = esp_http_client_perform(client);			// do the hard work
-			if (err == ESP_OK)
+		if(framSem)
+			if(xSemaphoreTake(framSem, portMAX_DELAY/  portTICK_RATE_MS))	//reserve our Fram just for this operation
 			{
-#ifdef DEBUGX
-				if(theConf.traceflag & (1<<HOSTD))
-					printf("%sStatus = %d, content_length = %d\n",HOSTDT,
-						esp_http_client_get_status_code(client),
-						esp_http_client_get_content_length(client));
-#endif
-				if(esp_http_client_get_status_code(client)!=200)
+				esp_err_t err = esp_http_client_perform(client);			// do the hard work
+				if (err == ESP_OK)
 				{
+	#ifdef DEBUGX
 					if(theConf.traceflag & (1<<HOSTD))
-						printf("%sFailed to download Tariff Err %x\n",HOSTDT,esp_http_client_get_status_code(client));
+						printf("%sStatus = %d, content_length = %d\n",HOSTDT,
+							esp_http_client_get_status_code(client),
+							esp_http_client_get_content_length(client));
+	#endif
+					if(esp_http_client_get_status_code(client)!=200)
+					{
+						if(theConf.traceflag & (1<<HOSTD))
+							printf("%sFailed to download Tariff Err %x\n",HOSTDT,esp_http_client_get_status_code(client));
+						esp_http_client_cleanup(client);
+						return;
+					}
+				}
+				else
+				{
+	#ifdef DEBUGX
+					if(theConf.traceflag & (1<<HOSTD))
+						printf("%sFailed to download Tariff Err %x\n",HOSTDT,err);
 					esp_http_client_cleanup(client);
 					return;
+	#endif
 				}
-			}
-			else
-			{
-#ifdef DEBUGX
-				if(theConf.traceflag & (1<<HOSTD))
-					printf("%sFailed to download Tariff Err %x\n",HOSTDT,err);
+				// all is well, cleanup and read back to our working array
 				esp_http_client_cleanup(client);
-				return;
-#endif
-			}
-			// all is well, cleanup and read back to our working array
-			esp_http_client_cleanup(client);
 
-			err=fram.read_tarif_day(yearDay,(u8*)&tarifasDia);
-			xSemaphoreGive(framSem);
-			if(err!=0)
-				printf("%sLoadTariff Error %d reading Tariffs day %d...recovering from Host\n",HOSTDT,err,yearDay);
-		}
+				err=fram.read_tarif_day(yearDay,(u8*)&tarifasDia);
+				xSemaphoreGive(framSem);
+				if(err!=0)
+					printf("%sLoadTariff Error %d reading Tariffs day %d...recovering from Host\n",HOSTDT,err,yearDay);
+			}
 	}
 	else
 	{
@@ -941,17 +941,17 @@ static void ip_event_handler(void* arg, esp_event_base_t event_base,
 {
 	 wifi_config_t wifi_config;
 	 ip_event_got_ip_t *ev=(ip_event_got_ip_t*)event_data;
+	 ip_event_ap_staipassigned_t *evip=(ip_event_ap_staipassigned_t*)event_data;
 
 	    memset(&wifi_config,0,sizeof(wifi_config));//very important
 
     switch (event_id) {
     case IP_EVENT_AP_STAIPASSIGNED:
-//    	printf("\nIP Assigned:" IPSTR, IP2STR(&ev->ip_info.ip));
+  //  	printf("\nAP IP Assigned:" IPSTR "\n", IP2STR(&evip->ip));
     	update_ip();
     	break;
         case IP_EVENT_STA_GOT_IP:
-        	printf("\nIP Assigned:" IPSTR, IP2STR(&ev->ip_info.ip));
-        	printf("\n");
+        	printf("\nIP Assigned:" IPSTR "\n", IP2STR(&ev->ip_info.ip));
         	wifif=true;
             xEventGroupSetBits(wifi_event_group, WIFI_BIT);
         	xTaskCreate(&sntpget,"sntp",2048,NULL, 4, NULL);
@@ -1517,6 +1517,8 @@ void write_to_fram(u8 meter,bool addit)
 {
 	time_t timeH;
     struct tm timeinfo;
+    uint16_t theG;
+
 
 	// FRAM Semaphore is taken by the Interrupt Manager. Safe to work.
     time(&timeH);
@@ -1547,6 +1549,9 @@ void write_to_fram(u8 meter,bool addit)
 	}
 		else
 		{
+			fram.read_guard((uint8_t*)&theG);
+			if(theG!=theGuard)
+				printf("Fram is lost\n");
 			fram.write_beat(meter,theMeters[meter].currentBeat);
 			fram.writeMany(FRAMDATE,(uint8_t*)&timeH,sizeof(timeH));//last known date
 		}
@@ -1554,36 +1559,44 @@ void write_to_fram(u8 meter,bool addit)
 
 void load_from_fram(u8 meter)
 {
-	if(xSemaphoreTake(framSem, portMAX_DELAY/  portTICK_RATE_MS))
-	{
-		fram.read_lifekwh(meter,(u8*)&theMeters[meter].curLife);
-		fram.read_lifedate(meter,(u8*)&theMeters[meter].lastKwHDate);
-		fram.read_month(meter, mesg, (u8*)&theMeters[meter].curMonth);
-		fram.read_monthraw(meter, mesg, (u8*)&theMeters[meter].curMonthRaw);
-		fram.read_day(meter, yearDay, (u8*)&theMeters[meter].curDay);
-		fram.read_dayraw(meter, yearDay, (u8*)&theMeters[meter].curDayRaw);
-		fram.read_hour(meter, yearDay, horag, (u8*)&theMeters[meter].curHour);
-		fram.read_hourraw(meter, yearDay, horag, (u8*)&theMeters[meter].curHourRaw);
-		fram.read_beat(meter,(u8*)&theMeters[meter].currentBeat);
-		xSemaphoreGive(framSem);
+	if(framSem)
+		if(xSemaphoreTake(framSem, portMAX_DELAY/  portTICK_RATE_MS))
+		{
+			fram.read_lifekwh(meter,(u8*)&theMeters[meter].curLife);
+			fram.read_lifedate(meter,(u8*)&theMeters[meter].lastKwHDate);
+			fram.read_month(meter, mesg, (u8*)&theMeters[meter].curMonth);
+			fram.read_monthraw(meter, mesg, (u8*)&theMeters[meter].curMonthRaw);
+			fram.read_day(meter, yearDay, (u8*)&theMeters[meter].curDay);
+			fram.read_dayraw(meter, yearDay, (u8*)&theMeters[meter].curDayRaw);
+			fram.read_hour(meter, yearDay, horag, (u8*)&theMeters[meter].curHour);
+			fram.read_hourraw(meter, yearDay, horag, (u8*)&theMeters[meter].curHourRaw);
+			fram.read_beat(meter,(u8*)&theMeters[meter].currentBeat);
+			xSemaphoreGive(framSem);
 
-		totalPulses+=theMeters[meter].currentBeat;
+			totalPulses+=theMeters[meter].currentBeat;
 
-#ifdef DEBUGX
-		if(theConf.traceflag & (1<<FRAMD))
-			printf("[FRAMD]Loaded Meter %d curLife %d beat %d\n",meter,theMeters[meter].curLife,theMeters[meter].currentBeat);
-#endif
-	}
+	#ifdef DEBUGX
+			if(theConf.traceflag & (1<<FRAMD))
+				printf("[FRAMD]Loaded Meter %d curLife %d beat %d\n",meter,theMeters[meter].curLife,theMeters[meter].currentBeat);
+	#endif
+		}
 }
 
 static void init_fram()
 {
 	// FRAM Setup
+	theGuard = rand();
+	framSem=NULL;
 	fram.begin(FMOSI,FMISO,FCLK,FCS,&framSem); //will create SPI channel and Semaphore
 	spi_flash_init();
 	//load all devices counters from FRAM
-	for (int a=0;a<MAXDEVS;a++)
-		load_from_fram(a);
+	if(framSem)
+	{
+		fram.write_guard(theGuard);				// theguard is dynamic and will change every boot.
+
+		for (int a=0;a<MAXDEVS;a++)
+			load_from_fram(a);
+	}
 }
 
 // save the data to fram
@@ -1601,14 +1614,17 @@ void framManager(void * pArg)
 	{
 		if( xQueueReceive( framQ, &theMeter, portMAX_DELAY/  portTICK_RATE_MS ))
 		{
-			if(xSemaphoreTake(framSem, portMAX_DELAY/  portTICK_RATE_MS))
+			if(framSem)
 			{
-				write_to_fram(theMeter.pos,theMeter.saveit);
-#ifdef DEBUGX
-				if(theConf.traceflag & (1<<FRAMD))
-					printf("%sSaving Meter %d add %d Beats %d\n",FRAMDT,theMeter.pos,theMeter.saveit,theMeters[theMeter.pos].currentBeat);
-#endif
-				xSemaphoreGive(framSem);
+				if(xSemaphoreTake(framSem, portMAX_DELAY/  portTICK_RATE_MS))
+				{
+					write_to_fram(theMeter.pos,theMeter.saveit);
+	#ifdef DEBUGX
+					if(theConf.traceflag & (1<<FRAMD))
+						printf("%sSaving Meter %d add %d Beats %d\n",FRAMDT,theMeter.pos,theMeter.saveit,theMeters[theMeter.pos].currentBeat);
+	#endif
+					xSemaphoreGive(framSem);
+				}
 			}
 		}
 		else
@@ -1669,7 +1685,10 @@ static void pcntManager(void * pArg)
 				if(tarifasDia[horag]==0)
 					tarifasDia[horag]=100; //when Tariffs NOT initialized it will crash
 
-				residuo=theMeters[evt.unit].beatSave % (theMeters[evt.unit].beatsPerkW*tarifasDia[horag]/100);
+				if(theMeters[evt.unit].beatsPerkW>0)
+					residuo=theMeters[evt.unit].beatSave % (theMeters[evt.unit].beatsPerkW*tarifasDia[horag]/100);
+				else
+					residuo=1;
 
 #ifdef DEBUGX
 				if(theConf.traceflag & (1<<INTD))
@@ -1843,7 +1862,7 @@ cJSON * makeGroupMeters()
 	cJSON_AddNumberToObject(root,"macn",				theMacNum);
 
 	cJSON *ar = cJSON_CreateArray();
-	for (int a=0;a<vanMacs+9;a++)
+	for (int a=0;a<reservedCnt;a++)
 	{
 		if(losMacs[0].lastUpdate>0)
 			makeMetercJSON(&losMacs[0],ar);
@@ -1943,8 +1962,8 @@ void init_boot()
 	if((theConf.traceflag & (1<<BOOTD)) && fram.intframWords>0)
 	{
 		printf("%s=============== FRAM ===============%s\n",RED,YELLOW);
-		printf("FRAMDATE(%s%d%s)=%s%d%s\n",GREEN,FRAMDATE,YELLOW,CYAN,METERVER-FRAMDATE,RESETC);
-		printf("METERVER(%s%d%s)=%s%d%s\n",GREEN,METERVER,YELLOW,CYAN,USEDMACS-METERVER,RESETC);
+		printf("FRAMDATE(%s%d%s)=%s%d%s\n",GREEN,FRAMDATE,YELLOW,CYAN,GUARDM-FRAMDATE,RESETC);
+		printf("METERVER(%s%d%s)=%s%d%s\n",GREEN,GUARDM,YELLOW,CYAN,USEDMACS-GUARDM,RESETC);
 		printf("FREEFRAM(%s%d%s)=%s%d%s\n",GREEN,USEDMACS,YELLOW,CYAN,MCYCLE-USEDMACS,RESETC);
 		printf("MCYCLE(%s%d%s)=%s%d%s\n",GREEN,MCYCLE,YELLOW,CYAN,STATIONS-MCYCLE,RESETC);
 		printf("STATIONS(%s%d%s)=%s%d%s\n",GREEN,STATIONS,YELLOW,CYAN,STATIONSEND-STATIONS,RESETC);
@@ -2000,10 +2019,10 @@ static void loadDefaultTariffs()
 	xQueueSend( mqttR,&cmd,0 );
 }
 
-static void load_reservedMacs()
+static void load_whitelist()
 {
 	fram.read_macs((uint8_t*)&reservedMacs,(uint8_t*)&reservedCnt);
-	printf("Reserves loaded %d\n",reservedCnt);
+	printf("Whitelist loaded %d\n",reservedCnt);
 	for (int a=0;a<reservedCnt;a++)
 	{
 		printf("Macs[%d]=%x %s",a,reservedMacs[a].dMac,ctime(reservedMacs[a].when));
@@ -2041,7 +2060,7 @@ void app_main()
 
 	init_vars();			// setup initial values
 	init_fram();			// connect to fram to save readings
-	load_reservedMacs();	// reserved macs
+	load_whitelist();		// reserved macs
     init_boot();			// print boot stuff if defined
     wifi_init();			// this a Master Controller.
     mqtt_app_start();		// Start MQTT configuration and DO NOT connect. Connection will be on demand
@@ -2060,10 +2079,10 @@ void app_main()
 #endif
 
    	// Managers Tasks
-   	xTaskCreate(&cmdManager,"cmdMgr",10240,NULL, 5, NULL); 							//cmds received from the Host Controller via MQTT or TCP/IP. jSON based
+   	xTaskCreate(&cmdManager,"cmdMgr",4096,NULL, 5, NULL); 							//cmds received from the Host Controller via MQTT or TCP/IP. jSON based
 	xTaskCreate(&framManager,"framMgr",4096,NULL, configMAX_PRIORITIES-5, NULL);	// Fram Manager
 	xTaskCreate(&pcntManager,"pcntMgr",4096,NULL, configMAX_PRIORITIES-8, NULL);	// We also control 5 meters. Pseudo ISR. This is d manager
-	xTaskCreate(&buildMgr,"TCP",10240,(void*)1, configMAX_PRIORITIES-10, NULL);		// Messages from the Meter Controllers via socket manager
+	xTaskCreate(&buildMgr,"TCP",4096,(void*)1, configMAX_PRIORITIES-10, NULL);		// Messages from the Meter Controllers via socket manager
 
 	// wait time from SNTP for 10 secs. If failure use FRAM last saved time
 	EventBits_t uxBits = xEventGroupWaitBits(wifi_event_group, SNTP_BIT, false, true, 10000/  portTICK_RATE_MS);//
@@ -2105,7 +2124,7 @@ void app_main()
 	}
 
 	pcnt_init();// initialize it. Several tricks apply. Read there. Depends on Tariffs so must be after we know tariffs and date are OK
-	xTaskCreate(&start_webserver,"web",10240,(void*)1, 4, &webHandle);// Messages from the Meters. Controller Section socket manager
+	xTaskCreate(&start_webserver,"web",4096,(void*)1, 4, &webHandle);// Messages from the Meters. Controller Section socket manager
 
 #ifdef DISPLAY
 	xTaskCreate(&displayManager,"dispMgr",4096,NULL, 4, NULL);
