@@ -20,54 +20,54 @@ void watchDog(void * pArg)
 		for (int a=0;a<theConf.reservedCnt;a++)
 		{
 
-			switch(whitelist[a].dState)
+			switch(losMacs[a].dState)
 			{
 				case BOOTSTATE:
-					if((now-whitelist[a].seen)>TSTATE1)
+					if((now-losMacs[a].stateChangeTS[BOOTSTATE])>TSTATE1)
 					{
-						if(whitelist[a].report!=REPORTED)
+						if(losMacs[a].report!=REPORTED)
 						{
-							printf("NO Connection from %x Time Elapsed %d Report Host\n",theConf.reservedMacs[a],now-whitelist[a].seen);
-							whitelist[a].report=REPORTED;
+							printf("NO Connection from %x Time Elapsed %d Report Host\n",theConf.reservedMacs[a],now-losMacs[a].stateChangeTS[BOOTSTATE]);
+							losMacs[a].report=REPORTED;
 						}
 
 					}
 					break;
 				case CONNSTATE:
-					if(whitelist[a].report==REPORTED)
+					if(losMacs[a].report==REPORTED)
 					{
 						printf("Connection from %x \n",theConf.reservedMacs[a]);
-						whitelist[a].report=NOREPORT;
-						whitelist[a].seen=now;
+						losMacs[a].report=NOREPORT;
+						losMacs[a].stateChangeTS[CONNSTATE]=now;
 						break;
 					}
 
-					if((now-whitelist[a].seen)>TSTATE2)
+					if((now-losMacs[a].stateChangeTS[CONNSTATE])>TSTATE2)
 					{
-						if(whitelist[a].report!=REPORTED)
+						if(losMacs[a].report!=REPORTED)
 						{
-							printf("NO Login from %x Time Elapsed %d Report Host\n",theConf.reservedMacs[a],now-whitelist[a].seen);
-							whitelist[a].report=REPORTED;
+							printf("NO Login from %x Time Elapsed %d Report Host\n",theConf.reservedMacs[a],now-losMacs[a].stateChangeTS[CONNSTATE]);
+							losMacs[a].report=REPORTED;
 						}
 
 					}
 					break;
 				case MSGSTATE:
-					if(whitelist[a].report==REPORTED)
+					if(losMacs[a].report==REPORTED)
 					{
 						printf("Message received from %x \n",theConf.reservedMacs[a]);
-						whitelist[a].report=NOREPORT;
-						whitelist[a].seen=now;
+						losMacs[a].report=NOREPORT;
+						losMacs[a].stateChangeTS[MSGSTATE]=now;
 						break;
 					}
 
-					if((now-whitelist[a].seen)>TSTATE3)
+					if((now-losMacs[a].stateChangeTS[MSGSTATE])>TSTATE3)
 					{
-						if(whitelist[a].report!=REPORTED)
+						if(losMacs[a].report!=REPORTED)
 						{
-							printf("NO Msg from %x Time Elapsed %d Report Host\n",theConf.reservedMacs[a],now-whitelist[a].seen);
-							whitelist[a].report=REPORTED;
-							whitelist[a].dState=TOSTATE;
+							printf("NO Msg from %x Time Elapsed %d Report Host\n",theConf.reservedMacs[a],now-losMacs[a].stateChangeTS[MSGSTATE]);
+							losMacs[a].report=REPORTED;
+							losMacs[a].dState=TOSTATE;
 						}
 
 					}

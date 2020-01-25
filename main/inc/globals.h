@@ -14,7 +14,7 @@ using namespace std;
 
 EXTERN esp_mqtt_client_config_t 		mqtt_cfg;
 EXTERN bool								isrf,connf,wifif,apstaf,displayf,miscanf;
-EXTERN char								http_request[100],tempb[5000],texto[101];
+EXTERN char								http_request[100],tempb[5000],texto[101],stateName[sizeof(meterState)][20];
 EXTERN cmdRecord 						cmds[MAXCMDS];
 EXTERN cmdType							theCmd;
 EXTERN config_flash						theConf;
@@ -40,7 +40,7 @@ EXTERN host_t							setupHost[MAXDEVS];
 EXTERN TaskHandle_t						webHandle,timeHandle,simHandle,blinkHandle;
 EXTERN uint8_t 							daysInMonth [12];
 EXTERN string							controlQueue,cmdQueue;
-EXTERN whitelist_t						whitelist[MAXSTA];
+//EXTERN whitelist_t						whitelist[MAXSTA];
 #ifdef KBD
 EXTERN char								lookuptable[NKEYS][10];
 #endif

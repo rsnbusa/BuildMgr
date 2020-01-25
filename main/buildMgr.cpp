@@ -33,6 +33,7 @@ const static int PUB_BIT 	= BIT2;
 const static int DONE_BIT 	= BIT3;
 const static int SNTP_BIT 	= BIT4;
 
+
 static int find_mac(uint32_t esteMac)
 {
 	for (int a=0;a<theConf.reservedCnt;a++)
@@ -578,9 +579,11 @@ static void getMessage(void *pArg)
 						}
 					}
 
-			   		whitelist[pos].dState=MSGSTATE;
-			    	whitelist[pos].seen=millis();
-			    	time(&whitelist[pos].ddate);
+					if(losMacs[pos].dState<LOGINSTATE)
+					{
+						printf("GetMsg dState %s\n",stateName[losMacs[pos].dState]);
+					}
+					time(&losMacs[pos].lastUpdate);
 
 					llevoMsg++;
 					comando.mensaje[len] = 0;
@@ -683,7 +686,10 @@ static void buildMgr(void *pvParameters)
 	#endif
 			}
 			else
+			{
 				losMacs[a].theSock=sock;
+
+			}
 
 			theP.pos_p=a;
 			theP.sock_p=sock;
@@ -730,9 +736,29 @@ static void wifi_event_handler(void* arg, esp_event_base_t event_base,
     	estem=find_mac(newmac);
     	if(estem>=0)
     	{
-    		whitelist[estem].dState=CONNSTATE;
-    		whitelist[estem].seen=millis();
-    		time(&whitelist[estem].ddate);
+    		if(losMacs[estem].dState>BOOTSTATE)
+    		{
+    			printf("MtM Rebooted %x last State %s seen %s",losMacs[estem].macAdd,
+    					stateName[losMacs[estem].dState],ctime(&losMacs[estem].lastUpdate));
+    		}
+    		//in theory a Disconnect should have happened but not in reality so kill tasks
+    		if(losMacs[estem].theHandle)
+			{
+				vTaskDelete(losMacs[estem].theHandle);
+				losMacs[estem].theHandle=NULL;
+			}
+			if(losMacs[estem].timerH)
+			{
+				xTimerStop(losMacs[estem].timerH,0);
+						xTimerDelete(losMacs[estem].timerH,0);
+						losMacs[estem].timerH=NULL;
+			}
+
+    		memset(&losMacs[estem],0,sizeof(losMacs[0]));	//initialize it
+    		losMacs[estem].macAdd=newmac;
+    		losMacs[estem].dState=CONNSTATE;
+    		losMacs[estem].stateChangeTS[CONNSTATE]=millis();
+    		time(&losMacs[estem].lastUpdate);
     	}
     //	update_mac(newmac);
     	break;
@@ -742,9 +768,22 @@ static void wifi_event_handler(void* arg, esp_event_base_t event_base,
 		estem=find_mac(newmac);
 		if(estem>=0)
 		{
-			whitelist[estem].dState=BOOTSTATE;
-			whitelist[estem].seen=millis();
-			time(&whitelist[estem].ddate);
+			losMacs[estem].dState=BOOTSTATE;
+			losMacs[estem].stateChangeTS[BOOTSTATE]=millis();
+
+    		//in theory this should happend here but it gets called to late. Still...
+
+			if(losMacs[estem].theHandle)
+			{
+				vTaskDelete(losMacs[estem].theHandle);
+				losMacs[estem].theHandle=NULL;
+			}
+			if(losMacs[estem].timerH)
+			{
+				xTimerStop(losMacs[estem].timerH,0);
+						xTimerDelete(losMacs[estem].timerH,0);
+						losMacs[estem].timerH=NULL;
+			}
 			//a controller is dying should report event to Host or keep an eye on it before sending msg
 		}
 		break;
@@ -1246,10 +1285,14 @@ static void loginCmd(parg* argument)
 	if(cual<0)
 		return;
 
-	whitelist[cual].dState=MSGSTATE;
-	whitelist[cual].seen=millis();
+	if(losMacs[cual].dState>LOGINSTATE)
+	{
+		printf("Forcing login state MAC %x state %s seen %s",macc,stateName[losMacs[cual].dState],ctime(&losMacs[cual].lastUpdate));
 
-//	losMacs[cual].loginf=true;
+	}
+	losMacs[cual].dState=LOGINSTATE;
+	losMacs[cual].stateChangeTS[LOGINSTATE]=millis();
+	time(&losMacs[cual].lastUpdate);
 
 	time(&loginData.thedate);
 	loginData.theTariff=100;
@@ -1310,6 +1353,9 @@ static void reserveSlot(parg* argument)
 			int cual=find_mac(macc);
 			if(cual>=0)
 			{
+				losMacs[cual].dState=MSGSTATE;
+				losMacs[cual].stateChangeTS[MSGSTATE]=millis();
+
 				tallies[cual][pos]++;
 				if(mid)
 					strcpy(losMacs[cual].meterSerial[pos],mid->valuestring);
@@ -1758,11 +1804,12 @@ static void init_vars()
 	memset(&setupHost,0,sizeof(setupHost));
 	memset(&theMeters,0,sizeof(theMeters));
 
-	for (int a=0;a<theConf.reservedCnt;a++)
-	{
-		whitelist[a].dState=BOOTSTATE;
-		whitelist[a].seen=0;
-	}
+//	for (int a=0;a<theConf.reservedCnt;a++)
+//	{
+//		losMacs[a].dState=BOOTSTATE;
+//		losMacs[a].stateChangeTS[BOOTSTATE]=millis();
+//		time(&losMacs[a].lastUpdate);
+//	}
 
 	vanMacs=0;
     qwait=QDELAY;
@@ -1787,6 +1834,13 @@ static void init_vars()
 	daysInMonth [9] =31;
 	daysInMonth [10] =30;
 	daysInMonth [11] =31;
+
+	strcpy(stateName[BOOTSTATE],"BOOT");
+	strcpy(stateName[CONNSTATE],"CONN");
+	strcpy(stateName[LOGINSTATE],"LOGIN");
+	strcpy(stateName[MSGSTATE],"MSG");
+	strcpy(stateName[TOSTATE],"TO");
+
 
 	for(int a=0;a<MAXDEVS;a++)
 	{

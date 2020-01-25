@@ -847,27 +847,40 @@ void showHelp()
 
 static void printControllers()
 {
-	printf("%sListing %d Active Controllers%s\n",KBDT,vanMacs,RESETC);
+	char str2[INET_ADDRSTRLEN];
+	int antes,son;
 
+	printf("%sListing %d Controllers\n",KBDT,theConf.reservedCnt);
+
+	printf("%s============%s\n",MAGENTA,RESETC);
 	printf("%sLocal Meters%s\n",MAGENTA,RESETC);
+	printf("%s============%s\n",MAGENTA,RESETC);
 	for (int a=0;a<MAXDEVS;a++)
 		printf("%sMeter[%d]=%s KwH %6d Beats %9d\n",a%2?CYAN:GREEN,a,theMeters[a].serialNumber,theMeters[a].curLife,theMeters[a].currentBeat);
 	printf("\n");
 
-	for (int a=0;a<vanMacs;a++)
-	{
-		printf("%sController[%d] Mac %06x seen %s State %d %s\n",YELLOW,a,losMacs[a].macAdd,ctime(&losMacs[a].lastUpdate),
-				whitelist[a].dState,whitelist[a].report==REPORTED?"Reported":"");
-		for (int b=0;b<MAXDEVS;b++)
-			printf("%sMeter[%d]=%s KwH %6d Beats %9d\n",b%2?CYAN:GREEN,b,losMacs[a].meterSerial[b],losMacs[a].controlLastKwH[b],losMacs[a].controlLastBeats[b]);
-	}
-
-	printf("Slots Reserved\n");
+	printf("===============\n");
+	printf("Configured MtMs\n");
+	printf("===============\n");
 
 	for(int a=0;a<theConf.reservedCnt;a++)
-		printf("%sReserved Slot[%d]%s=%06x State=%d %s %s\n",GREEN,a,CYAN,theConf.reservedMacs[a],whitelist[a].dState,whitelist[a].report==REPORTED?"Reported":"",
-				ctime(&whitelist[a].ddate));
+	{
+		inet_ntop( AF_INET,(in_addr*)&losMacs[a].theIp, str2, INET_ADDRSTRLEN );
+		printf("%sSlot[%d]%s=%06x IP=%s State=(%d)%s %s Seen@%sStateChanges:",GREEN,a,CYAN,theConf.reservedMacs[a], str2,losMacs[a].dState,stateName[losMacs[a].dState],losMacs[a].report==REPORTED?"Reported":"",
+				ctime(&losMacs[a].lastUpdate));
+		antes=0;
+		for(int b=0;b<sizeof(meterState);b++)
+		{
+			son=losMacs[a].stateChangeTS[b]-antes;
+			printf("[%s]=%dms(%d) ",stateName[b],losMacs[a].stateChangeTS[b],son);
+			antes=losMacs[a].stateChangeTS[b];
+		}
+			printf("\n");
 
+		for (int b=0;b<MAXDEVS;b++)
+			printf("%sMeter[%d]=%s KwH %6d Beats %9d\n",b%2?CYAN:GREEN,b,losMacs[a].meterSerial[b],losMacs[a].controlLastKwH[b],losMacs[a].controlLastBeats[b]);
+		printf("\n");
+	}
 	printf("%s\n",KBDT);
 }
 

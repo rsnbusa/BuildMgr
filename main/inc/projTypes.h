@@ -7,7 +7,7 @@ typedef enum displayType {NODISPLAY,DISPLAYIT} displayType;
 typedef enum overType {NOREP,REPLACE} overType;
 enum sourceFlags{HOSTT,LOCALT};
 enum debugflags{BOOTD,WIFID,MQTTD,PUBSUBD,OTAD,CMDD,WEBD,GEND,MQTTT,FRMCMD,INTD,FRAMD,MSGD,TIMED,SIMD,HOSTD};
-typedef enum macState{BOOTSTATE,CONNSTATE,MSGSTATE,TOSTATE} meterState;
+typedef enum macState{BOOTSTATE,CONNSTATE,LOGINSTATE,MSGSTATE,TOSTATE} meterState;
 typedef enum reportState{NOREPORT,REPORTED} reportState_t;
 
 typedef struct whitel{
@@ -26,7 +26,7 @@ typedef struct macC{
 	uint32_t 		trans[MAXDEVS],controlLastKwH[MAXDEVS],controlLastBeats[MAXDEVS];
 	TimerHandle_t	timerH;
 	char			meterSerial[MAXDEVS][20];
-	meterState		dState;
+	meterState		dState,pState;
 	reportState		report;
 	uint32_t		stateChangeTS[sizeof(reportState)];
 } macControl;
