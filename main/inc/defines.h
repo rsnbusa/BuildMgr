@@ -56,6 +56,10 @@
 #define u8								uint8_t
 #define WIFILED							2
 
+#define TSTATE1							10000
+#define TSTATE2							5000
+#define TSTATE3							65000
+
 //30	Black
 //31	Red
 //32	Green

@@ -23,7 +23,7 @@ EXTERN esp_mqtt_client_handle_t 		clientCloud;
 EXTERN float							ttemp;
 EXTERN FramSPI							fram;
 EXTERN gpio_config_t 					io_conf;
-EXTERN int 								socket_id,binary_file_length,numsensors,diaHoraTarifa,vanMacs,reservedCnt,usedMacs,vanadd,vanvueltas,globalSocks;
+EXTERN int 								socket_id,binary_file_length,numsensors,diaHoraTarifa,vanMacs,usedMacs,vanadd,vanvueltas,globalSocks;
 EXTERN macControl						losMacs[MAXSTA];
 EXTERN meterType						theMeters[MAXDEVS],algo;
 EXTERN nvs_handle 						nvshandle;
@@ -40,7 +40,7 @@ EXTERN host_t							setupHost[MAXDEVS];
 EXTERN TaskHandle_t						webHandle,timeHandle,simHandle,blinkHandle;
 EXTERN uint8_t 							daysInMonth [12];
 EXTERN string							controlQueue,cmdQueue;
-EXTERN mac_reserved						reservedMacs[MAXSTA];
+EXTERN whitelist_t						whitelist[MAXSTA];
 #ifdef KBD
 EXTERN char								lookuptable[NKEYS][10];
 #endif

@@ -3,7 +3,7 @@
 #define framDef_h
 
 #define HOST
-#define TXL 				SOC_SPI_MAXIMUM_BUFFER_SIZE
+#define TXL 				SOC_SPI_MAXIMUM_BUFFER_SIZE-4
 #define MAXDEVSUP           (5)
 #define MAXDEVSS            (5)
 #define MWORD				(2)

@@ -220,7 +220,7 @@ void confStatus()
 	printf("%s====================\nConfiguration Status\n",KBDT);
 
 	printf("ConnMgr %s DDay %d AltDay %d SlotTime %d SlotAssigned %d Reserved %d\n",theConf.meterConnName, theConf.connId.dDay,theConf.connId.altDay,
-							theConf.slot_Server.slot_time,theConf.connId.connSlot,reservedCnt);
+							theConf.slot_Server.slot_time,theConf.connId.connSlot,theConf.reservedCnt);
 
 	printf("%sConfiguration BootCount %d LReset %x RunStatus[%s] Trace %x\n",YELLOW,theConf.bootcount,theConf.lastResetCode,
 			theConf.active?"Run":"Setup",theConf.traceflag);
@@ -856,15 +856,17 @@ static void printControllers()
 
 	for (int a=0;a<vanMacs;a++)
 	{
-		printf("%sController[%d] Mac %06x seen %s login %s\n",YELLOW,a,losMacs[a].macAdd,ctime(&losMacs[a].lastUpdate),losMacs[a].loginf?"Y":"N");
+		printf("%sController[%d] Mac %06x seen %s State %d %s\n",YELLOW,a,losMacs[a].macAdd,ctime(&losMacs[a].lastUpdate),
+				whitelist[a].dState,whitelist[a].report==REPORTED?"Reported":"");
 		for (int b=0;b<MAXDEVS;b++)
 			printf("%sMeter[%d]=%s KwH %6d Beats %9d\n",b%2?CYAN:GREEN,b,losMacs[a].meterSerial[b],losMacs[a].controlLastKwH[b],losMacs[a].controlLastBeats[b]);
 	}
 
 	printf("Slots Reserved\n");
 
-	for(int a=0;a<reservedCnt;a++)
-		printf("%sReserved Slot[%d]%s=%06x %s",GREEN,a,CYAN,reservedMacs[a].dMac,ctime(&reservedMacs[a].when));
+	for(int a=0;a<theConf.reservedCnt;a++)
+		printf("%sReserved Slot[%d]%s=%06x State=%d %s %s\n",GREEN,a,CYAN,theConf.reservedMacs[a],whitelist[a].dState,whitelist[a].report==REPORTED?"Reported":"",
+				ctime(&whitelist[a].ddate));
 
 	printf("%s\n",KBDT);
 }

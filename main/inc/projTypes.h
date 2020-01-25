@@ -3,6 +3,20 @@
 
 typedef void (*mqttp)();
 
+typedef enum displayType {NODISPLAY,DISPLAYIT} displayType;
+typedef enum overType {NOREP,REPLACE} overType;
+enum sourceFlags{HOSTT,LOCALT};
+enum debugflags{BOOTD,WIFID,MQTTD,PUBSUBD,OTAD,CMDD,WEBD,GEND,MQTTT,FRMCMD,INTD,FRAMD,MSGD,TIMED,SIMD,HOSTD};
+typedef enum macState{BOOTSTATE,CONNSTATE,MSGSTATE,TOSTATE} meterState;
+typedef enum reportState{NOREPORT,REPORTED} reportState_t;
+
+typedef struct whitel{
+	meterState		dState;
+	uint32_t		seen;
+	reportState_t	report;
+	time_t			ddate;
+} whitelist_t;
+
 typedef struct macC{
 	int				theSock;
 	TaskHandle_t 	theHandle;
@@ -12,14 +26,10 @@ typedef struct macC{
 	uint32_t 		trans[MAXDEVS],controlLastKwH[MAXDEVS],controlLastBeats[MAXDEVS];
 	TimerHandle_t	timerH;
 	char			meterSerial[MAXDEVS][20];
-	bool			loginf;
+	meterState		dState;
+	reportState		report;
+	uint32_t		stateChangeTS[sizeof(reportState)];
 } macControl;
-
-typedef struct reserv{
-	uint32_t	dMac;
-	time_t		when;
-	uint16_t	free;
-}mac_reserved;
 
 typedef struct taskp{
 	int	sock_p;
@@ -52,14 +62,6 @@ typedef struct loginTarif{
 	uint16_t theTariff;
 } loginT;
 
-typedef enum displayModeType {DISPLAYPULSES,DISPLAYKWH,DISPLAYUSER,DISPLAYALL,DISPLAYALLK,DISPLAYAMPS,DISPLAYRSSI,DISPLAYNADA} displayModeType;
-typedef enum displayType {NODISPLAY,DISPLAYIT} displayType;
-typedef enum overType {NOREP,REPLACE} overType;
-//typedef enum resetType {ONCE,TIMER,REPEAT,TIMEREPEAT} resetType;
-typedef enum sendType {NOTSENT,SENT} sendType;
-enum sourceFlags{HOSTT,LOCALT};
-enum debugflags{BOOTD,WIFID,MQTTD,PUBSUBD,OTAD,CMDD,WEBD,GEND,MQTTT,FRMCMD,INTD,FRAMD,MSGD,TIMED,SIMD,HOSTD};
-
 
 typedef struct pcomm{
     int pComm;
@@ -67,6 +69,8 @@ typedef struct pcomm{
     void *pMessage;
     double macn;
 }parg;
+
+
 
 typedef void (*functrsn)(parg *);
 
@@ -96,7 +100,8 @@ typedef struct config {
     u32 		bornKwh[MAXDEVS],centinel,traceflag;
     u8 			configured[MAXDEVS],active;
     connStruct	connId;
-    char		free[20];//so as to not erase confi during development
+    uint32_t	reservedMacs[10];
+    uint16_t	reservedCnt;
 } config_flash;
 
 typedef struct framq{

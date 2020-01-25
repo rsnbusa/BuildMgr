@@ -100,6 +100,7 @@ public:
     uint8_t addressBytes;
     uint32_t intframWords;
     uint16_t manufID,prodId;
+    bool setw;
 
     void			setWrite(void);
 

@@ -16,6 +16,7 @@ FramSPI::FramSPI(void)
 	addressBytes=0;
 	prodId=0;
 	manufID=0;
+	setw=true;
 }
 
 bool FramSPI::begin(int MOSI, int MISO, int CLK, int CS,SemaphoreHandle_t *framSem)
@@ -74,10 +75,12 @@ bool FramSPI::begin(int MOSI, int MISO, int CLK, int CS,SemaphoreHandle_t *framS
 		case 0x2703:
 			addressBytes=3;
 			intframWords=131072;//1mb
+			setw=false;
 			break;
 		case 0x4803:
 			addressBytes=3;
 			intframWords=262144;//2mb
+			setw=false;
 			break;
 		default:
 			addressBytes=2;
@@ -104,7 +107,7 @@ bool FramSPI::begin(int MOSI, int MISO, int CLK, int CS,SemaphoreHandle_t *framS
 
 		ret=spi_bus_add_device(VSPI_HOST, &devcfg, &spi);
 
-		setWrite();// ONLY once required per datasheet
+		setWrite();// at least once
 		return true;
 	}
 	return false;
@@ -190,9 +193,12 @@ int FramSPI::writeMany (uint32_t framAddr, uint8_t *valores,uint32_t son)
 
 	memset(&t,0,sizeof(t));	//Zero out the transaction no need to set to 0 or null unused params
 	count=son;
+	if(setw)
+		setWrite();
 
 	while(count>0)
 	{
+		setWrite();
 		fueron=				count>TXL?TXL:count;
 		t.base.flags= 		( SPI_TRANS_VARIABLE_ADDR | SPI_TRANS_VARIABLE_CMD );
 		t.base.addr = 		framAddr;
@@ -245,6 +251,8 @@ int FramSPI::write8 (uint32_t framAddr, uint8_t value)
 	spi_transaction_ext_t t;
 
 	memset(&t,0,sizeof(t));	//Zero out the transaction no need to set to 0 or null unused params
+	if(setw)
+		setWrite();
 
 	t.base.tx_data[0]=	value;
 	t.base.flags= 		( SPI_TRANS_VARIABLE_ADDR | SPI_TRANS_VARIABLE_CMD| SPI_TRANS_USE_TXDATA );

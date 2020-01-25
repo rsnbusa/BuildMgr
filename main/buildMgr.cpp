@@ -12,6 +12,8 @@ void testMqtt();
 static void sendTelemetry();
 void start_webserver(void* pArg);
 static void reserveSlot(parg* argument);
+void write_to_flash();
+void watchDog(void* pArg);
 
 #define OTA_URL_SIZE 1024
 extern const uint8_t server_cert_pem_start[] asm("_binary_ca_cert_pem_start");
@@ -33,19 +35,9 @@ const static int SNTP_BIT 	= BIT4;
 
 static int find_mac(uint32_t esteMac)
 {
-	for (int a=0;a<vanMacs;a++)
+	for (int a=0;a<theConf.reservedCnt;a++)
 	{
-		if(losMacs[a].macAdd==esteMac)
-			return a;
-	}
-	return -1;
-}
-
-static int find_mac_slot(uint32_t esteMac)
-{
-	for (int a=0;a<reservedCnt;a++)
-	{
-		if(reservedMacs[a].dMac==esteMac)
+		if(theConf.reservedMacs[a]==esteMac)
 			return a;
 	}
 	return -1;
@@ -53,7 +45,7 @@ static int find_mac_slot(uint32_t esteMac)
 
 static int find_ip(uint32_t esteIp)
 {
-	for (int a=0;a<vanMacs;a++)
+	for (int a=0;a<theConf.reservedCnt;a++)
 	{
 		if(losMacs[a].theIp==esteIp)
 			return a;
@@ -540,7 +532,7 @@ static void getMessage(void *pArg)
 #ifdef DEBUGX
 	if(theConf.traceflag & (1<<CMDD))
 	{
-		printf("%sStarting GetM Fd %d Pos %d GlobaCount %d\n",CMDDT,sock,pos,globalSocks);
+		printf("%sStarting GetM Fd %d Pos %d GlobaCount %d Macf %d\n",CMDDT,sock,pos,globalSocks,theP->macf);
 		printf("%sGetm%d heap %d\n",CMDDT,sock,esp_get_free_heap_size());
 	}
 #endif
@@ -585,6 +577,11 @@ static void getMessage(void *pArg)
 							goto exit; //done
 						}
 					}
+
+			   		whitelist[pos].dState=MSGSTATE;
+			    	whitelist[pos].seen=millis();
+			    	time(&whitelist[pos].ddate);
+
 					llevoMsg++;
 					comando.mensaje[len] = 0;
 					comando.pos=pos;
@@ -674,7 +671,7 @@ static void buildMgr(void *pvParameters)
 
 			sprintf(tt,"getm%d",sock);		//launch a task with fd number as trailer
 			int  a,b;
-			memcpy((void*)&a,(void*)&losMacs[0].theIp,4);
+	//		memcpy((void*)&a,(void*)&losMacs[0].theIp,4);
 			memcpy((void*)&b,(void*)&ipAddr,4);
 
 			a=find_ip(b);
@@ -685,8 +682,9 @@ static void buildMgr(void *pvParameters)
 					printf("%sInternal error no Ip %x\n",CMDDT,b);
 	#endif
 			}
+			else
+				losMacs[a].theSock=sock;
 
-			losMacs[a].theSock=sock;
 			theP.pos_p=a;
 			theP.sock_p=sock;
 			theP.macf=a;
@@ -718,6 +716,8 @@ static void wifi_event_handler(void* arg, esp_event_base_t event_base,
                                 int32_t event_id, void* event_data)
 {
 	u32 newmac;
+	int estem;
+
 	wifi_event_ap_staconnected_t *ev=(wifi_event_ap_staconnected_t*)event_data;
     switch (event_id) {
 
@@ -727,10 +727,26 @@ static void wifi_event_handler(void* arg, esp_event_base_t event_base,
 			printf("%sWIFIMac connected %02x:%02x:%02x:%02x:%02x:%02x\n",WIFIDT,ev->mac[0],ev->mac[1],ev->mac[2],ev->mac[3],ev->mac[4],ev->mac[5]);
 #endif
     	memcpy((void*)&newmac,&ev->mac[2],4);
-    	update_mac(newmac);
+    	estem=find_mac(newmac);
+    	if(estem>=0)
+    	{
+    		whitelist[estem].dState=CONNSTATE;
+    		whitelist[estem].seen=millis();
+    		time(&whitelist[estem].ddate);
+    	}
+    //	update_mac(newmac);
     	break;
 	case WIFI_EVENT_AP_STADISCONNECTED:
-    //	printf("Mac disco %02x:%02x:%02x:%02x:%02x:%02x\n",ev->mac[0],ev->mac[1],ev->mac[2],ev->mac[3],ev->mac[4],ev->mac[5]);
+    	printf("Mac disco %02x:%02x:%02x:%02x:%02x:%02x\n",ev->mac[0],ev->mac[1],ev->mac[2],ev->mac[3],ev->mac[4],ev->mac[5]);
+		memcpy((void*)&newmac,&ev->mac[2],4);
+		estem=find_mac(newmac);
+		if(estem>=0)
+		{
+			whitelist[estem].dState=BOOTSTATE;
+			whitelist[estem].seen=millis();
+			time(&whitelist[estem].ddate);
+			//a controller is dying should report event to Host or keep an eye on it before sending msg
+		}
 		break;
     case WIFI_EVENT_AP_START:
         	break;
@@ -858,7 +874,7 @@ static void update_ip()
 		{
 #ifdef DEBUGX
 			if(theConf.traceflag & (1<<CMDD))
-				printf("%sNot registered mac %x found \n",CMDDT,bigmac);
+				printf("%sNot registered mac %x not found \n",CMDDT,bigmac);
 #endif
 
 		}
@@ -916,7 +932,7 @@ static void update_mac(u32 newmac)
 
 	// check if this mac has reserved a slot else do no put it in the Active Macs
 
-	este=find_mac_slot(newmac);
+	este=find_mac(newmac);
 	if(este<0)
 	{
 		if(theConf.traceflag & (1<<CMDD))
@@ -1229,7 +1245,12 @@ static void loginCmd(parg* argument)
 	int cual=find_mac(macc);
 	if(cual<0)
 		return;
-	losMacs[cual].loginf=true;
+
+	whitelist[cual].dState=MSGSTATE;
+	whitelist[cual].seen=millis();
+
+//	losMacs[cual].loginf=true;
+
 	time(&loginData.thedate);
 	loginData.theTariff=100;
 	send(argument->pComm, &loginData, sizeof(loginData), 0);
@@ -1243,21 +1264,21 @@ static void reserveSlot(parg* argument)
 	if(theConf.traceflag & (1<<CMDD))
 		printf("%sReserve slot for %x\n",CMDDT,macc);
 
-	for(int a=0;a<reservedCnt;a++)
+	for(int a=0;a<theConf.reservedCnt;a++)
 	{
-		if(reservedMacs[a].dMac==macc)
+		if(theConf.reservedMacs[a]==macc)
 		{
-			yes=-2;
+			yes=-2;		//duplicate HOW COME????? in normal conditions
 			send(argument->pComm, &yes, sizeof(yes), 0);//already registered
 			return;
 		}
 	}
 //add it
-	reservedMacs[reservedCnt].dMac=macc;
-	time(&reservedMacs[reservedCnt].when);
-	yes=reservedCnt++;
+	theConf.reservedMacs[theConf.reservedCnt]=macc;
+	printf("Mac reserved %x slot %d\n",theConf.reservedMacs[theConf.reservedCnt],theConf.reservedCnt);
+	yes=theConf.reservedCnt++;	//send slot assigned
 	send(argument->pComm, &yes, sizeof(yes), 0);
-	fram.write_macs((uint8_t*)&reservedMacs,reservedCnt);
+	write_to_flash();		//independent from FRAM
 }
 
 
@@ -1737,6 +1758,12 @@ static void init_vars()
 	memset(&setupHost,0,sizeof(setupHost));
 	memset(&theMeters,0,sizeof(theMeters));
 
+	for (int a=0;a<theConf.reservedCnt;a++)
+	{
+		whitelist[a].dState=BOOTSTATE;
+		whitelist[a].seen=0;
+	}
+
 	vanMacs=0;
     qwait=QDELAY;
     qdelay=qwait*1000;
@@ -1862,10 +1889,10 @@ cJSON * makeGroupMeters()
 	cJSON_AddNumberToObject(root,"macn",				theMacNum);
 
 	cJSON *ar = cJSON_CreateArray();
-	for (int a=0;a<reservedCnt;a++)
+	for (int a=0;a<theConf.reservedCnt;a++)
 	{
-		if(losMacs[0].lastUpdate>0)
-			makeMetercJSON(&losMacs[0],ar);
+//		if(losMacs[a].lastUpdate>0)
+			makeMetercJSON(&losMacs[a],ar);
 	}
 
 	//local meters
@@ -2019,16 +2046,6 @@ static void loadDefaultTariffs()
 	xQueueSend( mqttR,&cmd,0 );
 }
 
-static void load_whitelist()
-{
-	fram.read_macs((uint8_t*)&reservedMacs,(uint8_t*)&reservedCnt);
-	printf("Whitelist loaded %d\n",reservedCnt);
-	for (int a=0;a<reservedCnt;a++)
-	{
-		printf("Macs[%d]=%x %s",a,reservedMacs[a].dMac,ctime(reservedMacs[a].when));
-	}
-}
-
 void app_main()
 {
 
@@ -2060,7 +2077,6 @@ void app_main()
 
 	init_vars();			// setup initial values
 	init_fram();			// connect to fram to save readings
-	load_whitelist();		// reserved macs
     init_boot();			// print boot stuff if defined
     wifi_init();			// this a Master Controller.
     mqtt_app_start();		// Start MQTT configuration and DO NOT connect. Connection will be on demand
@@ -2079,7 +2095,7 @@ void app_main()
 #endif
 
    	// Managers Tasks
-   	xTaskCreate(&cmdManager,"cmdMgr",4096,NULL, 5, NULL); 							//cmds received from the Host Controller via MQTT or TCP/IP. jSON based
+   	xTaskCreate(&cmdManager,"cmdMgr",4096,NULL, 5, NULL); 							//cmds received from the Host Controller via MQTT or internal TCP/IP. jSON based
 	xTaskCreate(&framManager,"framMgr",4096,NULL, configMAX_PRIORITIES-5, NULL);	// Fram Manager
 	xTaskCreate(&pcntManager,"pcntMgr",4096,NULL, configMAX_PRIORITIES-8, NULL);	// We also control 5 meters. Pseudo ISR. This is d manager
 	xTaskCreate(&buildMgr,"TCP",4096,(void*)1, configMAX_PRIORITIES-10, NULL);		// Messages from the Meter Controllers via socket manager
@@ -2124,7 +2140,9 @@ void app_main()
 	}
 
 	pcnt_init();// initialize it. Several tricks apply. Read there. Depends on Tariffs so must be after we know tariffs and date are OK
-	xTaskCreate(&start_webserver,"web",4096,(void*)1, 4, &webHandle);// Messages from the Meters. Controller Section socket manager
+
+	xTaskCreate(&watchDog,"dog",4096,(void*)1, 4, NULL);				// Care taker of MeterM to report to Host
+	xTaskCreate(&start_webserver,"web",4096,(void*)1, 4, &webHandle);	// Messages from the Meters. Controller Section socket manager
 
 #ifdef DISPLAY
 	xTaskCreate(&displayManager,"dispMgr",4096,NULL, 4, NULL);
