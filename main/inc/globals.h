@@ -23,7 +23,6 @@ EXTERN char								http_request[100],tempb[5000],texto[101],stateName[sizeof(met
 EXTERN cmdRecord 						cmds[MAXCMDS];
 EXTERN cmdType							theCmd;
 EXTERN config_flash						theConf;
-EXTERN DS18B20_Info 					*ds18b20_info;
 EXTERN esp_mqtt_client_config_t 		mqtt_cfg;
 EXTERN esp_mqtt_client_handle_t 		clientCloud;
 EXTERN EventGroupHandle_t 				wifi_event_group;
@@ -46,12 +45,6 @@ EXTERN uint8_t 							daysInMonth [12],qwait,lastalign,lastFont,workingDevs;
 
 #ifdef KBD
 EXTERN char								lookuptable[NKEYS][10];
-#endif
-
-#ifdef TEMP
-EXTERN OneWireBus 						*owb;
-EXTERN owb_rmt_driver_info 				rmt_driver_info;
-EXTERn float							ttemp;
 #endif
 
 #ifdef MULTIX

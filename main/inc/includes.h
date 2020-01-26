@@ -16,7 +16,6 @@ extern "C"{
 #include "driver/pcnt.h"
 #include "driver/spi_master.h"
 #include "driver/uart.h"
-#include "ds18b20.h"
 #include "esp_event.h"
 #include "esp_http_client.h"
 #include "esp_http_server.h"
@@ -45,9 +44,8 @@ extern "C"{
 #include "mqtt_client.h"
 #include "nvs_flash.h"
 #include "nvs.h"
-#include "owb_rmt.h"
-#include "owb.h"
 #include "SSD1306.h"
+#include "sntp/sntp.h"
 void app_main();
 }
 #endif
