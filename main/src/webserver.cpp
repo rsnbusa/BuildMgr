@@ -22,7 +22,6 @@ static esp_err_t conn_tariff(httpd_req_t *req);
 extern void delay(uint32_t a);
 extern void write_to_flash();
 extern void firmUpdate(void* pArg);
-extern void loadit(void* pArg);
 
 static const httpd_uri_t setup = {
     .uri       = "/cmsetup",
@@ -473,7 +472,7 @@ void start_webserver(void *pArg)
         httpd_register_uri_handler(server, &csetup);		//connmgr setup
         httpd_register_uri_handler(server, &rsetup);		//send connmgr setup
         httpd_register_uri_handler(server, &challenge);		//confirm challenge and store in flash
-        httpd_register_uri_handler(server, &cmdFW);		//confirm challenge and store in flash
+        httpd_register_uri_handler(server, &cmdFW);			//confirm challenge and store in flash
         httpd_register_uri_handler(server, &cmdTariff);		//confirm challenge and store in flash
     }
 #ifdef DEBUGX

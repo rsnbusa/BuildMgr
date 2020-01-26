@@ -50,7 +50,6 @@ public:
     void        getDeviceID(uint16_t *manufacturerID, uint16_t *productID);
     int         writeBulk (uint32_t framAddr, uint8_t *valores,uint32_t son);
     int 		format(uint8_t valor, uint8_t *buffer,uint32_t len,bool all);
-    int 		formatSlow(uint8_t valor);
 
     int			formatMeter(uint8_t cual);
     int 		writeMany (uint32_t framAddr, uint8_t *valores,uint32_t son);
@@ -102,7 +101,7 @@ public:
     uint16_t manufID,prodId;
     bool setw;
 
-    void			setWrite(void);
+    bool		setWrite(void);
 
 };
 

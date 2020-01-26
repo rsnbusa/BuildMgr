@@ -1,11 +1,11 @@
+#define GLOBAL
+
 #include "includes.h"
 #include "defines.h"
-#define GLOBAL
 #include "globals.h"
 // file spi_caps.h in soc/esp32/include/soc has parameter SOC_SPI_MAXIMUM_BUFFER_SIZE set to 64. Max bytes in Halfduplex.
 #include "soc/spi_caps.h"
 
-#define DEBUGMQQT
 #define METERSIZE	(DATAEND-BEATSTART)
 
 FramSPI::FramSPI(void)
@@ -39,15 +39,12 @@ bool FramSPI::begin(int MOSI, int MISO, int CLK, int CS,SemaphoreHandle_t *framS
 	ret=spi_bus_initialize(VSPI_HOST, &buscfg, 0);
 	assert(ret == ESP_OK);
 
-
-//	devcfg .clock_speed_hz=SPI_MASTER_FREQ_40M;              	//Clock out at 26 MHz
+//	devcfg .clock_speed_hz=SPI_MASTER_FREQ_40M;              	//Clock out at 40 MHz the ESP32 cannot handle it. Logic Analyzer sees the FRAM sending correct info but destroyed by ESP32
 	devcfg .clock_speed_hz=SPI_MASTER_FREQ_26M;              	//Clock out at 26 MHz
-//	devcfg .clock_speed_hz=SPI_MASTER_FREQ_8M;              	//Clock out for test in Saleae clone limited speed
 	devcfg.mode=0;                                				//SPI mode 0
 	devcfg.spics_io_num=CS;               						//CS pin
-	devcfg.queue_size=7;                         				//We want to be able to queue 7 transactions at a time
+	devcfg.queue_size=7;                         				//We want to be able to queue 7 transactions at a time...not really
 	devcfg.flags=SPI_DEVICE_HALFDUPLEX;
-
 
 	ret=spi_bus_add_device(VSPI_HOST, &devcfg, &spi);
 	if (ret==ESP_OK)
@@ -60,32 +57,32 @@ bool FramSPI::begin(int MOSI, int MISO, int CLK, int CS,SemaphoreHandle_t *framS
 		//Set write enable after chip is identified
 		switch(prodId)
 		{
-		case 0x409:
-			addressBytes=2;
-			intframWords=16384;//128k
-			break;
-		case 0x509:
-			addressBytes=2;
-			intframWords=32768;//256k
-			break;
-		case 0x2603:
-			addressBytes=2;
-			intframWords=65536;//542k
-			break;
-		case 0x2703:
-			addressBytes=3;
-			intframWords=131072;//1mb
-			setw=false;
-			break;
-		case 0x4803:
-			addressBytes=3;
-			intframWords=262144;//2mb
-			setw=false;
-			break;
-		default:
-			addressBytes=2;
-			intframWords=0;
-			return false;
+			case 0x409:					//MB85RS128
+				addressBytes=2;
+				intframWords=16384;		//128k
+				break;
+			case 0x509:					//MB85RS256
+				addressBytes=2;
+				intframWords=32768;		//256k
+				break;
+			case 0x2603:				//MB85RS512
+				addressBytes=2;
+				intframWords=65536;		//512k
+				break;
+			case 0x2703:				//MB85RS1MT
+				addressBytes=3;
+				intframWords=131072;	//1mb
+				setw=false;
+				break;
+			case 0x4803:				//MB85RS2MTA
+				addressBytes=3;
+				intframWords=262144;	//2mb
+				setw=false;
+				break;
+			default:
+				addressBytes=2;
+				intframWords=0;
+				return false;
 		}
 
 		_framInitialised = true;
@@ -94,7 +91,10 @@ bool FramSPI::begin(int MOSI, int MISO, int CLK, int CS,SemaphoreHandle_t *framS
 		if(*framSem)
 			xSemaphoreGive(*framSem);  //SUPER important else its born locked
 		else
+		{
 			printf("Cant allocate Fram Sem\n");
+			return false;
+		}
 
 		if(TOTALFRAM>intframWords)
 		{
@@ -102,12 +102,14 @@ bool FramSPI::begin(int MOSI, int MISO, int CLK, int CS,SemaphoreHandle_t *framS
 			return false;
 		}
 
-		devcfg.address_bits=addressBytes*8;
-		devcfg.command_bits=8;
+		//configure CMD and ADDRESS bits
+		devcfg.address_bits=addressBytes*8;	//depends on the fram:2 or 3 bytes per address
+		devcfg.command_bits=8;				//always
 
 		ret=spi_bus_add_device(VSPI_HOST, &devcfg, &spi);
 
-		setWrite();// at least once
+		if(!setWrite())							// at least once for the 2MB and allways for the others
+			return false;
 		return true;
 	}
 	return false;
@@ -125,12 +127,12 @@ int  FramSPI::sendCmd (uint8_t cmd)
 	t.base.cmd=			cmd;
 	t.command_bits = 	8;
 
-	ret=spi_device_polling_transmit(spi, (spi_transaction_t*)&t);  //Transmit!
+	ret=spi_device_polling_transmit(spi, (spi_transaction_t*)&t);  //Transmit and wait
 	return ret;
 
 }
 
-int FramSPI::read_guard(uint8_t*  value)
+int FramSPI::read_guard(uint8_t*  value)			//guard is used to check if the HW is working. 0 if not working
 {
 	int ret;
 	uint32_t badd=GUARDM;
@@ -147,9 +149,9 @@ int  FramSPI::readStatus ( uint8_t* donde)
 
 	t.base.flags= 		( SPI_TRANS_VARIABLE_CMD | SPI_TRANS_USE_RXDATA );
 	t.base.cmd=			MBRSPI_RDSR;
-	t.base.rxlength=	8;
-	t.command_bits = 	8;                                                    //zero command bits
-	ret=spi_device_polling_transmit(spi, (spi_transaction_t*)&t);  //Transmit!
+	t.base.rxlength=	8;				//bits
+	t.command_bits = 	8;              //bits
+	ret=spi_device_polling_transmit(spi, (spi_transaction_t*)&t);  //Transmit and wait
     *donde=t.base.rx_data[0];
 	return ret;
 }
@@ -158,30 +160,33 @@ int  FramSPI::writeStatus ( uint8_t streg)
 {
 	esp_err_t ret;
 	spi_transaction_t t;
-	memset(&t, 0, sizeof(t));       //Zero out the transaction
+	memset(&t, 0, sizeof(t));       		//Zero out the transaction
 	t.tx_data[0]=MBRSPI_WRSR;
 	t.tx_data[1]=streg;
-	t.length=16;                     //Command is 8 bits
+	t.length=16;
 	t.flags=SPI_TRANS_USE_TXDATA;
-    ret=spi_device_polling_transmit(spi, &t);  //Transmit!
+    ret=spi_device_polling_transmit(spi, &t);  //Transmit and wait
 	return ret;
 }
 
-void FramSPI::setWrite()
+bool FramSPI::setWrite()				//required by all Fujitssu FRAMs at least once
 {
 	int countst=10;
 	uint8_t st=0;
 
 	while(countst>0 && st!=2)
 	{
-		readStatus(&st);
+		readStatus(&st);				//status BIT 2 must be ON to WREN
 		st=st&2;
 		if(st!=2)
 		{
 			sendCmd(MBRSPI_WREN);
-			countst--;
+			countst--;					//retry
 		}
+		else
+			return true;
 	}
+	return false;
 }
 
 
@@ -193,12 +198,13 @@ int FramSPI::writeMany (uint32_t framAddr, uint8_t *valores,uint32_t son)
 
 	memset(&t,0,sizeof(t));	//Zero out the transaction no need to set to 0 or null unused params
 	count=son;
-	if(setw)
-		setWrite();
+
 
 	while(count>0)
 	{
-		setWrite();
+		if(setw)
+			if(!setWrite())
+				return -1;		//failed. Stop
 		fueron=				count>TXL?TXL:count;
 		t.base.flags= 		( SPI_TRANS_VARIABLE_ADDR | SPI_TRANS_VARIABLE_CMD );
 		t.base.addr = 		framAddr;
@@ -252,7 +258,8 @@ int FramSPI::write8 (uint32_t framAddr, uint8_t value)
 
 	memset(&t,0,sizeof(t));	//Zero out the transaction no need to set to 0 or null unused params
 	if(setw)
-		setWrite();
+		if(!setWrite())
+			return -1;
 
 	t.base.tx_data[0]=	value;
 	t.base.flags= 		( SPI_TRANS_VARIABLE_ADDR | SPI_TRANS_VARIABLE_CMD| SPI_TRANS_USE_TXDATA );
@@ -301,8 +308,6 @@ void FramSPI::getDeviceID(uint16_t *manufacturerID, uint16_t *productID)
 	*productID=(t.base.rx_data[2]<<8)+t.base.rx_data[3];
 }
 
-
-
 int FramSPI::format(uint8_t valor, uint8_t *lbuffer,uint32_t len,bool all)
 {
 	uint32_t add=0;
@@ -343,20 +348,6 @@ int FramSPI::format(uint8_t valor, uint8_t *lbuffer,uint32_t len,bool all)
 	free(buffer);
 	return ESP_OK;
 }
-
-int FramSPI::formatSlow(uint8_t valor)
-{
-	uint32_t add=0;
-	int count=intframWords;
-	while (count>0)
-	{
-		write8(add,valor);
-		count--;
-		add++;
-	}
-	return ESP_OK;
-}
-
 
 int FramSPI::formatMeter(uint8_t cual)
 {

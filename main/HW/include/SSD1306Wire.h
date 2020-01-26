@@ -48,18 +48,9 @@ class SSD1306Wire : public OLEDDisplay {
       this->puerto = i2cp;
     }
 
-    bool connect() {
+    virtual ~SSD1306Wire(){};
 
-        //Presumed that channel was already setup
-    //  Wire.begin(this->_sda, this->_scl);
-      // Let's use ~700khz if ESP8266 is in 160Mhz mode
-      // this will be limited to ~400khz if the ESP8266 in 80Mhz mode.
-    //  Wire.setClock(700000);
-   // 	i2c_config_t conf;
-    //	conf.master.clk_speed = 700000;
-//   	ESP_ERROR_CHECK(i2c_param_config(I2C_NUM_0, &conf));
-      return true;
-    }
+    bool connect() {return true;}
 
     void display(void) {
       #ifdef OLEDDISPLAY_DOUBLE_BUFFER

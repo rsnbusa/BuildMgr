@@ -12,37 +12,46 @@
 #include "includes.h"
 using namespace std;
 
-EXTERN esp_mqtt_client_config_t 		mqtt_cfg;
+const static int MQTT_BIT 				= BIT0;
+const static int WIFI_BIT 				= BIT1;
+const static int PUB_BIT 				= BIT2;
+const static int DONE_BIT 				= BIT3;
+const static int SNTP_BIT 				= BIT4;
+
 EXTERN bool								isrf,connf,wifif,apstaf,displayf,miscanf;
 EXTERN char								http_request[100],tempb[5000],texto[101],stateName[sizeof(meterState)][20];
 EXTERN cmdRecord 						cmds[MAXCMDS];
 EXTERN cmdType							theCmd;
 EXTERN config_flash						theConf;
 EXTERN DS18B20_Info 					*ds18b20_info;
+EXTERN esp_mqtt_client_config_t 		mqtt_cfg;
 EXTERN esp_mqtt_client_handle_t 		clientCloud;
-EXTERN float							ttemp;
+EXTERN EventGroupHandle_t 				wifi_event_group;
 EXTERN FramSPI							fram;
 EXTERN gpio_config_t 					io_conf;
+EXTERN host_t							setupHost[MAXDEVS];
 EXTERN int 								socket_id,binary_file_length,numsensors,diaHoraTarifa,vanMacs,usedMacs,vanadd,vanvueltas,globalSocks;
 EXTERN macControl						losMacs[MAXSTA];
-EXTERN meterType						theMeters[MAXDEVS],algo;
+EXTERN mbedtls_md_context_t 			mbedtls_ctx;
+EXTERN meterType						theMeters[MAXDEVS];
 EXTERN nvs_handle 						nvshandle;
-EXTERN OneWireBus 						*owb;
-EXTERN owb_rmt_driver_info 				rmt_driver_info;
 EXTERN QueueHandle_t 					mqttQ,mqttR,framQ,pcnt_evt_queue;
 EXTERN SemaphoreHandle_t 				wifiSem,framSem;
+EXTERN string							controlQueue,cmdQueue;
+EXTERN TaskHandle_t						webHandle,timeHandle,simHandle,blinkHandle;
 EXTERN TimerHandle_t					hourChangeT,connHandle;
 EXTERN u16 								theGuard,qdelay,llevoMsg,mesg,diag,horag,yearg,wDelay,tarifasDia[24],oldMesg,oldDiag,oldHorag,yearDay,oldYearDay;
-EXTERN u32								sentTotal,llevo,tallies[MAXSTA][MAXDEVS],theMacNum;
-EXTERN u8								qwait,lastalign,lastFont,workingDevs;
-EXTERN uint32_t							totalPulses,oldCurBeat[MAXDEVS],oldCurLife[MAXDEVS];
-EXTERN host_t							setupHost[MAXDEVS];
-EXTERN TaskHandle_t						webHandle,timeHandle,simHandle,blinkHandle;
-EXTERN uint8_t 							daysInMonth [12];
-EXTERN string							controlQueue,cmdQueue;
-//EXTERN whitelist_t						whitelist[MAXSTA];
+EXTERN uint32_t							totalPulses,oldCurBeat[MAXDEVS],oldCurLife[MAXDEVS],sentTotal,llevo,tallies[MAXSTA][MAXDEVS],theMacNum;
+EXTERN uint8_t 							daysInMonth [12],qwait,lastalign,lastFont,workingDevs;
+
 #ifdef KBD
 EXTERN char								lookuptable[NKEYS][10];
+#endif
+
+#ifdef TEMP
+EXTERN OneWireBus 						*owb;
+EXTERN owb_rmt_driver_info 				rmt_driver_info;
+EXTERn float							ttemp;
 #endif
 
 #ifdef MULTIX

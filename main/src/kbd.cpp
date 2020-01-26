@@ -6,15 +6,15 @@
 #include <bits/stdc++.h>
 
 #define KBDT		"\e[36m[KBD]\e[0m"
-#define MAXCMDSK	26
+#define MAXCMDSK	24
 
 extern void delay(uint32_t a);
 extern void write_to_flash();
 extern void write_to_fram(u8 meter,bool addit);
 extern void connMgr(void *pArg);
 extern void firmUpdate(void *pArg);
-extern bool miscanf;
-extern esp_mqtt_client_handle_t 		clientCloud;
+extern void shaMake(char * key,uint8_t klen,uint8_t* shaResult);
+
 using namespace std;
 
 typedef void (*functkbd)();
@@ -916,119 +916,132 @@ static void firmware()
 
 }
 
-static void print_auth_mode(int authmode)
-{
-    switch (authmode) {
-    case WIFI_AUTH_OPEN:
-        printf( "%sAuthmode \tWIFI_AUTH_OPEN%s\n",YELLOW,RESETC);
-        break;
-    case WIFI_AUTH_WEP:
-        printf( "%sAuthmode \tWIFI_AUTH_WEP%s\n",YELLOW,RESETC);
-        break;
-    case WIFI_AUTH_WPA_PSK:
-        printf( "%sAuthmode \tWIFI_AUTH_WPA_PSK%s\n",YELLOW,RESETC);
-        break;
-    case WIFI_AUTH_WPA2_PSK:
-        printf( "%sAuthmode \tWIFI_AUTH_WPA2_PSK%s\n",YELLOW,RESETC);
-        break;
-    case WIFI_AUTH_WPA_WPA2_PSK:
-        printf( "%sAuthmode \tWIFI_AUTH_WPA_WPA2_PSK%s\n",YELLOW,RESETC);
-        break;
-    case WIFI_AUTH_WPA2_ENTERPRISE:
-        printf( "%sAuthmode \tWIFI_AUTH_WPA2_ENTERPRISE%s\n",YELLOW,RESETC);
-        break;
-    default:
-        printf( "%sAuthmode \tWIFI_AUTH_UNKNOWN%s\n",YELLOW,RESETC);
-        break;
-    }
-}
+//static void print_auth_mode(int authmode)
+//{
+//    switch (authmode) {
+//    case WIFI_AUTH_OPEN:
+//        printf( "%sAuthmode \tWIFI_AUTH_OPEN%s\n",YELLOW,RESETC);
+//        break;
+//    case WIFI_AUTH_WEP:
+//        printf( "%sAuthmode \tWIFI_AUTH_WEP%s\n",YELLOW,RESETC);
+//        break;
+//    case WIFI_AUTH_WPA_PSK:
+//        printf( "%sAuthmode \tWIFI_AUTH_WPA_PSK%s\n",YELLOW,RESETC);
+//        break;
+//    case WIFI_AUTH_WPA2_PSK:
+//        printf( "%sAuthmode \tWIFI_AUTH_WPA2_PSK%s\n",YELLOW,RESETC);
+//        break;
+//    case WIFI_AUTH_WPA_WPA2_PSK:
+//        printf( "%sAuthmode \tWIFI_AUTH_WPA_WPA2_PSK%s\n",YELLOW,RESETC);
+//        break;
+//    case WIFI_AUTH_WPA2_ENTERPRISE:
+//        printf( "%sAuthmode \tWIFI_AUTH_WPA2_ENTERPRISE%s\n",YELLOW,RESETC);
+//        break;
+//    default:
+//        printf( "%sAuthmode \tWIFI_AUTH_UNKNOWN%s\n",YELLOW,RESETC);
+//        break;
+//    }
+//}
+//
+//static void print_cipher_type(int pairwise_cipher, int group_cipher)
+//{
+//    switch (pairwise_cipher) {
+//    case WIFI_CIPHER_TYPE_NONE:
+//    	printf("%sPairw Cipher \tWIFI_CIPHER_TYPE_NONE%s\n",YELLOW,RESETC);
+//        break;
+//    case WIFI_CIPHER_TYPE_WEP40:
+//    	printf("%sPairw Cipher \tWIFI_CIPHER_TYPE_WEP40%s\n",YELLOW,RESETC);
+//        break;
+//    case WIFI_CIPHER_TYPE_WEP104:
+//    	printf("%sPairw Cipher \tWIFI_CIPHER_TYPE_WEP104%s\n",YELLOW,RESETC);
+//        break;
+//    case WIFI_CIPHER_TYPE_TKIP:
+//    	printf("%sPairw Cipher \tWIFI_CIPHER_TYPE_TKIP%s\n",YELLOW,RESETC);
+//        break;
+//    case WIFI_CIPHER_TYPE_CCMP:
+//    	printf("%sPairw Cipher \tWIFI_CIPHER_TYPE_CCMP%s\n",YELLOW,RESETC);
+//        break;
+//    case WIFI_CIPHER_TYPE_TKIP_CCMP:
+//    	printf("%sPairw Cipher \tWIFI_CIPHER_TYPE_TKIP_CCMP%s\n",YELLOW,RESETC);
+//        break;
+//    default:
+//    	printf("%sPairw Cipher \tWIFI_CIPHER_TYPE_UNKNOWN%s\n",YELLOW,RESETC);
+//        break;
+//    }
+//
+//    switch (group_cipher) {
+//    case WIFI_CIPHER_TYPE_NONE:
+//    	printf("%sGroup Cipher \tWIFI_CIPHER_TYPE_NONE%s\n",YELLOW,RESETC);
+//        break;
+//    case WIFI_CIPHER_TYPE_WEP40:
+//    	printf("%sGroup Cipher \tWIFI_CIPHER_TYPE_WEP40%s\n",YELLOW,RESETC);
+//        break;
+//    case WIFI_CIPHER_TYPE_WEP104:
+//    	printf("%sGroup Cipher \tWIFI_CIPHER_TYPE_WEP104%s\n",YELLOW,RESETC);
+//        break;
+//    case WIFI_CIPHER_TYPE_TKIP:
+//    	printf("%sGroup Cipher \tWIFI_CIPHER_TYPE_TKIP%s\n",YELLOW,RESETC);
+//        break;
+//    case WIFI_CIPHER_TYPE_CCMP:
+//    	printf( "%sGroup Cipher \tWIFI_CIPHER_TYPE_CCMP%s\n",YELLOW,RESETC);
+//        break;
+//    case WIFI_CIPHER_TYPE_TKIP_CCMP:
+//    	printf( "%sGroup Cipher \tWIFI_CIPHER_TYPE_TKIP_CCMP%s\n",YELLOW,RESETC);
+//        break;
+//    default:
+//    	printf("%sGroup Cipher \tWIFI_CIPHER_TYPE_UNKNOWN%s\n",YELLOW,RESETC);
+//        break;
+//    }
+//}
 
-static void print_cipher_type(int pairwise_cipher, int group_cipher)
-{
-    switch (pairwise_cipher) {
-    case WIFI_CIPHER_TYPE_NONE:
-    	printf("%sPairw Cipher \tWIFI_CIPHER_TYPE_NONE%s\n",YELLOW,RESETC);
-        break;
-    case WIFI_CIPHER_TYPE_WEP40:
-    	printf("%sPairw Cipher \tWIFI_CIPHER_TYPE_WEP40%s\n",YELLOW,RESETC);
-        break;
-    case WIFI_CIPHER_TYPE_WEP104:
-    	printf("%sPairw Cipher \tWIFI_CIPHER_TYPE_WEP104%s\n",YELLOW,RESETC);
-        break;
-    case WIFI_CIPHER_TYPE_TKIP:
-    	printf("%sPairw Cipher \tWIFI_CIPHER_TYPE_TKIP%s\n",YELLOW,RESETC);
-        break;
-    case WIFI_CIPHER_TYPE_CCMP:
-    	printf("%sPairw Cipher \tWIFI_CIPHER_TYPE_CCMP%s\n",YELLOW,RESETC);
-        break;
-    case WIFI_CIPHER_TYPE_TKIP_CCMP:
-    	printf("%sPairw Cipher \tWIFI_CIPHER_TYPE_TKIP_CCMP%s\n",YELLOW,RESETC);
-        break;
-    default:
-    	printf("%sPairw Cipher \tWIFI_CIPHER_TYPE_UNKNOWN%s\n",YELLOW,RESETC);
-        break;
-    }
-
-    switch (group_cipher) {
-    case WIFI_CIPHER_TYPE_NONE:
-    	printf("%sGroup Cipher \tWIFI_CIPHER_TYPE_NONE%s\n",YELLOW,RESETC);
-        break;
-    case WIFI_CIPHER_TYPE_WEP40:
-    	printf("%sGroup Cipher \tWIFI_CIPHER_TYPE_WEP40%s\n",YELLOW,RESETC);
-        break;
-    case WIFI_CIPHER_TYPE_WEP104:
-    	printf("%sGroup Cipher \tWIFI_CIPHER_TYPE_WEP104%s\n",YELLOW,RESETC);
-        break;
-    case WIFI_CIPHER_TYPE_TKIP:
-    	printf("%sGroup Cipher \tWIFI_CIPHER_TYPE_TKIP%s\n",YELLOW,RESETC);
-        break;
-    case WIFI_CIPHER_TYPE_CCMP:
-    	printf( "%sGroup Cipher \tWIFI_CIPHER_TYPE_CCMP%s\n",YELLOW,RESETC);
-        break;
-    case WIFI_CIPHER_TYPE_TKIP_CCMP:
-    	printf( "%sGroup Cipher \tWIFI_CIPHER_TYPE_TKIP_CCMP%s\n",YELLOW,RESETC);
-        break;
-    default:
-    	printf("%sGroup Cipher \tWIFI_CIPHER_TYPE_UNKNOWN%s\n",YELLOW,RESETC);
-        break;
-    }
-}
-
-static void scan()
-{
-	 	uint16_t number = 10;
-	    wifi_ap_record_t ap_info[10];
-	    uint16_t ap_count = 0;
-	    memset(ap_info, 0, sizeof(ap_info));
-	    miscanf=true;
-	    ESP_ERROR_CHECK(esp_wifi_stop());
-	    ESP_ERROR_CHECK(esp_wifi_set_mode(WIFI_MODE_STA));
-	    esp_wifi_start();
-	   	ESP_ERROR_CHECK(esp_wifi_scan_start(NULL, true));
-	    ESP_ERROR_CHECK(esp_wifi_scan_get_ap_records(&number, ap_info));
-	    ESP_ERROR_CHECK(esp_wifi_scan_get_ap_num(&ap_count));
-	    printf("%sTotal APs scanned = %u%s\n",RED, ap_count,RESETC);
-	    for (int i = 0; (i < 10) && (i < ap_count); i++) {
-	        printf("%sSSID%s \t\t%s\n",GREEN,RESETC, ap_info[i].ssid);
-	        printf("%sRSSI%s\t\t%d\n", CYAN,RESETC,ap_info[i].rssi);
-	        print_auth_mode(ap_info[i].authmode);
-	        if (ap_info[i].authmode != WIFI_AUTH_WEP) {
-	            print_cipher_type(ap_info[i].pairwise_cipher, ap_info[i].group_cipher);
-	        }
-	        printf( "Channel \t%d\n", ap_info[i].primary);
-	    }
-
-	    miscanf=false;
-	    ESP_ERROR_CHECK(esp_wifi_stop());
-	    ESP_ERROR_CHECK(esp_wifi_set_mode(WIFI_MODE_APSTA));
-	    esp_wifi_start();
-	    clientCloud = esp_mqtt_client_init(&mqtt_cfg);
-}
+//static void scan()
+//{
+//	 	uint16_t number = 10;
+//	    wifi_ap_record_t ap_info[10];
+//	    uint16_t ap_count = 0;
+//	    memset(ap_info, 0, sizeof(ap_info));
+//	    miscanf=true;
+//	    ESP_ERROR_CHECK(esp_wifi_stop());
+//	    ESP_ERROR_CHECK(esp_wifi_set_mode(WIFI_MODE_STA));
+//	    esp_wifi_start();
+//	   	ESP_ERROR_CHECK(esp_wifi_scan_start(NULL, true));
+//	    ESP_ERROR_CHECK(esp_wifi_scan_get_ap_records(&number, ap_info));
+//	    ESP_ERROR_CHECK(esp_wifi_scan_get_ap_num(&ap_count));
+//	    printf("%sTotal APs scanned = %u%s\n",RED, ap_count,RESETC);
+//	    for (int i = 0; (i < 10) && (i < ap_count); i++) {
+//	        printf("%sSSID%s \t\t%s\n",GREEN,RESETC, ap_info[i].ssid);
+//	        printf("%sRSSI%s\t\t%d\n", CYAN,RESETC,ap_info[i].rssi);
+//	        print_auth_mode(ap_info[i].authmode);
+//	        if (ap_info[i].authmode != WIFI_AUTH_WEP) {
+//	            print_cipher_type(ap_info[i].pairwise_cipher, ap_info[i].group_cipher);
+//	        }
+//	        printf( "Channel \t%d\n", ap_info[i].primary);
+//	    }
+//
+//	    miscanf=false;
+//	    ESP_ERROR_CHECK(esp_wifi_stop());
+//	    ESP_ERROR_CHECK(esp_wifi_set_mode(WIFI_MODE_APSTA));
+//	    esp_wifi_start();
+//	    clientCloud = esp_mqtt_client_init(&mqtt_cfg);
+//}
 
 void eraseTariff()
 {
 	fram.erase_tarif();
 	printf("%sTariffs erased\n",KBDT);
+}
+
+static void sha256()
+{
+	char s1[20];
+	printf("Enter SHA256 key:");
+	fflush(stdout);
+	int fueron=get_string(UART_NUM_0,10,s1);
+	uint8_t  shares[32];
+	shaMake(s1,fueron,(uint8_t*)&shares);
+	for(int a=0;a<32;a++)
+		printf("%02x",shares[a]);
+	printf("\n");
 }
 
 void init_kbd_commands()
@@ -1045,20 +1058,18 @@ void init_kbd_commands()
 	strcpy((char*)&cmdds[9].comando,"WriteFram");		cmdds[ 9].code=writeFram;
 	strcpy((char*)&cmdds[10].comando,"LogLevel");		cmdds[10].code=logLevel;
 	strcpy((char*)&cmdds[11].comando,"FramDaysAll");	cmdds[11].code=framDays;
-	strcpy((char*)&cmdds[12].comando,"FramHoursAll");	cmdds[12].code=framHours;
-	strcpy((char*)&cmdds[13].comando,"FramHour");		cmdds[13].code=framHourSearch;
-	strcpy((char*)&cmdds[14].comando,"FramDay");		cmdds[14].code=framDaySearch;
-	strcpy((char*)&cmdds[15].comando,"FramMonth");		cmdds[15].code=framMonthSearch;
-	strcpy((char*)&cmdds[16].comando,"Flush");			cmdds[16].code=flushFram;
-	strcpy((char*)&cmdds[17].comando,"MessageCount");	cmdds[17].code=msgCount;
-	strcpy((char*)&cmdds[18].comando,"Help");			cmdds[18].code=showHelp;
-	strcpy((char*)&cmdds[19].comando,"Trace");			cmdds[19].code=traceFlags;
-	strcpy((char*)&cmdds[20].comando,"FramMonthsAll");	cmdds[20].code=framMonths;
-	strcpy((char*)&cmdds[21].comando,"FramMonthHours");	cmdds[21].code=framMonthsHours;
-	strcpy((char*)&cmdds[22].comando,"Telemetry");		cmdds[22].code=sendTelemetry;
-	strcpy((char*)&cmdds[23].comando,"Tariff");			cmdds[23].code=tariffs;
-	strcpy((char*)&cmdds[24].comando,"Firmware");		cmdds[24].code=firmware;
-	strcpy((char*)&cmdds[25].comando,"Scan");			cmdds[25].code=scan;
+	strcpy((char*)&cmdds[12].comando,"FramHour");		cmdds[12].code=framHourSearch;
+	strcpy((char*)&cmdds[13].comando,"FramDay");		cmdds[13].code=framDaySearch;
+	strcpy((char*)&cmdds[14].comando,"FramMonth");		cmdds[14].code=framMonthSearch;
+	strcpy((char*)&cmdds[15].comando,"Flush");			cmdds[15].code=flushFram;
+	strcpy((char*)&cmdds[16].comando,"MessageCount");	cmdds[16].code=msgCount;
+	strcpy((char*)&cmdds[17].comando,"Help");			cmdds[17].code=showHelp;
+	strcpy((char*)&cmdds[18].comando,"Trace");			cmdds[18].code=traceFlags;
+	strcpy((char*)&cmdds[19].comando,"FramMonthsAll");	cmdds[19].code=framMonths;
+	strcpy((char*)&cmdds[20].comando,"Telemetry");		cmdds[20].code=sendTelemetry;
+	strcpy((char*)&cmdds[21].comando,"Tariff");			cmdds[21].code=tariffs;
+	strcpy((char*)&cmdds[22].comando,"Firmware");		cmdds[22].code=firmware;
+	strcpy((char*)&cmdds[23].comando,"Sha256");			cmdds[23].code=sha256;
 }
 
 void kbd(void *arg)

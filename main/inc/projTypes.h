@@ -65,7 +65,7 @@ typedef struct loginTarif{
 
 typedef struct pcomm{
     int pComm;
-    uint8_t typeMsg;
+    uint8_t pos;
     void *pMessage;
     double macn;
 }parg;

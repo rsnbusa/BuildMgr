@@ -26,7 +26,7 @@ I2C::I2C() {
 	directionKnown = false;
 	address = 0;
 	cmd = 0;
-	portNum=0;
+	portNum=(i2c_port_t)0;
 }
 
 void I2C::beginTransaction() {
@@ -86,8 +86,8 @@ void I2C::readBytes(uint8_t* bytes, size_t length) {
 		i2c_master_write_byte(cmd, (address << 1) | I2C_MASTER_READ, 1);
 	}
 	if(length>1)
-		i2c_master_read(cmd, bytes, length-1, 0);//0 = ACK
-	i2c_master_read_byte(cmd, bytes+length-1, 1);
+		i2c_master_read(cmd, bytes, length-1, (i2c_ack_type_t)0);//0 = ACK
+	i2c_master_read_byte(cmd, bytes+length-1, (i2c_ack_type_t)1);
 }
 
 void I2C::stop() {

@@ -254,6 +254,7 @@ class OLEDDisplay  {
     // Connect to the display
    virtual bool connect() {return true;};
 
+   virtual ~OLEDDisplay(){};
     // Send all the init commands
     void sendInitCommands();
 
