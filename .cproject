@@ -26,6 +26,7 @@
 							</tool>
 							<tool id="cdt.managedbuild.tool.gnu.cross.cpp.compiler.531031896" name="Cross G++ Compiler" superClass="cdt.managedbuild.tool.gnu.cross.cpp.compiler">
 								<option IS_BUILTIN_EMPTY="false" IS_VALUE_EMPTY="false" id="gnu.cpp.compiler.option.include.paths.963737118" name="Include paths (-I)" superClass="gnu.cpp.compiler.option.include.paths" useByScannerDiscovery="false" valueType="includePath">
+									<listOptionValue builtIn="false" value="&quot;${IDF_PATH}/components/esp_rom/include/esp32&quot;"/>
 									<listOptionValue builtIn="false" value="&quot;${IDF_PATH}/components/app_update/include&quot;"/>
 									<listOptionValue builtIn="false" value="&quot;${IDF_PATH}/components/bootloader_support/include&quot;"/>
 									<listOptionValue builtIn="false" value="&quot;${IDF_PATH}/components/driver/include&quot;"/>

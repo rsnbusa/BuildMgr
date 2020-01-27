@@ -27,7 +27,10 @@ void watchDog(void * pArg)
 					{
 						if(losMacs[a].report!=REPORTED)
 						{
-							printf("NO Connection from %x Time Elapsed %d Report Host\n",theConf.reservedMacs[a],now-losMacs[a].stateChangeTS[BOOTSTATE]);
+#ifdef DEBUGX
+							if(theConf.traceflag & (1<<CMDD))
+								printf("%sNO Connection from %x Time Elapsed %d Report Host\n",CMDDT,theConf.reservedMacs[a],now-losMacs[a].stateChangeTS[BOOTSTATE]);
+#endif
 							losMacs[a].report=REPORTED;
 						}
 
@@ -36,7 +39,10 @@ void watchDog(void * pArg)
 				case CONNSTATE:
 					if(losMacs[a].report==REPORTED)
 					{
-						printf("Connection from %x \n",theConf.reservedMacs[a]);
+#ifdef DEBUGX
+						if(theConf.traceflag & (1<<CMDD))
+							printf("%sConnection from %x \n",CMDDT,theConf.reservedMacs[a]);
+#endif
 						losMacs[a].report=NOREPORT;
 						losMacs[a].stateChangeTS[CONNSTATE]=now;
 						break;
@@ -46,7 +52,10 @@ void watchDog(void * pArg)
 					{
 						if(losMacs[a].report!=REPORTED)
 						{
-							printf("NO Login from %x Time Elapsed %d Report Host\n",theConf.reservedMacs[a],now-losMacs[a].stateChangeTS[CONNSTATE]);
+#ifdef DEBUGX
+							if(theConf.traceflag & (1<<CMDD))
+								printf("%sNO Login from %x Time Elapsed %d Report Host\n",CMDDT,theConf.reservedMacs[a],now-losMacs[a].stateChangeTS[CONNSTATE]);
+#endif
 							losMacs[a].report=REPORTED;
 						}
 
@@ -55,7 +64,10 @@ void watchDog(void * pArg)
 				case MSGSTATE:
 					if(losMacs[a].report==REPORTED)
 					{
-						printf("Message received from %x \n",theConf.reservedMacs[a]);
+#ifdef DEBUGX
+						if(theConf.traceflag & (1<<CMDD))
+							printf("%sMessage received from %x \n",CMDDT,theConf.reservedMacs[a]);
+#endif
 						losMacs[a].report=NOREPORT;
 						losMacs[a].stateChangeTS[MSGSTATE]=now;
 						break;
@@ -65,7 +77,10 @@ void watchDog(void * pArg)
 					{
 						if(losMacs[a].report!=REPORTED)
 						{
-							printf("NO Msg from %x Time Elapsed %d Report Host\n",theConf.reservedMacs[a],now-losMacs[a].stateChangeTS[MSGSTATE]);
+#ifdef DEBUGX
+							if(theConf.traceflag & (1<<CMDD))
+								printf("%sNO Msg from %x Time Elapsed %d Report Host\n",CMDDT,theConf.reservedMacs[a],now-losMacs[a].stateChangeTS[MSGSTATE]);
+#endif
 							losMacs[a].report=REPORTED;
 							losMacs[a].dState=TOSTATE;
 						}

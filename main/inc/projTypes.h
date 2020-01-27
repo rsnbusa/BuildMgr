@@ -102,6 +102,7 @@ typedef struct config {
     connStruct	connId;
     uint32_t	reservedMacs[10];
     uint16_t	reservedCnt;
+    time_t		lastReboot;
 } config_flash;
 
 typedef struct framq{

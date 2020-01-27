@@ -969,20 +969,24 @@ static void cmdManager(void* arg)
 								cJSON *cmgr= cJSON_GetObjectItem(cmdIteml,"connmgr");
 								if(!cmgr)
 								{
-									printf("Not our structure\n");
+#ifdef DEBUGX
+									if(theConf.traceflag & (1<<CMDD))
+										printf("%sNot our structure\n",CMDDT);
+#endif
 									free(argument);
 									goto exit;
 								}
 								if(strcmp(cmgr->valuestring,theConf.meterConnName)!=0)
 								{
-									printf("Not our connMgr %s\n",cmgr->valuestring);
+#ifdef DEBUGX
+									if(theConf.traceflag & (1<<CMDD))
+										printf("%sNot our connMgr %s\n",CMDDT,cmgr->valuestring);
+#endif
 									free(argument);
 									goto exit;
 								}
+								argument->macn=(u32)theMacNum;				//this allows HOST to NOT know the local MAC. If implemented its a great security feature
 							}
-
-//							losMacs[argument->pos].dState=MSGSTATE;
-//							losMacs[argument->pos].stateChangeTS[MSGSTATE]=millis();
 
 							(*cmds[cualf].code)(argument);	// call the cmd and wait for it to end
 							free(argument);
@@ -1485,6 +1489,7 @@ void shaMake(char * key,uint8_t klen,uint8_t* shaResult)
 void app_main()
 {
 
+
 	esp_log_level_set("*", ESP_LOG_WARN);
 
 	esp_err_t err = nvs_flash_init();
@@ -1495,6 +1500,9 @@ void app_main()
     }
 
 	read_flash();// read configuration
+
+	theConf.lastResetCode=rtc_get_reset_reason(0);
+
 #ifdef DEBUGX
 	if(theConf.traceflag & (1<<BOOTD))
 	{
@@ -1574,6 +1582,9 @@ void app_main()
 		fram.readMany(FRAMDATE,(uint8_t*)&now.thedate,sizeof(now.thedate));
 		updateDateTime(now);
 	}
+
+	time(&theConf.lastReboot);
+	write_to_flash();
 
 	pcnt_init();// initialize it. Several tricks apply. Read there. Depends on Tariffs so must be after we know tariffs and date are OK
 
