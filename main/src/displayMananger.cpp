@@ -147,6 +147,20 @@ static void displayKwH()
 	}
 }
 
+static void displayActivity()
+{
+
+	char textt[20];
+	int yy=1;
+
+	for(int a=0;a<theConf.reservedCnt;a++)
+	{
+		sprintf(textt,"%d",(int)losMacs[a].msgCount);
+		drawString(64, yy,string(textt), 12, TEXT_ALIGN_CENTER,DISPLAYIT, REPLACE);
+		yy+=14;
+	}
+}
+
 void displayManager(void *arg) {
 	time_t t = 0;
 	struct tm timeinfo ;
@@ -154,7 +168,7 @@ void displayManager(void *arg) {
 	time_t cuando;
 	int pasaron;
 
-	bool displayMode=true;// kwh
+	uint8_t displayMode=0;// kwh
 
 	time(&t);
 	localtime_r(&t, &timeinfo);
@@ -190,18 +204,25 @@ void displayManager(void *arg) {
 	if(workingDevs)
 		clearScreen();
 
+	int howLong=1000;
+
 	while(true)
 	{
-		vTaskDelay(1000/portTICK_PERIOD_MS);
+		time(&mgrTime[DISPLAYMGR]);
+
+		vTaskDelay(howLong/portTICK_PERIOD_MS);
 		if(!gpio_get_level((gpio_num_t)0))
 		{
-			displayMode=!displayMode;
+			displayMode++;
+			if(displayMode>2)
+				displayMode=0;
 			memset(oldCurBeat,0,sizeof(oldCurBeat));
 			memset(oldCurLife,0,sizeof(oldCurLife));
 			clearScreen();
 		}
 
-
+		time(&t);
+		localtime_r(&t, &timeinfo);
 
 		sprintf(textd,"%02d/%02d/%04d",timeinfo.tm_mday,timeinfo.tm_mon+1,1900+timeinfo.tm_year);
 		sprintf(textt,"%02d:%02d:%02d",timeinfo.tm_hour,timeinfo.tm_min,timeinfo.tm_sec);
@@ -209,10 +230,23 @@ void displayManager(void *arg) {
 		{
 			drawString(0, 51, string(textd), 10, TEXT_ALIGN_LEFT,NODISPLAY, REPLACE);
 			drawString(86, 51, string(textt), 10, TEXT_ALIGN_LEFT,DISPLAYIT, REPLACE);
-			if(displayMode)
+			switch(displayMode)
+			{
+			case 0:
+				howLong=1000;
 				displayBeats();
-			else
+				break;
+			case 1:
+				howLong=5000;
 				displayKwH();
+				break;
+			case 2:
+				howLong=10000;
+				displayActivity();
+				break;
+			default:
+				break;
+			}
 			xSemaphoreGive(I2CSem);
 		}
 	}

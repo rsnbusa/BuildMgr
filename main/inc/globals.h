@@ -19,7 +19,7 @@ const static int DONE_BIT 				= BIT3;
 const static int SNTP_BIT 				= BIT4;
 
 EXTERN bool								isrf,connf,wifif,apstaf,displayf,miscanf;
-EXTERN char								http_request[100],tempb[5000],texto[101],stateName[sizeof(meterState)][20];
+EXTERN char								http_request[100],tempb[5000],texto[101],stateName[5][20];
 EXTERN cmdRecord 						cmds[MAXCMDS];
 EXTERN cmdType							theCmd;
 EXTERN config_flash						theConf;
@@ -37,12 +37,12 @@ EXTERN nvs_handle 						nvshandle;
 EXTERN QueueHandle_t 					mqttQ,mqttR,framQ,pcnt_evt_queue;
 EXTERN SemaphoreHandle_t 				wifiSem,framSem;
 EXTERN string							controlQueue,cmdQueue;
-EXTERN TaskHandle_t						webHandle,timeHandle,simHandle,blinkHandle;
+EXTERN TaskHandle_t						webHandle,timeHandle,simHandle,blinkHandle,cmdHandle,framHandle,pinHandle,buildHandle,watchHandle,displayHandle,submHandle;
+EXTERN time_t							mgrTime[7];
 EXTERN TimerHandle_t					hourChangeT,connHandle;
 EXTERN u16 								theGuard,qdelay,llevoMsg,mesg,diag,horag,yearg,wDelay,tarifasDia[24],oldMesg,oldDiag,oldHorag,yearDay,oldYearDay;
 EXTERN uint32_t							totalPulses,oldCurBeat[MAXDEVS],oldCurLife[MAXDEVS],sentTotal,llevo,tallies[MAXSTA][MAXDEVS],theMacNum;
 EXTERN uint8_t 							daysInMonth [12],qwait,lastalign,lastFont,workingDevs;
-
 #ifdef KBD
 EXTERN char								lookuptable[NKEYS][10];
 #endif

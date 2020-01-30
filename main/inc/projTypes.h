@@ -9,6 +9,7 @@ enum sourceFlags{HOSTT,LOCALT};
 enum debugflags{BOOTD,WIFID,MQTTD,PUBSUBD,OTAD,CMDD,WEBD,GEND,MQTTT,FRMCMD,INTD,FRAMD,MSGD,TIMED,SIMD,HOSTD};
 typedef enum macState{BOOTSTATE,CONNSTATE,LOGINSTATE,MSGSTATE,TOSTATE} meterState;
 typedef enum reportState{NOREPORT,REPORTED} reportState_t;
+enum mgrT{BUILDMGR,CMDMGR,WATCHMGR,DISPLAYMGR,FRAMMGR,PINMGR,SUBMGR};
 
 typedef struct whitel{
 	meterState		dState;
@@ -23,7 +24,7 @@ typedef struct macC{
 	time_t			lastUpdate;
 	u32				theIp;
 	uint32_t 		macAdd;
-	uint32_t 		trans[MAXDEVS],controlLastKwH[MAXDEVS],controlLastBeats[MAXDEVS];
+	uint32_t 		trans[MAXDEVS],controlLastKwH[MAXDEVS],controlLastBeats[MAXDEVS],msgCount;
 	TimerHandle_t	timerH;
 	char			meterSerial[MAXDEVS][20];
 	meterState		dState,pState;

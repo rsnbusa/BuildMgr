@@ -17,11 +17,12 @@ extern void shaMake(char * key,uint8_t klen,uint8_t* shaResult);
 
 using namespace std;
 
-typedef void (*functkbd)();
+typedef void (*functkbd)(string ss);
 
 typedef struct cmd_kbd_t{
     char comando[20];
     functkbd code;
+    string help;
 }cmdRecord_t;
 
 cmdRecord_t cmdds[MAXCMDSK];
@@ -36,6 +37,84 @@ uint16_t date2days(uint16_t y, uint8_t m, uint8_t d) {
 	return days ;
 
 }
+
+cJSON *makeJson(string ss)
+{
+	cJSON *root=cJSON_CreateObject();
+
+	size_t start=0,found,fkey;
+	int van=0;
+	string cmdstr,theK;
+	std::locale loc;
+
+	if(ss=="")
+		return NULL;
+
+	do{
+		found=ss.find(" ",start);
+		if (found!=std::string::npos)
+		{
+			cmdstr=ss.substr(start,found-start);
+		//	printf("Start %d found %d Param %d=%s\n",start,found,van,cmdstr.c_str());
+
+			fkey=cmdstr.find_first_of("=:");
+			if(fkey!=std::string::npos)
+			{
+				theK=cmdstr.substr(0,fkey);
+			//	printf("Key=%s Value=%s\n",cmdstr.substr(0,fkey).c_str(),
+			//			cmdstr.substr(fkey+1,cmdstr.length()).c_str());
+				for (size_t i=0; i<theK.length(); ++i)
+				    theK[i]= std::toupper(theK[i],loc);
+
+				string valor=cmdstr.substr(fkey+1,cmdstr.length());
+
+				bool isdig=true;
+				for (size_t i=0; i<valor.length(); ++i)
+				{
+					if(!isdigit(valor[i]))
+					{
+							 isdig=false;
+							 break;
+					}
+				}
+				if(!isdig)
+					cJSON_AddStringToObject(root,theK.c_str(),valor.c_str());
+				else
+					cJSON_AddNumberToObject(root,theK.c_str(),atoi(valor.c_str()));
+
+			}
+			else
+				return NULL; //error is drastic
+			start=found+1;
+			van++;
+		}
+
+	} while(found!=std::string::npos);
+
+//	if(start<ss.length())
+//	{
+//		cmdstr=ss.substr(start,ss.length());
+//	//	printf("Start %d found %d LastParam %d=%s\n",start,found,van,cmdstr.c_str());
+//		fkey=cmdstr.find_first_of("=:");
+//		if(fkey!=std::string::npos)
+//		{
+//			theK=cmdstr.substr(0,fkey);
+//			 for (size_t i=0; i<theK.length(); ++i)
+//							    theK[i]= std::toupper(theK[i],loc);
+//		//	printf("LKey=%s LValue=%s\n",cmdstr.substr(0,fkey).c_str(),
+//		//			cmdstr.substr(fkey+1,cmdstr.length()).c_str());
+//			cJSON_AddStringToObject(root,theK.c_str(),cmdstr.substr(fkey+1,cmdstr.length()).c_str());
+//		}
+//	}
+	char *lmessage=cJSON_Print(root);
+	if(lmessage)
+	{
+		printf("Root %s\n",lmessage);
+		free(lmessage);
+	}
+	return root;
+}
+
 int get_string(uart_port_t uart_num,uint8_t cual,char *donde)
 {
 	uint8_t ch;
@@ -95,6 +174,8 @@ int kbdCmd(string key)
 		for(int a=0;a<s1.length();a++)
 			s2[a]=toupper(s1[a]);
 	//	printf("Cmd =%s=\n",s2.c_str());
+
+
 		if(strstr(s2.c_str(),skey.c_str())!=NULL)
 			return i;
 		s1=s2="";
@@ -103,43 +184,61 @@ int kbdCmd(string key)
 }
 
 
-int askMeter()
+int askMeter(cJSON *params) // json should be METER
 {
-	int len;
+	int len=-1;
 	char s1[20];
 
-	printf("Meter:");
-	fflush(stdout);
-	len=get_string(UART_NUM_0,10,s1);
-	if(len<=0)
+	if(params)
 	{
-		printf("\n");
-		return -1;
+		cJSON *jentry= cJSON_GetObjectItem(params,"METER");
+		if(jentry)
+			len=jentry->valueint;
 	}
-	len= atoi(s1);
-	if(len<MAXDEVS)
-		return len;
 	else
 	{
-		printf("%sMeter out of range 0-%d%s\n",MAGENTA,MAXDEVS-1,RESETC);
-		return -1;
+		printf("Meter:");
+		fflush(stdout);
+		len=get_string(UART_NUM_0,10,s1);
+		if(len<=0)
+		{
+			printf("\n");
+			return -1;
+		}
+		len= atoi(s1);
 	}
+		if(len<MAXDEVS)
+			return len;
+		else
+		{
+			printf("%sMeter out of range 0-%d%s\n",MAGENTA,MAXDEVS-1,RESETC);
+			return -1;
+		}
 }
 
-int askMonth()
+int askMonth(cJSON *params)	//JSON should be MONTH
 {
-	int len;
+	int len=-1;
 	char s1[20];
 
-	printf("Month(0-11):");
-	fflush(stdout);
-	len=get_string(UART_NUM_0,10,s1);
-	if(len<=0)
+	if(params)
 	{
-		printf("\n");
-		return -1;
+		cJSON *jentry= cJSON_GetObjectItem(params,"MONTH");
+		if(jentry)
+			len=jentry->valueint;
 	}
-	len= atoi(s1);
+	else
+	{
+		printf("Month(0-11):");
+		fflush(stdout);
+		len=get_string(UART_NUM_0,10,s1);
+		if(len<=0)
+		{
+			printf("\n");
+			return -1;
+		}
+		len= atoi(s1);
+	}
 	if(len<12)
 		return len;
 	else
@@ -149,20 +248,29 @@ int askMonth()
 	}
 }
 
-int askHour()
+int askHour(cJSON *params)	//json should be HOUR
 {
-	int len;
+	int len=-1;
 	char s1[20];
 
-	printf("Hour(0-23):");
-	fflush(stdout);
-	len=get_string(UART_NUM_0,10,s1);
-	if(len<=0)
+	if(params)
+		{
+			cJSON *jentry= cJSON_GetObjectItem(params,"HOUR");
+			if(jentry)
+				len=jentry->valueint;
+		}
+	else
 	{
-		printf("\n");
-		return -1;
+		printf("Hour(0-23):");
+		fflush(stdout);
+		len=get_string(UART_NUM_0,10,s1);
+		if(len<=0)
+		{
+			printf("\n");
+			return -1;
+		}
+		len= atoi(s1);
 	}
-	len= atoi(s1);
 	if(len<24)
 		return len;
 	else
@@ -172,84 +280,147 @@ int askHour()
 	}
 }
 
-int askDay(int month)
+int askDay(cJSON *params,int month)	// JSON should be DAY
 {
-	int len;
+	int len=-1;
 	char s1[20];
 
-	printf("Day(0-%d):",daysInMonth[month]-1);
-	fflush(stdout);
-	len=get_string(UART_NUM_0,10,s1);
-	if(len<=0)
-	{
-		printf("\n");
-		return -1;
-	}
-	len= atoi(s1);
-	if(len<daysInMonth[month])
-		return len;
+	if(params)
+		{
+			cJSON *jentry= cJSON_GetObjectItem(params,"DAY");
+			if(jentry)
+				len=jentry->valueint;
+		}
 	else
 	{
-		printf("%sDay out of range 0-%d%s\n",MAGENTA,daysInMonth[month]-1,RESETC);
-		return -1;
+		printf("Day(0-%d):",daysInMonth[month]-1);
+		fflush(stdout);
+		len=get_string(UART_NUM_0,10,s1);
+		if(len<=0)
+		{
+			printf("\n");
+			return -1;
+		}
+		len= atoi(s1);
 	}
+		if(len<daysInMonth[month])
+			return len;
+		else
+		{
+			printf("%sDay out of range 0-%d%s\n",MAGENTA,daysInMonth[month]-1,RESETC);
+			return -1;
+		}
 }
 
-int askValue(const char *title)
+int askValue(const char *title,cJSON *params)	//JSON should be VAL
 {
 	int len;
 	char s1[20];
 
-	printf("%s:",title);
-	fflush(stdout);
-	len=get_string(UART_NUM_0,10,s1);
-	if(len<=0)
+	if(params)
+		{
+			cJSON *jentry= cJSON_GetObjectItem(params,"VAL");
+			if(jentry)
+				return(jentry->valueint);
+			else
+				return -1;
+		}
+	else
 	{
-		printf("\n");
-		return -1;
-	}
+		printf("%s:",title);
+		fflush(stdout);
+		len=get_string(UART_NUM_0,10,s1);
+		if(len<=0)
+		{
+			printf("\n");
+			return -1;
+		}
 
-	return atoi(s1);
+		return atoi(s1);
+	}
+	return -1;
 }
 
-void confStatus()
+void confStatus(string ss)
 {
 	struct tm timeinfo;
 	char strftime_buf[64];
+	time_t now;
+	bool shortans=false;
+	cJSON *params=NULL;
 
-	printf("%s====================\nConfiguration Status\n",KBDT);
+	params=makeJson(ss);
 
-	printf("ConnMgr %s DDay %d AltDay %d SlotTime %d SlotAssigned %d Reserved %d\n",theConf.meterConnName, theConf.connId.dDay,theConf.connId.altDay,
-							theConf.slot_Server.slot_time,theConf.connId.connSlot,theConf.reservedCnt);
-
-	printf("%sConfiguration BootCount %d LReset %x RunStatus[%s] Trace %x\n",YELLOW,theConf.bootcount,theConf.lastResetCode,
-			theConf.active?"Run":"Setup",theConf.traceflag);
-
-	for (int a=0;a<MAXDEVS;a++)
+	if(params)
 	{
-		localtime_r(&theConf.bornDate[a], &timeinfo);
-		strftime(strftime_buf, sizeof(strftime_buf), "%c", &timeinfo);
-		printf("%sMeter[%d] Serial %s BPW %d Born %s BornkWh %d Active %s\n",(a % 2)?CYAN:GREEN,a,theConf.medidor_id[a],theConf.beatsPerKw[a],
-				strftime_buf,theConf.bornKwh[a],theConf.configured[a]==3?"Yes":"No");
+		cJSON *jmeter= cJSON_GetObjectItem(params,"SHORT");
+		if(jmeter)
+			shortans=true;
+
+		cJSON_Delete(params);
+	}
+
+	time(&now);
+	printf("%s====================\nConfiguration Status %s",KBDT,ctime(&now));
+
+	printf("ConnMgr %s%s%s Whitelisted %s%d%s",CYAN,theConf.meterConnName,RESETC,GREEN,theConf.reservedCnt,RESETC);
+	printf("%sConfiguration RunStatus[%s] Trace %x %sBootCount %d LReset %x @%s",YELLOW,theConf.active?"Run":"Setup",theConf.traceflag,GREEN,theConf.bootcount,theConf.lastResetCode,ctime(&theConf.lastReboot));
+
+	if(!shortans)
+	{
+		for (int a=0;a<MAXDEVS;a++)
+		{
+			localtime_r(&theConf.bornDate[a], &timeinfo);
+			strftime(strftime_buf, sizeof(strftime_buf), "%c", &timeinfo);
+			printf("%sMeter[%d] Serial %s BPW %d Born %s BornkWh %d %s\n",(a % 2)?CYAN:GREEN,a,theConf.medidor_id[a],theConf.beatsPerKw[a],
+					strftime_buf,theConf.bornKwh[a],theConf.configured[a]==3?"Active":"Inactive");
+		}
+	}
+
+	printf("===============\n");
+	printf("  MQTT Section\n");
+	printf("===============%s\n",RESETC);
+	printf("Command Queue %s%s%s\n",GREEN,cmdQueue.c_str(),RESETC);
+	printf("Host Queue %s%s%s\n",CYAN,controlQueue.c_str(),RESETC);
+
+	if(!shortans)
+	{
+		printf("%s===============\n",YELLOW);
+		printf("Control Tasks\n");
+		printf("===============%s\n",RESETC);
+
+		printf("CmdMgr %s @%s",cmdHandle?GREEN "Alive" RESETC:RED "Dead" RESETC,ctime(&mgrTime[CMDMGR]));
+		printf("FramMgr %s @%s",framHandle?GREEN "Alive" RESETC:RED "Dead" RESETC,ctime(&mgrTime[FRAMMGR]));
+		printf("PinMgr %s @%s",pinHandle?GREEN "Alive" RESETC:RED "Dead" RESETC,ctime(&mgrTime[PINMGR]));
+		printf("WatchMgr %s @%s",watchHandle?GREEN "Alive" RESETC:RED "Dead" RESETC,ctime(&mgrTime[WATCHMGR]));
+		printf("DisplayMgr %s @%s",displayHandle?GREEN "Alive" RESETC:RED "Dead" RESETC,ctime(&mgrTime[DISPLAYMGR]));
+		printf("SubMgr %s @%s",submHandle?GREEN "Alive" RESETC:RED "Dead" RESETC,ctime(&mgrTime[SUBMGR]));
 	}
 	printf("====================%s\n",KBDT);
 
 }
 
-void meterStatus()
+void meterStatus(string ss)
 {
 	uint32_t valr;
+	cJSON *params=NULL;
+	int meter=-1;
 
+	params=makeJson(ss);
 
 	printf("%s============\nMeter status\n",KBDT);
-	int meter=askMeter();
-	if(meter<0)
+	meter=askMeter(params);
+	if(meter<0||meter>MAXDEVS-1)
+	{
+		printf("Meter %d out of range\n",meter);
 		return;
+	}
+
 	printf("============%s\n\n",YELLOW);
 
 	if(xSemaphoreTake(framSem, portMAX_DELAY/  portTICK_RATE_MS))
 	{
-		printf("Meter Compare test Year %d Month %d Day %d Hour %d YDAY %d\n",yearg,mesg,diag,horag,yearDay);
+	//	printf("Meter Compare test Year %d Month %d Day %d Hour %d YDAY %d\n",yearg,mesg,diag,horag,yearDay);
 		valr=0;
 		fram.read_beat(meter,(uint8_t*)&valr);
 		printf("Beat[%d]=%d %d\n",meter,valr,theMeters[meter].currentBeat);
@@ -284,15 +455,26 @@ void meterStatus()
 	}
 }
 
-void meterTest()
+void meterTest(string ss)
 {
+	cJSON *params=NULL;
+	int val=0,meter=0;
+
+	params=makeJson(ss);
+
+	meter=askMeter(params);
+	if(meter<0||meter>MAXDEVS-1)
+	{
+		printf("Meter %d out of range\n",meter);
+		return;
+	}
+		val=askValue((char*)"Value",params);
+
+
 	printf("%s================\nTest Write Meter\n",KBDT);
 
-	int meter=askMeter();
-	int val=askValue((char*)"Value");
+
 	printf("================%s\n\n",RESETC);
-	if(meter<0 || val<0)
-		return;
 
 	uint32_t valr;
 
@@ -335,7 +517,7 @@ void meterTest()
 	}
 }
 
-void webReset()
+void webReset(string ss)
 {
 	theConf.active=!theConf.active;
 	printf("%sWeb %s\n",KBDT,theConf.active?"RunConf":"SetupConf");
@@ -347,7 +529,7 @@ void webReset()
 	write_to_flash();
 }
 
-void meterCount()
+void meterCount(string ss)
 {
 	time_t timeH;
 
@@ -367,8 +549,9 @@ void meterCount()
 
 }
 
-void dumpCore()
+void dumpCore(string ss)
 {
+
 	u8 *p;
 	printf("%sDumping core ins 3 secs%s\n",RED,RESETC);
 	delay(3000);
@@ -376,13 +559,28 @@ void dumpCore()
 	*p=0;
 }
 
-void formatFram()
+void formatFram(string ss)
 {
-	printf("%s===========\nFormat FRAM\n",KBDT);
+	cJSON *params=NULL;
+	int val=0;
 
-	int val=askValue((char*)"Init value");
-	printf("===========%s\n\n",KBDT);
+	params=makeJson(ss);
 
+	if(params)
+	{
+		cJSON *jval= cJSON_GetObjectItem(params,"VAL");
+		if(jval)
+			val=jval->valueint;
+		cJSON_Delete(params);
+	}
+	else
+	{
+
+		printf("%s===========\nFormat FRAM\n",KBDT);
+
+		val=askValue((char*)"Init value",params);
+		printf("===========%s\n\n",KBDT);
+	}
 	if(val<0)
 		return;
 
@@ -403,13 +601,29 @@ void formatFram()
 }
 
 
-void readFram()
+void readFram(string ss)
 {
-	printf("%s=========\nRead FRAM\n",KBDT);
+	cJSON *params=NULL;
+	int framAddress=0,fueron=0;
+	params=makeJson(ss);
 
-	int framAddress=askValue((char*)"Address");
-	int fueron=askValue((char*)"Count");
-	printf("=========%s\n\n",KBDT);
+	if(params)
+	{
+		cJSON *jmeter= cJSON_GetObjectItem(params,"ADDR");
+		if(jmeter)
+			framAddress=jmeter->valueint;
+		cJSON *jval= cJSON_GetObjectItem(params,"COUNT");
+		if(jval)
+			fueron=jval->valueint;
+		cJSON_Delete(params);
+	}
+	else
+	{
+		printf("%s=========\nRead FRAM\n",KBDT);
+		framAddress=askValue((char*)"Address",params);
+		fueron=askValue((char*)"Count",params);
+		printf("=========%s\n\n",KBDT);
+	}
 	if(fueron<0 || framAddress<0)
 		return;
 
@@ -420,13 +634,29 @@ void readFram()
 
 }
 
-void writeFram()
+void writeFram(string ss)
 {
-	printf("%s==========\nWrite FRAM\n",KBDT);
+	cJSON *params=NULL;
+	int fueron=0,framAddress=0;
+	params=makeJson(ss);
 
-	int framAddress=askValue((char*)"Address");
-	int fueron=askValue((char*)"Value");
-	printf("==========%s\n\n",KBDT);
+	if(params)
+	{
+		cJSON *jmeter= cJSON_GetObjectItem(params,"ADDR");
+		if(jmeter)
+			framAddress=jmeter->valueint;
+		cJSON *jval= cJSON_GetObjectItem(params,"VAL");
+		if(jval)
+			fueron=jval->valueint;
+		cJSON_Delete(params);
+	}
+	else
+	{
+		printf("%s==========\nWrite FRAM\n",KBDT);
+		framAddress=askValue((char*)"Address",params);
+		fueron=askValue((char*)"Value",params);
+		printf("==========%s\n\n",KBDT);
+	}
 	if(fueron<0 || framAddress<0)
 		return;
 
@@ -434,17 +664,31 @@ void writeFram()
 
 }
 
-void logLevel()
+void logLevel(string ss)
 {
+	cJSON *params=NULL;
 	char s1[10];
 
-	printf("%sLOG level:(N)one (I)nfo (E)rror (V)erbose (W)arning:",KBDT);
-	fflush(stdout);
-	int len=get_string(UART_NUM_0,10,s1);
-	if(len<=0)
+	params=makeJson(ss);
+
+	if(params)
 	{
-		printf("\n");
-		return;
+		cJSON *jmeter= cJSON_GetObjectItem(params,"LEVEL");
+		if(jmeter)
+			s1[0]=jmeter->valuestring[0];
+		cJSON_Delete(params);
+	}
+	else
+	{
+
+		printf("%sLOG level:(N)one (I)nfo (E)rror (V)erbose (W)arning:",KBDT);
+		fflush(stdout);
+		int len=get_string(UART_NUM_0,10,s1);
+		if(len<=0)
+		{
+			printf("\n");
+			return;
+		}
 	}
 		switch (s1[0])
 		{
@@ -472,21 +716,36 @@ void logLevel()
 
 }
 
-void framDays()
+void framDays(string ss)
 {
 	uint16_t valor;
 	uint32_t tots=0;
+	cJSON *params=NULL;
+	int meter=0,month=0;
 
-	printf("%s==================\nFram Days in Month\n",KBDT);
+	params=makeJson(ss);
 
+	if(params)
+	{
+		cJSON *jmeter= cJSON_GetObjectItem(params,"METER");
+		if(jmeter)
+			meter=jmeter->valueint;
+		cJSON *jval= cJSON_GetObjectItem(params,"MONTH");
+		if(jval)
+			month=jval->valueint;
+		cJSON_Delete(params);
+	}
+	else
+	{
 
-	int meter=askMeter();
-	if(meter<0)
-		return;
-	int month=askMonth();
-	if(month<0)
-		return;
-
+		printf("%s==================\nFram Days in Month\n",KBDT);
+		meter=askMeter(params);
+		if(meter<0)
+			return;
+		month=askMonth(params);
+		if(month<0)
+			return;
+	}
 	if(xSemaphoreTake(framSem, portMAX_DELAY))
 	{
 		int startday=date2days(yearg,month,0);//this year, this month, first day
@@ -510,23 +769,42 @@ void framDays()
 
 }
 
-void framHours()
+void framHours(string ss)
 {
 	uint8_t valor;
 	uint32_t tots=0;
+	cJSON *params=NULL;
+	int meter=0,month=0,dia=0;
 
-	printf("%s=================\nFram Hours in Day\n",KBDT);
+	params=makeJson(ss);
 
-	int meter=askMeter();
-	if(meter<0)
-		return;
-	int month=askMonth();
-	if(month<0)
-		return;
-	int dia=askDay(month);
-	if(dia<0)
-		return;
+	if(params)
+	{
+		cJSON *jmeter= cJSON_GetObjectItem(params,"METER");
+		if(jmeter)
+			meter=jmeter->valueint;
+		cJSON *jval= cJSON_GetObjectItem(params,"MONTH");
+		if(jval)
+			month=jval->valueint;
+		cJSON *jday= cJSON_GetObjectItem(params,"DAY");
+		if(jday)
+			dia=jval->valueint;
+		cJSON_Delete(params);
+	}
+	else
+	{
+		printf("%s=================\nFram Hours in Day\n",KBDT);
 
+		meter=askMeter(params);
+		if(meter<0)
+			return;
+		month=askMonth(params);
+		if(month<0)
+			return;
+		dia=askDay(params,month);
+		if(dia<0)
+			return;
+	}
 
 	if(xSemaphoreTake(framSem, portMAX_DELAY))
 	{
@@ -550,21 +828,37 @@ void framHours()
 	}
 }
 
-void framMonthsHours()
+void framMonthsHours(string ss)
 {
 	uint8_t valor;
 	uint32_t tots=0;
 	bool was;
+	cJSON *params=NULL;
+	int meter=0,month=0;
 
-	printf("%s=================\nFram Hours in Month\n",KBDT);
+	params=makeJson(ss);
 
-	int meter=askMeter();
-	if(meter<0)
-		return;
-	int month=askMonth();
-	if(month<0)
-		return;
+	if(params)
+	{
+		cJSON *jmeter= cJSON_GetObjectItem(params,"METER");
+		if(jmeter)
+			meter=jmeter->valueint;
+		cJSON *jval= cJSON_GetObjectItem(params,"MONTH");
+		if(jval)
+			month=jval->valueint;
 
+		cJSON_Delete(params);
+	}
+	else
+	{
+		printf("%s=================\nFram Hours in Month\n",KBDT);
+		meter=askMeter(params);
+		if(meter<0)
+			return;
+		month=askMonth(params);
+		if(month<0)
+			return;
+	}
 
 	if(xSemaphoreTake(framSem, portMAX_DELAY))
 	{
@@ -594,25 +888,48 @@ void framMonthsHours()
 	}
 }
 
-void framHourSearch()
+void framHourSearch(string ss)
 {
 	uint8_t valor;
+	cJSON *params=NULL;
+	int meter=0,month=0,dia=0,hora=0;
 
-	printf("%s================\nFram Hour Search\n",KBDT);
+	params=makeJson(ss);
 
-	int meter=askMeter();
-	if(meter<0)
-		return;
-	int month=askMonth();
-	if(month<0)
-		return;
-	int dia=askDay(month);
-	if(dia<0)
-		return;
-	int hora=askHour();
-	if(hora<0)
-		return;
+	if(params)
+	{
+		cJSON *jmeter= cJSON_GetObjectItem(params,"METER");
+		if(jmeter)
+			meter=jmeter->valueint;
+		cJSON *jval= cJSON_GetObjectItem(params,"MONTH");
+		if(jval)
+			month=jval->valueint;
+		jval= cJSON_GetObjectItem(params,"DAY");
+		if(jval)
+			dia=jval->valueint;
+		jval= cJSON_GetObjectItem(params,"HOUR");
+		if(jval)
+			hora=jval->valueint;
 
+		cJSON_Delete(params);
+	}
+	else
+	{
+		printf("%s================\nFram Hour Search\n",KBDT);
+
+		meter=askMeter(params);
+		if(meter<0)
+			return;
+		month=askMonth(params);
+		if(month<0)
+			return;
+		dia=askDay(params,month);
+		if(dia<0)
+			return;
+		hora=askHour(params);
+		if(hora<0)
+			return;
+	}
 
 	if(xSemaphoreTake(framSem, portMAX_DELAY))
 	{
@@ -633,22 +950,41 @@ void framHourSearch()
 }
 
 
-void framDaySearch()
+void framDaySearch(string ss)
 {
 	uint16_t valor;
+	cJSON *params=NULL;
+	int meter=0,month=0,dia=0;
 
-	printf("%s===============\nFram Day Search\n",KBDT);
+	params=makeJson(ss);
 
-	int meter=askMeter();
-	if(meter<0)
-		return;
-	int month=askMonth();
-	if(month<0)
-		return;
-	int dia=askDay(month);
-	if(dia<0)
-		return;
+	if(params)
+	{
+		cJSON *jmeter= cJSON_GetObjectItem(params,"METER");
+		if(jmeter)
+			meter=jmeter->valueint;
+		cJSON *jval= cJSON_GetObjectItem(params,"MONTH");
+		if(jval)
+			month=jval->valueint;
+		jval= cJSON_GetObjectItem(params,"DAY");
+		if(jval)
+			dia=jval->valueint;
+		cJSON_Delete(params);
+	}
+	else
+	{
+		printf("%s===============\nFram Day Search\n",KBDT);
 
+		meter=askMeter(params);
+		if(meter<0)
+			return;
+		month=askMonth(params);
+		if(month<0)
+			return;
+		dia=askDay(params,month);
+		if(dia<0)
+			return;
+	}
 
 	if(xSemaphoreTake(framSem, portMAX_DELAY))
 	{
@@ -669,19 +1005,35 @@ void framDaySearch()
 
 }
 
-void framMonthSearch()
+void framMonthSearch(string ss)
 {
 	uint16_t valor;
+	cJSON *params=NULL;
+	int meter=0,month=0;
 
-	printf("%s=================\nFram Month Search\n",KBDT);
+	params=makeJson(ss);
 
-	int meter=askMeter();
-	if(meter<0)
-		return;
-	int month=askMonth();
-	if(month<0)
-		return;
+	if(params)
+	{
+		cJSON *jmeter= cJSON_GetObjectItem(params,"METER");
+		if(jmeter)
+			meter=jmeter->valueint;
+		cJSON *jval= cJSON_GetObjectItem(params,"MONTH");
+		if(jval)
+			month=jval->valueint;
+		cJSON_Delete(params);
+	}
+	else
+	{
+		printf("%s=================\nFram Month Search\n",KBDT);
 
+		meter=askMeter(params);
+		if(meter<0)
+			return;
+		month=askMonth(params);
+		if(month<0)
+			return;
+	}
 	if(xSemaphoreTake(framSem, portMAX_DELAY))
 	{
 		fram.read_month(meter,month,(u8*)&valor);
@@ -697,13 +1049,28 @@ void framMonthSearch()
 	printf("\n=================%s\n",KBDT);
 }
 
-void framMonths()
+void framMonths(string ss)
 {
 	uint16_t valor;
 	uint32_t tots=0;
+	cJSON *params=NULL;
+	int meter=0;
 
-	printf("%s=================\nFram Month All\n",KBDT);
-	int meter=askMeter();
+	params=makeJson(ss);
+
+	if(params)
+	{
+		cJSON *jmeter= cJSON_GetObjectItem(params,"METER");
+		if(jmeter)
+			meter=jmeter->valueint;
+		cJSON_Delete(params);
+	}
+	else
+	{
+		printf("%s=================\nFram Month All\n",KBDT);
+		meter=askMeter(params);
+	}
+
 	if(meter<0)
 		return;
 
@@ -730,7 +1097,7 @@ void framMonths()
 	printf("\n");
 }
 
-void flushFram()
+void flushFram(string ss)
 {
 	printf("%s=============\nFlushing Fram\n",KBDT);
 	for(int a=0;a<MAXDEVS;a++)
@@ -739,7 +1106,7 @@ void flushFram()
 	printf("=============%s\n",KBDT);
 }
 
-void msgCount()
+void msgCount(string ss)
 {
 	printf("%s=============\nMessage Count\n",KBDT);
 	for (int a=0;a<MAXDEVS;a++)
@@ -750,34 +1117,42 @@ void msgCount()
 
 }
 
-void traceFlags()
+void traceFlags(string sss)
 {
 	char s1[60],s2[20];
 	string ss;
+	std::locale loc;
 
 	printf("%sTrace Flags:%s",KBDT,CYAN);
 
 	for (int a=0;a<NKEYS/2;a++)
 	if (theConf.traceflag & (1<<a))
 		printf("%s ",lookuptable[a]);
+	printf("\n");
 
-	printf("%s\nEnter TRACE FLAG:%s",RED,RESETC);
-	fflush(stdout);
-	memset(s1,0,sizeof(s1));
-	get_string(UART_NUM_0,10,s1);
-	memset(s2,0,sizeof(s2));
-	for(int a=0;a<strlen(s1);a++)
-		s2[a]=toupper(s1[a]);
+	if(sss=="")
+	{
+		printf("%s\nEnter TRACE FLAG:%s",RED,RESETC);
+		fflush(stdout);
+		memset(s1,0,sizeof(s1));
+		get_string(UART_NUM_0,10,s1);
+		memset(s2,0,sizeof(s2));
+		for(int a=0;a<strlen(s1);a++)
+			s2[a]=toupper(s1[a]);
 
-	if(strlen(s2)<=1)
-		return;
+		if(strlen(s2)<=1)
+			return;
+	}
+	else
+		strcpy(s2,sss.c_str());
+
 
 	  char *ch;
 	  ch = strtok(s2, " ");
 	  while (ch != NULL)
 	  {
 		  ss=string(ch);
-	//	  printf("%s\n", ch);
+		//  printf("[%s]\n", ch);
 		  ch = strtok(NULL, " ");
 
 		if(strcmp(ss.c_str(),"NONE")==0)
@@ -828,8 +1203,19 @@ bool compareCmd(cmdRecord_t r1, cmdRecord_t r2)
 		return false;
 }
 
-void showHelp()
+void showHelp(string ss)
 {
+	cJSON *params=NULL;
+	bool longf=false;
+	params=makeJson(ss);
+
+	if(params)
+	{
+		cJSON *jmeter= cJSON_GetObjectItem(params,"LONG");
+		if(jmeter)
+			longf=true;
+		cJSON_Delete(params);
+	}
     int n = sizeof(cmdds)/sizeof(cmdds[0]);
 
     std::sort(cmdds, cmdds+n, compareCmd);
@@ -838,27 +1224,49 @@ void showHelp()
 	for (int a=0;a<MAXCMDSK;a++)
 	{
 		if(a % 2)
+		{
 			printf("%s%s ",CYAN,cmdds[a].comando);
+			if (longf)
+				printf("(%s)\n",cmdds[a].help.c_str());
+		}
 		else
+		{
 			printf("%s%s ",GREEN,cmdds[a].comando);
+			if (longf)
+				printf("(%s)\n",cmdds[a].help.c_str());
+		}
 	}
 	printf("\n======CMDS======%s\n",RESETC);
 }
 
-static void printControllers()
+static void printControllers(string ss)
 {
 	char str2[INET_ADDRSTRLEN];
 	int antes,son;
+	cJSON *params=NULL;
+	bool shortans=false;
+
+	params=makeJson(ss);
+
+	if(params)
+	{
+		cJSON *jmeter= cJSON_GetObjectItem(params,"SHORT");
+		if(jmeter)
+			shortans=true;
+		cJSON_Delete(params);
+	}
 
 	printf("%sListing %d Controllers\n",KBDT,theConf.reservedCnt);
 
-	printf("%s============%s\n",MAGENTA,RESETC);
-	printf("%sLocal Meters%s\n",MAGENTA,RESETC);
-	printf("%s============%s\n",MAGENTA,RESETC);
-	for (int a=0;a<MAXDEVS;a++)
-		printf("%sMeter[%d]=%s KwH %6d Beats %9d\n",a%2?CYAN:GREEN,a,theMeters[a].serialNumber,theMeters[a].curLife,theMeters[a].currentBeat);
-	printf("\n");
-
+	if(!shortans)
+	{
+		printf("%s============%s\n",MAGENTA,RESETC);
+		printf("%sLocal Meters%s\n",MAGENTA,RESETC);
+		printf("%s============%s\n",MAGENTA,RESETC);
+		for (int a=0;a<MAXDEVS;a++)
+			printf("%sMeter[%d]=%s KwH %6d Beats %9d\n",a%2?CYAN:GREEN,a,theMeters[a].serialNumber,theMeters[a].curLife,theMeters[a].currentBeat);
+		printf("\n");
+	}
 	printf("===============\n");
 	printf("Configured MtMs\n");
 	printf("===============\n");
@@ -866,10 +1274,10 @@ static void printControllers()
 	for(int a=0;a<theConf.reservedCnt;a++)
 	{
 		inet_ntop( AF_INET,(in_addr*)&losMacs[a].theIp, str2, INET_ADDRSTRLEN );
-		printf("%sSlot[%d]%s=%06x IP=%s State=(%d)%s %s Seen@%sStateChanges:",GREEN,a,CYAN,theConf.reservedMacs[a], str2,losMacs[a].dState,stateName[losMacs[a].dState],losMacs[a].report==REPORTED?"Reported":"",
-				ctime(&losMacs[a].lastUpdate));
+		printf("%sSlot[%d]%s=%06x IP=%s State=(%d)%s %s GTask %s Seen@%sStateChanges:",GREEN,a,CYAN,theConf.reservedMacs[a], str2,losMacs[a].dState,stateName[losMacs[a].dState],losMacs[a].report==REPORTED?"Reported":"",
+				losMacs[a].theHandle?"Alive":"Dead",ctime(&losMacs[a].lastUpdate));
 		antes=0;
-		for(int b=0;b<sizeof(meterState);b++)
+		for(int b=0;b<4;b++)
 		{
 			son=losMacs[a].stateChangeTS[b]-antes;
 			printf("[%s]=%dms(%d) ",stateName[b],losMacs[a].stateChangeTS[b],son);
@@ -877,24 +1285,30 @@ static void printControllers()
 		}
 			printf("\n");
 
-		for (int b=0;b<MAXDEVS;b++)
-			printf("%sMeter[%d]=%s KwH %6d Beats %9d\n",b%2?CYAN:GREEN,b,losMacs[a].meterSerial[b],losMacs[a].controlLastKwH[b],losMacs[a].controlLastBeats[b]);
+			if(!shortans)
+				for (int b=0;b<MAXDEVS;b++)
+					printf("%sMeter[%d]=%s KwH %6d Beats %9d\n",b%2?CYAN:GREEN,b,losMacs[a].meterSerial[b],losMacs[a].controlLastKwH[b],losMacs[a].controlLastBeats[b]);
 		printf("\n");
 	}
+
 	printf("%s\n",KBDT);
 }
 
-static void sendTelemetry()
+static void sendTelemetry(string ss)
 {
 	printf("%sSend Telemetry\n",KBDT);
 	xTaskCreate(&connMgr,"cnmgr",4096,(void*)123, 4, NULL);
 }
 
-static void tariffs()
+static void tariffs(string ss)
 {
 	const char *title="YearDay:";
 	int err=0;
-	int cuando=askValue(title);
+	cJSON *params=NULL;
+
+
+	params=makeJson(ss);
+	int cuando=askValue(title,params);
 	if(cuando<0)
 		return;
 
@@ -910,7 +1324,7 @@ static void tariffs()
 			printf("LoadTar Error %d reading Tariffs day %d...recovering from Host\n",err,yearDay);
 }
 
-static void firmware()
+static void firmware(string ss)
 {
 	xTaskCreate(&firmUpdate,"U571",10240,NULL, 5, NULL);
 
@@ -1025,13 +1439,13 @@ static void firmware()
 //	    clientCloud = esp_mqtt_client_init(&mqtt_cfg);
 //}
 
-void eraseTariff()
+void eraseTariff(string ss)
 {
 	fram.erase_tarif();
 	printf("%sTariffs erased\n",KBDT);
 }
 
-static void sha256()
+static void sha256(string ss)
 {
 	char s1[20];
 	printf("Enter SHA256 key:");
@@ -1046,38 +1460,43 @@ static void sha256()
 
 void init_kbd_commands()
 {
-	strcpy((char*)&cmdds[0].comando,"Config");			cmdds[ 0].code=confStatus;
-	strcpy((char*)&cmdds[1].comando,"WebReset");		cmdds[ 1].code=webReset;
-	strcpy((char*)&cmdds[2].comando,"Controllers");		cmdds[ 2].code=printControllers;
-	strcpy((char*)&cmdds[3].comando,"MeterStat");		cmdds[ 3].code=meterStatus;
-	strcpy((char*)&cmdds[4].comando,"EraseTariff");		cmdds[ 4].code=eraseTariff;
-	strcpy((char*)&cmdds[5].comando,"MeterCount");		cmdds[ 5].code=meterCount;
-	strcpy((char*)&cmdds[6].comando,"DumpCore");		cmdds[ 6].code=dumpCore;
-	strcpy((char*)&cmdds[7].comando,"FormatFram");		cmdds[ 7].code=formatFram;
-	strcpy((char*)&cmdds[8].comando,"ReadFram");		cmdds[ 8].code=readFram;
-	strcpy((char*)&cmdds[9].comando,"WriteFram");		cmdds[ 9].code=writeFram;
-	strcpy((char*)&cmdds[10].comando,"LogLevel");		cmdds[10].code=logLevel;
-	strcpy((char*)&cmdds[11].comando,"FramDaysAll");	cmdds[11].code=framDays;
-	strcpy((char*)&cmdds[12].comando,"FramHour");		cmdds[12].code=framHourSearch;
-	strcpy((char*)&cmdds[13].comando,"FramDay");		cmdds[13].code=framDaySearch;
-	strcpy((char*)&cmdds[14].comando,"FramMonth");		cmdds[14].code=framMonthSearch;
-	strcpy((char*)&cmdds[15].comando,"Flush");			cmdds[15].code=flushFram;
-	strcpy((char*)&cmdds[16].comando,"MessageCount");	cmdds[16].code=msgCount;
-	strcpy((char*)&cmdds[17].comando,"Help");			cmdds[17].code=showHelp;
+	strcpy((char*)&cmdds[0].comando,"Config");			cmdds[ 0].code=confStatus;			cmdds[0].help="SHORT";
+	strcpy((char*)&cmdds[1].comando,"WebReset");		cmdds[ 1].code=webReset;			cmdds[1].help="";
+	strcpy((char*)&cmdds[2].comando,"Controllers");		cmdds[ 2].code=printControllers;	cmdds[2].help="SHORT";
+	strcpy((char*)&cmdds[3].comando,"MeterStat");		cmdds[ 3].code=meterStatus;			cmdds[3].help="METER";
+	strcpy((char*)&cmdds[4].comando,"EraseTariff");		cmdds[ 4].code=eraseTariff;			cmdds[4].help="";
+	strcpy((char*)&cmdds[5].comando,"MeterCount");		cmdds[ 5].code=meterCount;			cmdds[5].help="";
+	strcpy((char*)&cmdds[6].comando,"DumpCore");		cmdds[ 6].code=dumpCore;			cmdds[6].help="";
+	strcpy((char*)&cmdds[7].comando,"FormatFram");		cmdds[ 7].code=formatFram;			cmdds[7].help="VAL";
+	strcpy((char*)&cmdds[8].comando,"ReadFram");		cmdds[ 8].code=readFram;			cmdds[8].help="COUNT";
+	strcpy((char*)&cmdds[9].comando,"WriteFram");		cmdds[ 9].code=writeFram;			cmdds[9].help="ADDR VAL";
+	strcpy((char*)&cmdds[10].comando,"LogLevel");		cmdds[10].code=logLevel;			cmdds[10].help="None Info Err Verb Warn";
+	strcpy((char*)&cmdds[11].comando,"FramDaysAll");	cmdds[11].code=framDays;			cmdds[11].help="METER MONTH";
+	strcpy((char*)&cmdds[12].comando,"FramHour");		cmdds[12].code=framHourSearch;		cmdds[12].help="METER MONTH DAY HOUR";
+	strcpy((char*)&cmdds[13].comando,"FramDay");		cmdds[13].code=framDaySearch;		cmdds[13].help="METER MONTH";
+	strcpy((char*)&cmdds[14].comando,"FramMonth");		cmdds[14].code=framMonthSearch;		cmdds[14].help="METER MONTH";
+	strcpy((char*)&cmdds[15].comando,"Flush");			cmdds[15].code=flushFram;			cmdds[15].help="";
+	strcpy((char*)&cmdds[16].comando,"MessageCount");	cmdds[16].code=msgCount;			cmdds[16].help="";
+	strcpy((char*)&cmdds[17].comando,"Help");			cmdds[17].code=showHelp;			cmdds[17].help="LONG";
 	strcpy((char*)&cmdds[18].comando,"Trace");			cmdds[18].code=traceFlags;
-	strcpy((char*)&cmdds[19].comando,"FramMonthsAll");	cmdds[19].code=framMonths;
-	strcpy((char*)&cmdds[20].comando,"Telemetry");		cmdds[20].code=sendTelemetry;
-	strcpy((char*)&cmdds[21].comando,"Tariff");			cmdds[21].code=tariffs;
-	strcpy((char*)&cmdds[22].comando,"Firmware");		cmdds[22].code=firmware;
-	strcpy((char*)&cmdds[23].comando,"Sha256");			cmdds[23].code=sha256;
+	cmdds[18].help="NONE ALL BOOTD WIFID MQTTD PUBSUBD OTAD CMDD WEBD GEND MQTTT FRMCMD INTD FRAMD MSGD TIMED SIMD HOSTD";
+	strcpy((char*)&cmdds[19].comando,"FramMonthsAll");	cmdds[19].code=framMonths;			cmdds[19].help="METER";
+	strcpy((char*)&cmdds[20].comando,"Telemetry");		cmdds[20].code=sendTelemetry;		cmdds[20].help="";
+	strcpy((char*)&cmdds[21].comando,"Tariff");			cmdds[21].code=tariffs;				cmdds[21].help="";
+	strcpy((char*)&cmdds[22].comando,"Firmware");		cmdds[22].code=firmware;			cmdds[22].help="";
+	strcpy((char*)&cmdds[23].comando,"Sha256");			cmdds[23].code=sha256;				cmdds[23].help="";
 }
 
 void kbd(void *arg)
 {
 	int len,cualf;
 	uart_port_t uart_num = UART_NUM_0 ;
-	char kbdstr[30],oldcmd[30];
+	char kbdstr[100],oldcmd[100];
 	string ss;
+	std::locale loc;
+
+
+	//cJSON *params;
 
 	uart_config_t uart_config = {
 			.baud_rate = 460800,
@@ -1101,13 +1520,30 @@ void kbd(void *arg)
 			len=get_string(UART_NUM_0,10,kbdstr);
 			if(len<=0)
 				strcpy(kbdstr,oldcmd);
+			ss=string(kbdstr);
+
+			 size_t found = ss.find(" ");
+			  if (found!=std::string::npos)
+			  {
+				  strcpy(kbdstr,ss.substr(0,found).c_str());	//Just cmd
+				  ss.erase(0,found+1);
+				  ss+=" ";
+			  }
+			  else ss="";
+
+			  for (size_t i=0; i<ss.length(); ++i)
+			  			ss[i]= std::toupper(ss[i],loc);
+
 
 			cualf=kbdCmd(string(kbdstr));
 			if(cualf>=0)
 			{
-				(*cmdds[cualf].code)();
+				(*cmdds[cualf].code)(ss);
 				strcpy(oldcmd,kbdstr);
 			}
+		//	if(params)
+		//		cJSON_Delete(params);
+
 		vTaskDelay(100 / portTICK_PERIOD_MS);
 	}
 }

@@ -328,6 +328,7 @@ static void getMessage(void *pArg)
 					}
 
 					time(&losMacs[pos].lastUpdate);
+					losMacs[pos].msgCount++;
 
 					llevoMsg++;
 					comando.mensaje[len] = 0;
@@ -407,6 +408,7 @@ static void buildMgr(void *pvParameters)
 				ESP_LOGE(TAG, "Unable to accept connection: errno %d", errno);
 				break;
 			}
+			time(&mgrTime[BUILDMGR]);
 
 			struct sockaddr_in* pV4Addr = (struct sockaddr_in*)&source_addr;
 			struct in_addr ipAddr = pV4Addr->sin_addr;
@@ -801,6 +803,7 @@ static void submode(void * pArg)
 			if( xQueueReceive( mqttQ, &meter, portMAX_DELAY ))
 			{
 #ifdef DEBUGX
+				time(&mgrTime[SUBMGR]);
 				if(theConf.traceflag & (1<<CMDD))
 				{
 					printf("%sHeap after submode rx %d\n",CMDDT,esp_get_free_heap_size());
@@ -905,7 +908,7 @@ static void mqtt_app_start(void)
 	    clientCloud = esp_mqtt_client_init(&mqtt_cfg);
 
 	    if(clientCloud)
-	    	xTaskCreate(&submode,"U571",10240,NULL, 5, NULL);
+	    	xTaskCreate(&submode,"U571",10240,NULL, 5, &submHandle);
 	    else
 	    {
 	    	printf("Not configured Mqtt\n");
@@ -934,6 +937,8 @@ static void cmdManager(void* arg)
 	{
 		if( xQueueReceive( mqttR, &cmd, portMAX_DELAY ))
 		{
+			time(&mgrTime[CMDMGR]);
+
 #ifdef DEBUGX
 			if(theConf.traceflag & (1<<MSGD))
 				printf("%sReceived: %s Fd %d Queue %d Heap %d\n",MSGDT,cmd.mensaje,cmd.fd,uxQueueMessagesWaiting(mqttR),esp_get_free_heap_size());
@@ -1187,6 +1192,8 @@ void framManager(void * pArg)
 		{
 			if(framSem)
 			{
+				time(&mgrTime[FRAMMGR]);
+
 				if(xSemaphoreTake(framSem, portMAX_DELAY/  portTICK_RATE_MS))
 				{
 					write_to_fram(theMeter.pos,theMeter.saveit);
@@ -1225,6 +1232,7 @@ static void pcntManager(void * pArg)
         res = xQueueReceive(pcnt_evt_queue, (void*)&evt,portMAX_DELAY / portTICK_PERIOD_MS);
         if (res == pdTRUE)
         {
+			time(&mgrTime[PINMGR]);
 			pcnt_get_counter_value((pcnt_unit_t)evt.unit,(short int *) &count);
 
 #ifdef DEBUGX
@@ -1402,8 +1410,12 @@ static void sendTelemetry()
 
 	if(telemetry)
 	{
+
 		lmessage=cJSON_Print(telemetry);
-		printf("To Host %s\n",lmessage);
+#ifdef DEBUGX
+		if(theConf.traceflag & (1<<MSGD))
+			printf("%sTo Host %s\n",MSGDT,lmessage);
+#endif
 	}
 	else
 	{
@@ -1424,10 +1436,10 @@ void connMgr(void* pArg)
 	meterType dummy;
 
 	//must ensure that the message is delivered to the Host NO MATTER WHAT
-	printf("Conn Manager Time %d\n",(int)pArg);
+//	printf("Conn Manager Time %d\n",(int)pArg);
 	delay((int)pArg);
 
-	printf("Sending Telemetry\n");
+//	printf("Sending Telemetry\n");
 	dummy.code=sendTelemetry;
 	dummy.saveit=true;
 	if(mqttQ)
@@ -1539,10 +1551,10 @@ void app_main()
 #endif
 
    	// Managers Tasks
-   	xTaskCreate(&cmdManager,"cmdMgr",4096,NULL, 5, NULL); 							//cmds received from the Host Controller via MQTT or internal TCP/IP. jSON based
-	xTaskCreate(&framManager,"framMgr",4096,NULL, configMAX_PRIORITIES-5, NULL);	// Fram Manager
-	xTaskCreate(&pcntManager,"pcntMgr",4096,NULL, configMAX_PRIORITIES-8, NULL);	// We also control 5 meters. Pseudo ISR. This is d manager
-	xTaskCreate(&buildMgr,"TCP",4096,(void*)1, configMAX_PRIORITIES-10, NULL);		// Messages from the Meter Controllers via socket manager
+   	xTaskCreate(&cmdManager,"cmdMgr",4096,NULL, 5, &cmdHandle); 							//cmds received from the Host Controller via MQTT or internal TCP/IP. jSON based
+	xTaskCreate(&framManager,"framMgr",4096,NULL, configMAX_PRIORITIES-5, &framHandle);	// Fram Manager
+	xTaskCreate(&pcntManager,"pcntMgr",4096,NULL, configMAX_PRIORITIES-8, &pinHandle);	// We also control 5 meters. Pseudo ISR. This is d manager
+	xTaskCreate(&buildMgr,"TCP",4096,(void*)1, configMAX_PRIORITIES-10, &buildHandle);		// Messages from the Meter Controllers via socket manager
 
 	// wait time from SNTP for 10 secs. If failure use FRAM last saved time
 	EventBits_t uxBits = xEventGroupWaitBits(wifi_event_group, SNTP_BIT, false, true, 10000/  portTICK_RATE_MS);//
@@ -1582,16 +1594,16 @@ void app_main()
 		fram.readMany(FRAMDATE,(uint8_t*)&now.thedate,sizeof(now.thedate));
 		updateDateTime(now);
 	}
-
+	theConf.bootcount++;
 	time(&theConf.lastReboot);
 	write_to_flash();
 
 	pcnt_init();// initialize it. Several tricks apply. Read there. Depends on Tariffs so must be after we know tariffs and date are OK
 
-	xTaskCreate(&watchDog,"dog",4096,(void*)1, 4, NULL);				// Care taker of MeterM to report to Host
+	xTaskCreate(&watchDog,"dog",4096,(void*)1, 4, &watchHandle);				// Care taker of MeterM to report to Host
 	xTaskCreate(&start_webserver,"web",4096,(void*)1, 4, &webHandle);	// Messages from the Meters. Controller Section socket manager
 
 #ifdef DISPLAY
-	xTaskCreate(&displayManager,"dispMgr",4096,NULL, 4, NULL);
+	xTaskCreate(&displayManager,"dispMgr",4096,NULL, 4, &displayHandle);
 #endif
 }

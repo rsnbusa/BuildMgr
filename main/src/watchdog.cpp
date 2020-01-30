@@ -16,6 +16,7 @@ void watchDog(void * pArg)
 	{
 		delay(100);			//minimum delay
 		now=millis();
+		time(&mgrTime[WATCHMGR]);
 
 		for (int a=0;a<theConf.reservedCnt;a++)
 		{
