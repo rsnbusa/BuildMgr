@@ -39,12 +39,12 @@ typedef struct taskp{
 } task_param;
 
 typedef struct meterType{
-	 bool saveit,lowThresf;
-	 char serialNumber[20];
-	 u16 beatsPerkW,curMonth,curMonthRaw,curDay,curDayRaw;
-	 u32 curLife,curCycle,lastKwHDate,msNow, minamps,maxamps,currentBeat,vanMqtt,ampTime,beatSave;
-	 u8 curHour,cycleMonth,curHourRaw,pos,pin,pinB;
-	 mqttp code;
+	 bool 	saveit,lowThresf;
+	 char 	serialNumber[20];
+	 u16 	beatsPerkW,curMonth,curMonthRaw,curDay,curDayRaw;
+	 u32 	curLife,curCycle,lastKwHDate,msNow, minamps,maxamps,currentBeat,vanMqtt,ampTime,beatSave;
+	 u8 	curHour,cycleMonth,curHourRaw,pos,pin,pinB;
+	 mqttp 	code;
 } meterType;
 
 typedef struct mqttMsg{
@@ -59,16 +59,16 @@ typedef struct i2cType{
 } i2ctype;
 
 typedef struct loginTarif{
-	time_t thedate;
-	uint16_t theTariff;
+	time_t		thedate;
+	uint16_t 	theTariff;
 } loginT;
 
 
 typedef struct pcomm{
-    int pComm;
+    int 	pComm;
     uint8_t pos;
-    void *pMessage;
-    double macn;
+    void 	*pMessage;
+    double	macn;
 }parg;
 
 
@@ -77,8 +77,9 @@ typedef void (*functrsn)(parg *);
 
 typedef struct cmdRecord{
     char comando[20];
-    uint8_t source;
-    functrsn code;
+    uint8_t 	source;
+    functrsn 	code;
+    uint32_t	count;
 }cmdRecord;
 
 typedef struct conId{
@@ -101,19 +102,19 @@ typedef struct config {
     u32 		bornKwh[MAXDEVS],centinel,traceflag;
     u8 			configured[MAXDEVS],active;
     connStruct	connId;
-    uint32_t	reservedMacs[10];
+    uint32_t	reservedMacs[MAXSTA];
     uint16_t	reservedCnt;
     time_t		lastReboot;
 } config_flash;
 
 typedef struct framq{
-	int whichMeter;
-	bool addit;
+	int 	whichMeter;
+	bool 	addit;
 }framMeterType;
 
 typedef struct pcntt{
-    int unit;  				// the PCNT unit that originated an interrupt
-    uint32_t status; 		// information on the event type that caused the interrupt
+    int 		unit;  				// the PCNT unit that originated an interrupt
+    uint32_t 	status; 		// information on the event type that caused the interrupt
 } pcnt_evt_t;
 
 typedef struct internalHost{

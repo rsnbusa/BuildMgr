@@ -44,9 +44,10 @@ extern "C"{
 #include "mqtt_client.h"
 #include "nvs_flash.h"
 #include "nvs.h"
+#include "rom/rtc.h"
 #include "sntp/sntp.h"
 #include "SSD1306.h"
-#include "rom/rtc.h"
+#include "tcpip_adapter.h"
 void app_main();
 }
 #endif

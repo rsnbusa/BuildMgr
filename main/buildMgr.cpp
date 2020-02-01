@@ -358,7 +358,7 @@ static void buildMgr(void *pvParameters)
     char 						addr_str[50];
     int 						addr_family;
     int 						ip_protocol;
-    int 						sock=0;
+    int 						sock=0,errcount=0;
     struct sockaddr_in 			source_addr;
     uint 						addr_len = sizeof(source_addr);
     struct sockaddr_in 			dest_addr;
@@ -402,12 +402,20 @@ static void buildMgr(void *pvParameters)
 
 		while (true)
 		{
-			sock = accept(listen_sock, (struct sockaddr *)&source_addr, &addr_len);
+			again:sock = accept(listen_sock, (struct sockaddr *)&source_addr, &addr_len);
 			if (sock < 0)
 			{
 				ESP_LOGE(TAG, "Unable to accept connection: errno %d", errno);
-				break;
+				errcount++;
+				if(errcount>10)
+					break;
+				else
+				{
+					delay(400);
+					goto again;
+				}
 			}
+			errcount=0;
 			time(&mgrTime[BUILDMGR]);
 
 			struct sockaddr_in* pV4Addr = (struct sockaddr_in*)&source_addr;
@@ -430,6 +438,7 @@ static void buildMgr(void *pvParameters)
 				if(theConf.traceflag & (1<<CMDD))
 					printf("%sInternal error no Ip %x\n",CMDDT,b);
 	#endif
+				// do not test MAC here since we need to get the message for the RSVP command, when there are 0 MACs reserved
 			}
 			else
 			{
@@ -593,6 +602,7 @@ static void update_ip()
 				printf("%02X", station.mac[i]);
 				if(i<5)printf(":");
 			}
+			printf("\n");
 		}
 #endif
 		u32 bigmac;
@@ -727,9 +737,32 @@ static void wifi_init(void)
 
 	//STA section
 	memset(&wifi_config,0,sizeof(wifi_config));//very important, do it again for sta else corrupted for ESP_IF_WIFI_STA
+
 	strcpy((char*)wifi_config.sta.ssid,INTERNET);
 	strcpy((char*)wifi_config.sta.password,INTERNETPASS);
 
+#define ENABLE_STATIC_IP
+#define STATIC_IP		"192.168.100.8"
+#define SUBNET_MASK		"255.255.255.0"
+#define GATE_WAY		"192.168.100.1"
+#define DNS_SERVER		"8.8.8.8"
+
+#ifdef ENABLE_STATIC_IP
+	//For using of static IP
+	tcpip_adapter_dhcpc_stop(TCPIP_ADAPTER_IF_STA); // Don't run a DHCP client
+
+	//Set static IP
+	tcpip_adapter_ip_info_t ipInfo;
+	inet_pton(AF_INET, STATIC_IP, &ipInfo.ip);
+	inet_pton(AF_INET, GATE_WAY, &ipInfo.gw);
+	inet_pton(AF_INET, SUBNET_MASK, &ipInfo.netmask);
+	tcpip_adapter_set_ip_info(TCPIP_ADAPTER_IF_STA, &ipInfo);
+
+	//Set Main DNS server
+	tcpip_adapter_dns_info_t dnsInfo;
+	inet_pton(AF_INET, DNS_SERVER, &dnsInfo.ip);
+	tcpip_adapter_set_dns_info(TCPIP_ADAPTER_IF_STA, ESP_NETIF_DNS_MAIN, &dnsInfo);
+#endif
     ESP_ERROR_CHECK(esp_wifi_set_config(ESP_IF_WIFI_STA, &wifi_config));
     ESP_ERROR_CHECK(esp_wifi_start());
     xEventGroupWaitBits(wifi_event_group, WIFI_BIT, false, true, portMAX_DELAY);
@@ -948,6 +981,14 @@ static void cmdManager(void* arg)
 			{
 				cJSON *monton= cJSON_GetObjectItem(elcmd,"Batch");
 				cJSON *ddmac= cJSON_GetObjectItem(elcmd,"macn");
+				cJSON *framGuard= cJSON_GetObjectItem(elcmd,"fram");
+
+				if(framGuard)
+					if(framGuard->valueint>0)
+					{
+						printf("Fram HW Failure in meter MAC %06x\n",(uint32_t)ddmac->valuedouble);
+						//send Host warning
+					}
 
 				if(monton && ddmac)										//MUST have a Batch and macn entry
 				{
@@ -992,7 +1033,7 @@ static void cmdManager(void* arg)
 								}
 								argument->macn=(u32)theMacNum;				//this allows HOST to NOT know the local MAC. If implemented its a great security feature
 							}
-
+							cmds[cualf].count++;			//keep a count of cmds rx
 							(*cmds[cualf].code)(argument);	// call the cmd and wait for it to end
 							free(argument);
 						}
@@ -1523,8 +1564,8 @@ void app_main()
 		printf("%sFree memory: %d bytes\n", BOOTDT,esp_get_free_heap_size());
 		printf("%sIDF version: %s\n", BOOTDT,esp_get_idf_version());
 	}
-	printf("\n%sFlash Button to erase config 3 secs%s\n",RED,RESETC);// chance to erase configuration and start fresh
-	delay(3000);
+	printf("\n%sFlash Button to erase config 1 secs%s\n",RED,RESETC);// chance to erase configuration and start fresh
+	delay(1000);
 #endif
 
 	//if wrong CENTINEL or Flash Button, erase configuration. Loses a lot of info. Must Configure the Manager

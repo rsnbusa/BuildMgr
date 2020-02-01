@@ -6,7 +6,7 @@
 #include <bits/stdc++.h>
 
 #define KBDT		"\e[36m[KBD]\e[0m"
-#define MAXCMDSK	24
+#define MAXCMDSK	26
 
 extern void delay(uint32_t a);
 extern void write_to_flash();
@@ -28,11 +28,11 @@ typedef struct cmd_kbd_t{
 cmdRecord_t cmdds[MAXCMDSK];
 
 uint16_t date2days(uint16_t y, uint8_t m, uint8_t d) {
-	uint8_t daysInMonth [12] ={ 31,28,31,30,31,30,31,31,30,31,30,31 };//offsets 0,31,59,90,120,151,181,212,243,273,304,334, +1 if leap year
+	uint8_t daysInMonth [12] ={ 31,28,31,30,31,30,31,31,30,31,30,31 };
 	uint16_t days = d;
 	for (uint8_t i = 0; i < m; i++)
 		days += daysInMonth[ i];
-	if (m > 1 && y % 4 == 0)
+	if (m == 1 && y % 4 == 0)
 		++days;
 	return days ;
 
@@ -55,14 +55,10 @@ cJSON *makeJson(string ss)
 		if (found!=std::string::npos)
 		{
 			cmdstr=ss.substr(start,found-start);
-		//	printf("Start %d found %d Param %d=%s\n",start,found,van,cmdstr.c_str());
-
 			fkey=cmdstr.find_first_of("=:");
 			if(fkey!=std::string::npos)
 			{
 				theK=cmdstr.substr(0,fkey);
-			//	printf("Key=%s Value=%s\n",cmdstr.substr(0,fkey).c_str(),
-			//			cmdstr.substr(fkey+1,cmdstr.length()).c_str());
 				for (size_t i=0; i<theK.length(); ++i)
 				    theK[i]= std::toupper(theK[i],loc);
 
@@ -91,27 +87,12 @@ cJSON *makeJson(string ss)
 
 	} while(found!=std::string::npos);
 
-//	if(start<ss.length())
+//	char *lmessage=cJSON_Print(root);
+//	if(lmessage)
 //	{
-//		cmdstr=ss.substr(start,ss.length());
-//	//	printf("Start %d found %d LastParam %d=%s\n",start,found,van,cmdstr.c_str());
-//		fkey=cmdstr.find_first_of("=:");
-//		if(fkey!=std::string::npos)
-//		{
-//			theK=cmdstr.substr(0,fkey);
-//			 for (size_t i=0; i<theK.length(); ++i)
-//							    theK[i]= std::toupper(theK[i],loc);
-//		//	printf("LKey=%s LValue=%s\n",cmdstr.substr(0,fkey).c_str(),
-//		//			cmdstr.substr(fkey+1,cmdstr.length()).c_str());
-//			cJSON_AddStringToObject(root,theK.c_str(),cmdstr.substr(fkey+1,cmdstr.length()).c_str());
-//		}
+//		printf("Root %s\n",lmessage);
+//		free(lmessage);
 //	}
-	char *lmessage=cJSON_Print(root);
-	if(lmessage)
-	{
-		printf("Root %s\n",lmessage);
-		free(lmessage);
-	}
 	return root;
 }
 
@@ -1244,15 +1225,15 @@ static void printControllers(string ss)
 	char str2[INET_ADDRSTRLEN];
 	int antes,son;
 	cJSON *params=NULL;
-	bool shortans=false;
+	bool shortans=true;
 
 	params=makeJson(ss);
 
 	if(params)
 	{
-		cJSON *jmeter= cJSON_GetObjectItem(params,"SHORT");
+		cJSON *jmeter= cJSON_GetObjectItem(params,"LONG");
 		if(jmeter)
-			shortans=true;
+			shortans=false;
 		cJSON_Delete(params);
 	}
 
@@ -1274,21 +1255,23 @@ static void printControllers(string ss)
 	for(int a=0;a<theConf.reservedCnt;a++)
 	{
 		inet_ntop( AF_INET,(in_addr*)&losMacs[a].theIp, str2, INET_ADDRSTRLEN );
-		printf("%sSlot[%d]%s=%06x IP=%s State=(%d)%s %s GTask %s Seen@%sStateChanges:",GREEN,a,CYAN,theConf.reservedMacs[a], str2,losMacs[a].dState,stateName[losMacs[a].dState],losMacs[a].report==REPORTED?"Reported":"",
-				losMacs[a].theHandle?"Alive":"Dead",ctime(&losMacs[a].lastUpdate));
-		antes=0;
-		for(int b=0;b<4;b++)
+		printf("%sSlot[%d]%s=%06x %sIP=%s %sState(#%d)%s%s%s(%s) GTask=%s%s %sSeen%s@%s",GREEN,a,CYAN,theConf.reservedMacs[a],YELLOW, str2,WHITEC,losMacs[a].msgCount,GREEN,stateName[losMacs[a].dState],CYAN,
+				losMacs[a].report==REPORTED? RED "Reported" RESETC:GREEN "OK" RESETC,losMacs[a].theHandle?LYELLOW "Alive":MAGENTA "Dead",RESETC,LRED,WHITEC,ctime(&losMacs[a].lastUpdate));
+		if(!shortans)
 		{
-			son=losMacs[a].stateChangeTS[b]-antes;
-			printf("[%s]=%dms(%d) ",stateName[b],losMacs[a].stateChangeTS[b],son);
-			antes=losMacs[a].stateChangeTS[b];
-		}
-			printf("\n");
+			antes=0;
+			printf("sStateChanges:");
+			for(int b=0;b<4;b++)
+			{
+				son=losMacs[a].stateChangeTS[b]-antes;
+				printf("[%s]=%dms(%d) ",stateName[b],losMacs[a].stateChangeTS[b],son);
+				antes=losMacs[a].stateChangeTS[b];
+			}
+				printf("\n");
 
-			if(!shortans)
-				for (int b=0;b<MAXDEVS;b++)
-					printf("%sMeter[%d]=%s KwH %6d Beats %9d\n",b%2?CYAN:GREEN,b,losMacs[a].meterSerial[b],losMacs[a].controlLastKwH[b],losMacs[a].controlLastBeats[b]);
-		printf("\n");
+					for (int b=0;b<MAXDEVS;b++)
+						printf("%sMeter[%d]=%s KwH %6d Beats %9d\n",b%2?CYAN:GREEN,b,losMacs[a].meterSerial[b],losMacs[a].controlLastKwH[b],losMacs[a].controlLastBeats[b]);
+		}
 	}
 
 	printf("%s\n",KBDT);
@@ -1458,11 +1441,62 @@ static void sha256(string ss)
 	printf("\n");
 }
 
+static void clearWL(string ss)
+{
+	char s1[20];
+	printf("%sAre you sure clear Whitelist?:%s",MAGENTA,RESETC);
+	fflush(stdout);
+	int fueron=get_string(UART_NUM_0,10,s1);
+	if(fueron<0)
+		return;
+	memset(theConf.reservedMacs,0,sizeof(theConf.reservedMacs));
+	theConf.reservedCnt=0;
+	write_to_flash();
+	printf("White List Cleared\n");
+}
+
+static void WhiteList(string ss)
+{
+	char s1[20];
+	int pos=-1;
+
+	cJSON *params=makeJson(ss);
+
+	if(params)
+	{
+		cJSON *jmeter= cJSON_GetObjectItem(params,"POS");
+		if(jmeter)
+			pos=jmeter->valueint;
+		cJSON_Delete(params);
+	}
+	else
+	{
+		printf("%sPosition to Delete:%s",MAGENTA,RESETC);
+		fflush(stdout);
+		pos=get_string(UART_NUM_0,10,s1);
+		if(pos<0)
+			return;
+	}
+	if(pos<0 || pos>theConf.reservedCnt-1)
+	{
+		printf("Pos %d Out of Range(%d)\n",pos,theConf.reservedCnt);
+		return;
+	}
+	int son=(MAXSTA-(pos+1))*sizeof(uint32_t);
+	if(pos<MAXSTA-1)
+		memmove(&theConf.reservedMacs[pos],&theConf.reservedMacs[pos+1],son);
+	memset(&theConf.reservedMacs[MAXSTA-1],0,sizeof(theConf.reservedMacs[0]));
+
+	theConf.reservedCnt--;
+	write_to_flash();
+	printf("WhiteList Entry %d Cleared Count %d\n",pos,theConf.reservedCnt);
+}
+
 void init_kbd_commands()
 {
 	strcpy((char*)&cmdds[0].comando,"Config");			cmdds[ 0].code=confStatus;			cmdds[0].help="SHORT";
 	strcpy((char*)&cmdds[1].comando,"WebReset");		cmdds[ 1].code=webReset;			cmdds[1].help="";
-	strcpy((char*)&cmdds[2].comando,"Controllers");		cmdds[ 2].code=printControllers;	cmdds[2].help="SHORT";
+	strcpy((char*)&cmdds[2].comando,"Controllers");		cmdds[ 2].code=printControllers;	cmdds[2].help="LONG";
 	strcpy((char*)&cmdds[3].comando,"MeterStat");		cmdds[ 3].code=meterStatus;			cmdds[3].help="METER";
 	strcpy((char*)&cmdds[4].comando,"EraseTariff");		cmdds[ 4].code=eraseTariff;			cmdds[4].help="";
 	strcpy((char*)&cmdds[5].comando,"MeterCount");		cmdds[ 5].code=meterCount;			cmdds[5].help="";
@@ -1485,6 +1519,8 @@ void init_kbd_commands()
 	strcpy((char*)&cmdds[21].comando,"Tariff");			cmdds[21].code=tariffs;				cmdds[21].help="";
 	strcpy((char*)&cmdds[22].comando,"Firmware");		cmdds[22].code=firmware;			cmdds[22].help="";
 	strcpy((char*)&cmdds[23].comando,"Sha256");			cmdds[23].code=sha256;				cmdds[23].help="";
+	strcpy((char*)&cmdds[24].comando,"ClearWL");		cmdds[24].code=clearWL;				cmdds[24].help="";
+	strcpy((char*)&cmdds[25].comando,"WhiteList");		cmdds[25].code=WhiteList;			cmdds[25].help="POS";
 }
 
 void kbd(void *arg)

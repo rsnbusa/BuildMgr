@@ -58,10 +58,10 @@ void statusCmd(parg *argument)
 			{
 #ifdef DEBUGX
 				if(theConf.traceflag & (1<<CMDD))
-					printf("%sStarting timer for meterController %d\n",CMDDT,argument->pos);
+					printf("%sStarting timer for meterController %d MAC %x\n",CMDDT,argument->pos,losMacs[argument->pos].macAdd);
 #endif
 				int cual=argument->pos;
-				losMacs[argument->pos].timerH=xTimerCreate("Monitor",61000 /portTICK_PERIOD_MS,pdTRUE,( void * )cual,&monitorCallback);
+				losMacs[argument->pos].timerH=xTimerCreate("Monitor",TIMEWAITMAC /portTICK_PERIOD_MS,pdTRUE,( void * )cual,&monitorCallback);
 				if(losMacs[argument->pos].timerH==NULL)
 					printf("Failed to create HourChange timer\n");
 				xTimerStart(losMacs[argument->pos].timerH,0); //Start it
@@ -71,7 +71,7 @@ void statusCmd(parg *argument)
 			{
 #ifdef DEBUGX
 				if(theConf.traceflag & (1<<CMDD))
-					printf("%sreseting timer for meterController %d\n",CMDDT,argument->pos);
+					printf("%sreseting timer for meterController %d MAC %x\n",CMDDT,argument->pos,losMacs[argument->pos].macAdd);
 #endif
 				xTimerReset(losMacs[argument->pos].timerH,0); //Start it with new
 

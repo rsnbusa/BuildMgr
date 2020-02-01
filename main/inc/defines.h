@@ -13,7 +13,7 @@
 
 #define BUFFSIZE 						4096
 #define BUILDMGRPORT					30000
-
+#define TIMEWAITMAC						61000	//miliseconds
 #define CENTINEL						0x12345678
 #define OTA_BIN_FILE	 				"http://feediot.c1.biz/buildMgrOled.bin"
 
@@ -96,6 +96,10 @@
 #define MAGENTA							"\e[35m"
 #define CYAN							"\e[36m"
 #define WHITEC							"\e[37m"
+#define GRAY							"\e[90m"
+#define LRED							"\e[91m"
+#define LGREEN							"\e[92m"
+#define LYELLOW							"\e[93m"
 #define RESETC							"\e[0m"
 
 
