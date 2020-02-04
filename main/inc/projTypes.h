@@ -30,6 +30,8 @@ typedef struct macC{
 	meterState		dState,pState;
 	reportState		report;
 	uint32_t		stateChangeTS[sizeof(reportState)];
+	uint8_t			hwState,toCount;
+	char			mtmName[20];
 } macControl;
 
 typedef struct taskp{
@@ -47,7 +49,7 @@ typedef struct meterType{
 	 mqttp 	code;
 } meterType;
 
-typedef struct mqttMsg{
+typedef struct mqttMsgCmd{
 	char	*mensaje;
 	int		fd;
 	u16		pos;
@@ -72,6 +74,12 @@ typedef struct pcomm{
 }parg;
 
 
+typedef struct mqttMsgInt{
+	uint8_t 	*message;	// memory of message. MUST be freed by the Submode Routine and allocated by caller
+	uint16_t	msgLen;
+	char		*queueName;	// queue name to send
+	uint32_t	maxTime;	//max ms to wait for publish ACK
+}mqttMsg_t;
 
 typedef void (*functrsn)(parg *);
 
@@ -82,29 +90,15 @@ typedef struct cmdRecord{
     uint32_t	count;
 }cmdRecord;
 
-typedef struct conId{
-	int8_t		altDay;
-	u8			dDay;
-	u16			connSlot;
-}connStruct;
-
-typedef struct slot{
-	u8			slot_time;
-	u8			server_num;
-	u8			tariff_id;
-}slt_t;
-
 typedef struct config {
     char 		medidor_id[MAXDEVS][MAXCHARS],meterConnName[MAXCHARS];
     time_t 		bornDate[MAXDEVS];
     u16 		beatsPerKw[MAXDEVS],bootcount,lastResetCode;
-    slt_t 		slot_Server;
     u32 		bornKwh[MAXDEVS],centinel,traceflag;
     u8 			configured[MAXDEVS],active;
-    connStruct	connId;
-    uint32_t	reservedMacs[MAXSTA];
+    uint32_t	reservedMacs[MAXSTA],msgTimeOut;
     uint16_t	reservedCnt;
-    time_t		lastReboot;
+    time_t		lastReboot,slotReserveDate[MAXSTA];
 } config_flash;
 
 typedef struct framq{

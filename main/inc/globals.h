@@ -41,7 +41,7 @@ EXTERN TaskHandle_t						webHandle,timeHandle,simHandle,blinkHandle,cmdHandle,fr
 EXTERN time_t							mgrTime[7];
 EXTERN TimerHandle_t					hourChangeT,connHandle;
 EXTERN u16 								theGuard,qdelay,llevoMsg,mesg,diag,horag,yearg,wDelay,tarifasDia[24],oldMesg,oldDiag,oldHorag,yearDay,oldYearDay;
-EXTERN uint32_t							totalPulses,oldCurBeat[MAXDEVS],oldCurLife[MAXDEVS],sentTotal,llevo,tallies[MAXSTA][MAXDEVS],theMacNum;
+EXTERN uint32_t							totalPulses,oldCurBeat[MAXDEVS],oldCurLife[MAXDEVS],sentTotal,llevo,tallies[MAXSTA][MAXDEVS],theMacNum,startGuard;
 EXTERN uint8_t 							daysInMonth [12],qwait,lastalign,lastFont,workingDevs;
 #ifdef KBD
 EXTERN char								lookuptable[NKEYS][10];

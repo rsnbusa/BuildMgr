@@ -15,22 +15,22 @@ bool check_delivery_date(int *cuanto,uint8_t eldia)
 	time_t now,t;
 	struct tm timeinfo;
 
-	if (eldia==theConf.connId.dDay)
-	{
-		time(&now);
-		localtime_r(&now, &timeinfo);
-		timeinfo.tm_hour=0;
-		timeinfo.tm_min=0;
-		timeinfo.tm_sec=0;
-		t=mktime ( &timeinfo );//Today at 0:0:0
-			//its today we need to deliver Telemetry
-			// time to delivery is slot_time*connSlot-faltan from 0 hours
-		*cuanto=theConf.slot_Server.slot_time*theConf.connId.connSlot+t-now;
-		//if negative in the Past should check if Sent
-		printf("To Deliver today %d secs %d SlotTime %d connSlot %d conAlt %d conDDay %d Secsnow %d Now %d T %d\n",eldia,*cuanto,theConf.slot_Server.slot_time,theConf.connId.connSlot,
-				theConf.connId.altDay,theConf.connId.dDay,(int)(now-t),(int)now,(int)t);
-		return true;// its our day and *cuanto time to send metrics
-	}
+//	if (eldia==theConf.connId.dDay)
+//	{
+//		time(&now);
+//		localtime_r(&now, &timeinfo);
+//		timeinfo.tm_hour=0;
+//		timeinfo.tm_min=0;
+//		timeinfo.tm_sec=0;
+//		t=mktime ( &timeinfo );//Today at 0:0:0
+//			//its today we need to deliver Telemetry
+//			// time to delivery is slot_time*connSlot-faltan from 0 hours
+//		*cuanto=theConf.slot_Server.slot_time*theConf.connId.connSlot+t-now;
+//		//if negative in the Past should check if Sent
+//		printf("To Deliver today %d secs %d SlotTime %d connSlot %d conAlt %d conDDay %d Secsnow %d Now %d T %d\n",eldia,*cuanto,theConf.slot_Server.slot_time,theConf.connId.connSlot,
+//				theConf.connId.altDay,theConf.connId.dDay,(int)(now-t),(int)now,(int)t);
+//		return true;// its our day and *cuanto time to send metrics
+//	}
 	return false;
 }
 

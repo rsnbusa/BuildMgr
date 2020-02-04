@@ -13,6 +13,8 @@
 #include "projTypes.h"
 #include "globals.h"
 
+extern uint32_t millis();
+
 void write_to_fram(u8 meter,bool addit)
 {
 	time_t timeH;
@@ -52,6 +54,15 @@ void write_to_fram(u8 meter,bool addit)
 			fram.read_guard((uint8_t*)&theG);
 			if(theG!=theGuard)
 				printf("Fram is lost\n");
+
+			if(millis()-startGuard>600000)
+			{
+				theGuard=esp_random();
+				fram.write_guard(theGuard);				// theguard is dynamic and will change every 10 minutes
+				startGuard=millis();
+
+			}
+
 			fram.write_beat(meter,theMeters[meter].currentBeat);
 			fram.writeMany(FRAMDATE,(uint8_t*)&timeH,sizeof(timeH));//last known date
 		}

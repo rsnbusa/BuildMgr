@@ -11,9 +11,9 @@
 #define SDAW                			21      // SDA
 #endif
 
+#define MAXTIMEOUTS						5
 #define BUFFSIZE 						4096
 #define BUILDMGRPORT					30000
-#define TIMEWAITMAC						61000	//miliseconds
 #define CENTINEL						0x12345678
 #define OTA_BIN_FILE	 				"http://feediot.c1.biz/buildMgrOled.bin"
 

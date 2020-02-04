@@ -1254,13 +1254,19 @@ static void printControllers(string ss)
 
 	for(int a=0;a<theConf.reservedCnt;a++)
 	{
+
+		time_t t = time(NULL);
+		struct tm * p = localtime(&t);
+		strftime(tempb, 100, "%D %T ", p);
+
 		inet_ntop( AF_INET,(in_addr*)&losMacs[a].theIp, str2, INET_ADDRSTRLEN );
-		printf("%sSlot[%d]%s=%06x %sIP=%s %sState(#%d)%s%s%s(%s) GTask=%s%s %sSeen%s@%s",GREEN,a,CYAN,theConf.reservedMacs[a],YELLOW, str2,WHITEC,losMacs[a].msgCount,GREEN,stateName[losMacs[a].dState],CYAN,
-				losMacs[a].report==REPORTED? RED "Reported" RESETC:GREEN "OK" RESETC,losMacs[a].theHandle?LYELLOW "Alive":MAGENTA "Dead",RESETC,LRED,WHITEC,ctime(&losMacs[a].lastUpdate));
+		printf("%sSlot[%d]%s=%06x %sIP=%s %sState(#%d)%s%s%s(%s) GTask=%s%s %sHW=%s %sBorn=%s%s %sSeen%s@%s",GREEN,a,CYAN,theConf.reservedMacs[a],YELLOW, str2,WHITEC,
+				losMacs[a].msgCount,GREEN,stateName[losMacs[a].dState],CYAN,losMacs[a].report==REPORTED? RED "Reported" RESETC:GREEN "OK" RESETC,
+				losMacs[a].theHandle?LYELLOW "Alive":MAGENTA "Dead",RESETC,GRAY,losMacs[a].hwState?LRED "FAIL":LGREEN "OK",LYELLOW,RESETC,tempb,YELLOW,RESETC,ctime(&losMacs[a].lastUpdate));
 		if(!shortans)
 		{
 			antes=0;
-			printf("sStateChanges:");
+			printf("StateChanges:");
 			for(int b=0;b<4;b++)
 			{
 				son=losMacs[a].stateChangeTS[b]-antes;

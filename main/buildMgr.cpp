@@ -8,7 +8,7 @@
 void kbd(void *pArg);
 void write_to_fram(u8 meter,bool addit);
 void testMqtt();
-static void sendTelemetry();
+char *sendTelemetry();
 void start_webserver(void* pArg);
 void watchDog(void* pArg);
 void loadit(parg *pArg);
@@ -138,16 +138,20 @@ void write_to_flash() //save our configuration
 
 void sendTelemetryCmd(parg *pArg)
 {
-	meterType dummy;
+	mqttMsg_t mqttMsgHandle;
 
 #ifdef DEBUGX
 	if(theConf.traceflag & (1<<HOSTD))
 		printf("%sHost requested telemetry readings\n",HOSTDT);
 #endif
-	dummy.code=sendTelemetry;
-	dummy.saveit=true;
+	char *mensaje=sendTelemetry();
+	mqttMsgHandle.msgLen=strlen(mensaje);
+	mqttMsgHandle.message=(uint8_t*)mensaje;
+	mqttMsgHandle.maxTime=4000;
+	mqttMsgHandle.queueName=(char*)controlQueue.c_str();
 	if(mqttQ)
-		xQueueSend( mqttQ,&dummy,0 );
+		xQueueSend( mqttQ,&mqttMsgHandle,0 );			//Submode will free the mensaje variable
+	//	printf("Sending Telemetry\n");
 }
 
 static void pcnt_intr_handler(void *arg)
@@ -244,7 +248,7 @@ static void pcnt_init(void)
 
 static void reserveSlot(parg* argument)
 {
-	uint8_t yes=1;
+	int8_t yes=1;
 	u32 macc=(u32)argument->macn;
 
 	if(theConf.traceflag & (1<<CMDD))
@@ -255,13 +259,15 @@ static void reserveSlot(parg* argument)
 		if(theConf.reservedMacs[a]==macc)
 		{
 			yes=-2;		//duplicate HOW COME????? in normal conditions
+			printf("Slot already exists\n");
 			send(argument->pComm, &yes, sizeof(yes), 0);//already registered
 			return;
 		}
 	}
 //add it
 	theConf.reservedMacs[theConf.reservedCnt]=macc;
-	printf("Mac reserved %x slot %d\n",theConf.reservedMacs[theConf.reservedCnt],theConf.reservedCnt);
+	time(&theConf.slotReserveDate[theConf.reservedCnt]);
+	printf("Mac reserved %x slot %d %s",theConf.reservedMacs[theConf.reservedCnt],theConf.reservedCnt,ctime(&theConf.slotReserveDate[theConf.reservedCnt]));
 	yes=theConf.reservedCnt++;	//send slot assigned
 	send(argument->pComm, &yes, sizeof(yes), 0);
 	write_to_flash();		//independent from FRAM
@@ -306,26 +312,20 @@ static void getMessage(void *pArg)
 				   goto exit;
 				} else {
 					// check special reserve msg
-					if(theP->macf<0) //no mac found in buildmgr. Checxk for Reserve Cmd
+					if(strstr(comando.mensaje,"rsvp")!=NULL)
 					{
-						if(strstr(comando.mensaje,"rsvp")==NULL)
-						{
-							if(theConf.traceflag & (1<<CMDD))
-								printf("%sTask Killed No MAC \n", CMDDT);
-							goto exit;
-						}
-						else
-						{
-							*(comando.mensaje+len)=0;
-							// reserve cmd rx. Process it without queue
-							// msg struct simple = rsvp123456789 rsvp=key numbers are macn in chars
-							memcpy(s1,comando.mensaje+4,len-4);
-							argument.macn=atof(s1);
-							argument.pComm=sock;
-							reserveSlot(&argument);
-							goto exit; //done
-						}
+						*(comando.mensaje+len)=0;
+						// reserve cmd rx. Process it without queue
+						// msg struct simple = rsvp123456789 rsvp=key numbers are macn in chars
+						memcpy(s1,comando.mensaje+4,len-4);
+						argument.macn=atof(s1);
+						argument.pComm=sock;
+						reserveSlot(&argument);
+						goto exit; //done. Kill task and start again. Station will reboot
 					}
+
+					if(theP->macf<0) //no mac found in buildmgr.
+						goto exit;
 
 					time(&losMacs[pos].lastUpdate);
 					losMacs[pos].msgCount++;
@@ -367,6 +367,7 @@ static void buildMgr(void *pvParameters)
 
     while (true)
     {
+		reListen:
 		dest_addr.sin_addr.s_addr = htonl(INADDR_ANY);
 		dest_addr.sin_family = AF_INET;
 		dest_addr.sin_port = htons(BUILDMGRPORT);
@@ -407,11 +408,18 @@ static void buildMgr(void *pvParameters)
 			{
 				ESP_LOGE(TAG, "Unable to accept connection: errno %d", errno);
 				errcount++;
-				if(errcount>10)
-					break;
+				if(errcount>3)			//not helping really but...
+				{
+					for (int a=0;a<theConf.reservedCnt;a++)
+						{
+							if(losMacs[a].theSock>3)
+								close(losMacs[a].theSock);
+						}
+					goto reListen;
+				}
 				else
 				{
-					delay(400);
+					delay(100);
 					goto again;
 				}
 			}
@@ -494,7 +502,10 @@ static void wifi_event_handler(void* arg, esp_event_base_t event_base,
     			printf("MtM Rebooted %x last State %s seen %s",losMacs[estem].macAdd,
     					stateName[losMacs[estem].dState],ctime(&losMacs[estem].lastUpdate));
     		}
-    		//in theory a Disconnect should have happened but not in reality so kill tasks
+    		if(losMacs[estem].theSock>0)
+    			close(losMacs[estem].theSock);
+
+    			//in theory a Disconnect should have happened but not in reality so kill tasks
     		if(losMacs[estem].theHandle)
 			{
 				vTaskDelete(losMacs[estem].theHandle);
@@ -515,7 +526,8 @@ static void wifi_event_handler(void* arg, esp_event_base_t event_base,
     	}
     	break;
 	case WIFI_EVENT_AP_STADISCONNECTED:
-    	printf("Mac disco %02x:%02x:%02x:%02x:%02x:%02x\n",ev->mac[0],ev->mac[1],ev->mac[2],ev->mac[3],ev->mac[4],ev->mac[5]);
+		if(theConf.traceflag & (1<<WIFID))
+			printf("Mac disco %02x:%02x:%02x:%02x:%02x:%02x\n",ev->mac[0],ev->mac[1],ev->mac[2],ev->mac[3],ev->mac[4],ev->mac[5]);
 		memcpy((void*)&newmac,&ev->mac[2],4);
 		estem=find_mac(newmac);
 		if(estem>=0)
@@ -536,6 +548,8 @@ static void wifi_event_handler(void* arg, esp_event_base_t event_base,
 						xTimerDelete(losMacs[estem].timerH,0);
 						losMacs[estem].timerH=NULL;
 			}
+    		if(losMacs[estem].theSock>0)
+    			close(losMacs[estem].theSock);
 			//a controller is dying should report event to Host or keep an eye on it before sending msg
 		}
 		break;
@@ -827,84 +841,78 @@ esp_err_t mqtt_event_handler(esp_mqtt_event_handle_t event)
 
 static void submode(void * pArg)
 {
-	meterType meter;
+	mqttMsg_t mqttHandle;
 	u32 timetodelivery=0;
 	while(true)
 	{
 		if(wifif) // is the network up?
 		{
-			if( xQueueReceive( mqttQ, &meter, portMAX_DELAY ))
+			if( xQueueReceive( mqttQ, &mqttHandle, portMAX_DELAY ))
 			{
 #ifdef DEBUGX
 				time(&mgrTime[SUBMGR]);
 				if(theConf.traceflag & (1<<CMDD))
-				{
 					printf("%sHeap after submode rx %d\n",CMDDT,esp_get_free_heap_size());
-					printf("%sReady to send for Pin %d Pos %d Qwaiting=%d\n",CMDDT,meter.pin,meter.pos,uxQueueMessagesWaiting( mqttQ ));
-				}
 #endif
-				if(meter.saveit) //used as a Send cmd
+				timetodelivery=millis();
+				if(!clientCloud) //just in case
+						printf("Error no client mqtt\n");
+				else
 				{
-					timetodelivery=millis();
-					if(!clientCloud) //just in case
-							printf("Error no client mqtt\n");
-					else
-					{
 #ifdef DEBUGX
-						if(theConf.traceflag & (1<<CMDD))
-							printf("%sStarting mqtt\n",CMDDT);
+					if(theConf.traceflag & (1<<CMDD))
+						printf("%sStarting mqtt\n",CMDDT);
 #endif
-						xEventGroupClearBits(wifi_event_group, MQTT_BIT);//clear flag to wait on
-						if(esp_mqtt_client_start(clientCloud)==ESP_OK) //we got an OK
+					xEventGroupClearBits(wifi_event_group, MQTT_BIT);//clear flag to wait on
+					if(esp_mqtt_client_start(clientCloud)==ESP_OK) //we got an OK
+					{
+							// when connected send the message
+						//wait for the CONNECT mqtt msg
+						if(xEventGroupWaitBits(wifi_event_group, MQTT_BIT, false, true, 4000/  portTICK_RATE_MS))
 						{
-								// when connected send the message
-							//wait for the CONNECT mqtt msg
-							if(xEventGroupWaitBits(wifi_event_group, MQTT_BIT, false, true, 4000/  portTICK_RATE_MS))
+#ifdef DEBUGX
+							if(theConf.traceflag & (1<<CMDD))
+								printf("%sSending Mqtt state\n",CMDDT);
+#endif
+							xEventGroupClearBits(wifi_event_group, PUB_BIT); // clear our waiting bit
+
+							esp_mqtt_client_publish(clientCloud, mqttHandle.queueName, (char*)mqttHandle.message, mqttHandle.msgLen, 1,0);
+							//Wait PUB_BIT or 4 secs for Publish then close connection
+
+							if(!xEventGroupWaitBits(wifi_event_group, PUB_BIT, false, true,  mqttHandle.maxTime/  portTICK_RATE_MS))
 							{
 #ifdef DEBUGX
 								if(theConf.traceflag & (1<<CMDD))
-									printf("%sSending Mqtt state\n",CMDDT);
-#endif
-								xEventGroupClearBits(wifi_event_group, PUB_BIT); // clear our waiting bit
-
-								// Call the sending routine if any
-								if(meter.code)
-									(*meter.code)();
-
-								//Wait PUB_BIT or 4 secs for Publish then close connection
-
-								if(!xEventGroupWaitBits(wifi_event_group, PUB_BIT, false, true,  4000/  portTICK_RATE_MS))
-								{
-#ifdef DEBUGX
-									if(theConf.traceflag & (1<<CMDD))
-										printf("Publish TimedOut\n");
-#endif
-								}
-
-								esp_mqtt_client_stop(clientCloud);
-#ifdef DEBUGX
-								if(theConf.traceflag & (1<<CMDD))
-									printf("%sStopping\n",CMDDT);
+									printf("Publish TimedOut\n");
 #endif
 							}
-							else
-							{ //it failed to start shouldnt close it
-							//	esp_mqtt_client_stop(clientCloud);
+							if(mqttHandle.message)
+								free(mqttHandle.message);			//we free the message HERE
+
+							esp_mqtt_client_stop(clientCloud);
 #ifdef DEBUGX
-								if(theConf.traceflag & (1<<CMDD))
-									printf("%sStart Timed out\n",CMDDT);
+							if(theConf.traceflag & (1<<CMDD))
+								printf("%sStopping\n",CMDDT);
 #endif
-							}
 						}
 						else
-						 printf("Failed to start when available\n");
+						{ //it failed to start shouldnt close it
+						//	esp_mqtt_client_stop(clientCloud);
+#ifdef DEBUGX
+							if(theConf.traceflag & (1<<CMDD))
+								printf("%sStart Timed out\n",CMDDT);
+#endif
+						}
 					}
+					else
+					 printf("Failed to start when available\n");
 				}
+
 #ifdef DEBUGX
 				if(theConf.traceflag & (1<<CMDD))
 				{
 					printf("%sDelivery time %dms\n",CMDDT,millis()-timetodelivery);
-					printf("%sSent %d pin %d. Heap after submode %d\n",CMDDT,++sentTotal,meter.pin,esp_get_free_heap_size());
+					printf("%sSent %d. Heap after submode %d\n",CMDDT,++sentTotal,esp_get_free_heap_size());
 				}
 #endif
 			}
@@ -934,7 +942,7 @@ static void mqtt_app_start(void)
 	     mqtt_cfg.event_handle = 			mqtt_event_handler;
 	     mqtt_cfg.disable_auto_reconnect=	true;
 #endif
-		mqttQ = xQueueCreate( 20, sizeof( meterType ) );
+		mqttQ = xQueueCreate( 20, sizeof( mqttMsg_t ) );
 		if(!mqttQ)
 			printf("Failed queue\n");
 
@@ -961,6 +969,7 @@ static void cmdManager(void* arg)
 {
 	cmdType cmd;
 	cJSON *elcmd;
+	char	mtmName[20];
 
 	mqttR = xQueueCreate( 20, sizeof( cmdType ) );
 			if(!mqttR)
@@ -982,14 +991,39 @@ static void cmdManager(void* arg)
 				cJSON *monton= cJSON_GetObjectItem(elcmd,"Batch");
 				cJSON *ddmac= cJSON_GetObjectItem(elcmd,"macn");
 				cJSON *framGuard= cJSON_GetObjectItem(elcmd,"fram");
+				cJSON *jmtmName= cJSON_GetObjectItem(elcmd,"Controller");
+
+				if (jmtmName)
+					strcpy(mtmName,jmtmName->valuestring);
+				else
+					memset(mtmName,0,sizeof(mtmName));
+
+				if(losMacs[cmd.pos].mtmName!=jmtmName)
+					strcpy(losMacs[cmd.pos].mtmName,mtmName);
+
 
 				if(framGuard)
-					if(framGuard->valueint>0)
+				{
+					uint8_t oldhw=losMacs[cmd.pos].hwState;
+					losMacs[cmd.pos].hwState=framGuard->valueint;
+					if(framGuard->valueint>0 && oldhw==0)
 					{
-						printf("Fram HW Failure in meter MAC %06x\n",(uint32_t)ddmac->valuedouble);
+#ifdef DEBUGX
+						if(theConf.traceflag & (1<<CMDD))
+							printf("%sFram HW Failure in meter MAC %06x MtM %s\n",CMDDT,(uint32_t)ddmac->valuedouble,mtmName);
+#endif
 						//send Host warning
+						mqttMsg_t 	mqttMsgHandle;
+						char		*textt=(char*)malloc(100);			//MUST be a malloc, will be Free
+						sprintf(textt,"Fram HW Failure in meter MAC %06x MtM %s\n",(uint32_t)ddmac->valuedouble,mtmName);
+						mqttMsgHandle.msgLen=strlen(textt);
+						mqttMsgHandle.message=(uint8_t*)textt;
+						mqttMsgHandle.maxTime=4000;
+						mqttMsgHandle.queueName=(char*)"MeterIoT/EEQ/SOS";
+						if(mqttQ)
+							xQueueSend( mqttQ,&mqttMsgHandle,0 );			//Submode will free the mensaje variable
 					}
-
+				}
 				if(monton && ddmac)										//MUST have a Batch and macn entry
 				{
 					int son=cJSON_GetArraySize(monton);
@@ -1113,6 +1147,9 @@ static void init_vars()
 	llevoMsg=0;
 	miscanf=false;
 
+	if(theConf.msgTimeOut<10000)
+		theConf.msgTimeOut=61000;	//just in case
+
 	memset(&losMacs,0,sizeof(losMacs));
 	memset(&setupHost,0,sizeof(setupHost));
 	memset(&theMeters,0,sizeof(theMeters));
@@ -1196,7 +1233,7 @@ static void init_vars()
 static void init_fram()
 {
 	// FRAM Setup
-	theGuard = rand();
+	theGuard = esp_random();
 	framSem=NULL;
 	spi_flash_init();
 
@@ -1210,7 +1247,7 @@ static void init_fram()
 	if(framSem)
 	{
 		fram.write_guard(theGuard);				// theguard is dynamic and will change every boot.
-
+		startGuard=millis();
 		for (int a=0;a<MAXDEVS;a++)
 			load_from_fram(a);
 	}
@@ -1330,8 +1367,6 @@ static void pcntManager(void * pArg)
 
 				if(framQ)
 					xQueueSend( framQ,&theMeters[evt.unit],0);//copy to fram Manager
-		//		if(mqttQ)
-		//			xQueueSend( mqttQ,&theMeters[evt.unit],0 );
 			}
         } else
             printf("PCNT Failed Queue\n");
@@ -1443,7 +1478,7 @@ void testMqtt()
 		cJSON_Delete(telemetry);
 }
 
-static void sendTelemetry()
+char *sendTelemetry()
 {
 	time_t now=0;
 	cJSON * telemetry=makeGroupMeters();
@@ -1462,30 +1497,28 @@ static void sendTelemetry()
 	{
 		printf("Failed telemetry\n");
 	}
-
 	time(&now);
-	esp_mqtt_client_publish(clientCloud, controlQueue.c_str(), lmessage, 0, 1,0);
 	fram.write_cycle(mesg,now);
-	if(lmessage)
-		free(lmessage);
+
 	if(telemetry)
 		cJSON_Delete(telemetry);
+	return lmessage;
+
 	}
 
 void connMgr(void* pArg)
 {
-	meterType dummy;
-
-	//must ensure that the message is delivered to the Host NO MATTER WHAT
-//	printf("Conn Manager Time %d\n",(int)pArg);
+	mqttMsg_t mqttMsgHandle;
 	delay((int)pArg);
 
-//	printf("Sending Telemetry\n");
-	dummy.code=sendTelemetry;
-	dummy.saveit=true;
+	char *mensaje=sendTelemetry();
+	mqttMsgHandle.msgLen=strlen(mensaje);
+	mqttMsgHandle.message=(uint8_t*)mensaje;
+	mqttMsgHandle.maxTime=4000;
+	mqttMsgHandle.queueName=(char*)controlQueue.c_str();
 	if(mqttQ)
-		xQueueSend( mqttQ,&dummy,0 );
-
+		xQueueSend( mqttQ,&mqttMsgHandle,0 );			//submode will free Mensaje
+//	printf("Sending Telemetry\n");
 	delay(1000);
 	connHandle=NULL;
 	vTaskDelete(NULL);

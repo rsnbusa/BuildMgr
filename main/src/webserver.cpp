@@ -144,12 +144,13 @@ static esp_err_t conn_tariff(httpd_req_t *req)
 				printf("cannot create root tariff\n");
 				return -1;
 			}
-            if (httpd_query_key_value(buf, "tariff", param, sizeof(param)) == ESP_OK)
-            	theConf.slot_Server.tariff_id=atoi(param);
+       //     if (httpd_query_key_value(buf, "tariff", param, sizeof(param)) == ESP_OK)
+         //   	theConf.slot_Server.tariff_id=atoi(param);
 
 			cJSON *cmdJ=cJSON_CreateObject();
 			cJSON_AddStringToObject(cmdJ,"cmd","/ga_tariff");
-			cJSON_AddNumberToObject(cmdJ,"tariff",theConf.slot_Server.tariff_id);
+	//		cJSON_AddNumberToObject(cmdJ,"tariff",theConf.slot_Server.tariff_id);
+			cJSON_AddNumberToObject(cmdJ,"tariff",1);
 			cJSON_AddItemToArray(ar, cmdJ);
 			cJSON_AddItemToObject(root,"Batch", ar);
 			lmessage=cJSON_Print(root);
@@ -392,20 +393,8 @@ static esp_err_t conn_setup_get_handler(httpd_req_t *req)
 	            if (httpd_query_key_value(buf, "conn", param, sizeof(param)) == ESP_OK)
 	            	strcpy(theConf.meterConnName,param);
 
-	            if (httpd_query_key_value(buf, "slot", param, sizeof(param)) == ESP_OK)
-	            	theConf.slot_Server.slot_time=atoi(param);
-
-	            if (httpd_query_key_value(buf, "server", param, sizeof(param)) == ESP_OK)
-	            	theConf.slot_Server.server_num=atoi(param);
-
-	            if (httpd_query_key_value(buf, "AltDay", param, sizeof(param)) == ESP_OK)
-	            	theConf.connId.altDay=atoi(param);
-
-	            if (httpd_query_key_value(buf, "DDay", param, sizeof(param)) == ESP_OK)
-	            	theConf.connId.dDay=atoi(param);
-
-	            if (httpd_query_key_value(buf, "SlotSlice", param, sizeof(param)) == ESP_OK)
-	            	theConf.connId.connSlot=atoi(param);
+	            if (httpd_query_key_value(buf, "TO", param, sizeof(param)) == ESP_OK)
+	            	theConf.msgTimeOut=atoi(param);
 	        }
 	        free(buf);
 	    }
@@ -415,8 +404,7 @@ static esp_err_t conn_setup_get_handler(httpd_req_t *req)
 			time(&now);
 			localtime_r(&now, &timeinfo);
 			strftime(strftime_buf, sizeof(strftime_buf), "%c", &timeinfo);
-	    	sprintf(tempb,"[%s]Conn:%s SlotDuration=%d MqttServer=%d AltDay=%d DDAY %d Slice=%d",strftime_buf,theConf.meterConnName,theConf.slot_Server.slot_time,
-	    			theConf.slot_Server.server_num,theConf.connId.altDay,theConf.connId.dDay,theConf.connId.connSlot);
+	    	sprintf(tempb,"[%s]Conn:%s TimeOut=%d ",strftime_buf,theConf.meterConnName,theConf.msgTimeOut);
 	    	write_to_flash();
 	    }
 	    else
@@ -447,8 +435,7 @@ static esp_err_t conn_sendsetup_handler(httpd_req_t *req)
 		time(&now);
 		localtime_r(&now, &timeinfo);
 		strftime(strftime_buf, sizeof(strftime_buf), "%c", &timeinfo);
-		sprintf(tempb,"[%s]Setup is Conn:%s SlotDuration=%d MqttServer=%d AltDay=%d DDAY %d Slice=%d",strftime_buf,theConf.meterConnName,theConf.slot_Server.slot_time,
-				theConf.slot_Server.server_num,theConf.connId.altDay,theConf.connId.dDay,theConf.connId.connSlot);
+		sprintf(tempb,"[%s]Setup is Conn:%s TimeOut=%d",strftime_buf,theConf.meterConnName,theConf.msgTimeOut);
 
 		httpd_resp_send(req, tempb, strlen(tempb));
 
