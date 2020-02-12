@@ -9,29 +9,85 @@
 #include "displayManager.h"
 
 extern void connMgr(void* pArg);
+extern void delay(uint32_t son);
+extern int sendTelemetryCmd(parg *pArg);
 
-bool check_delivery_date(int *cuanto,uint8_t eldia)
+static uint32_t getRandom(uint32_t startw, uint32_t endw)
 {
-	time_t now,t;
-	struct tm timeinfo;
+	uint32_t rand;
+	do
+	{
+		rand=esp_random();
 
-//	if (eldia==theConf.connId.dDay)
-//	{
-//		time(&now);
-//		localtime_r(&now, &timeinfo);
-//		timeinfo.tm_hour=0;
-//		timeinfo.tm_min=0;
-//		timeinfo.tm_sec=0;
-//		t=mktime ( &timeinfo );//Today at 0:0:0
-//			//its today we need to deliver Telemetry
-//			// time to delivery is slot_time*connSlot-faltan from 0 hours
-//		*cuanto=theConf.slot_Server.slot_time*theConf.connId.connSlot+t-now;
-//		//if negative in the Past should check if Sent
-//		printf("To Deliver today %d secs %d SlotTime %d connSlot %d conAlt %d conDDay %d Secsnow %d Now %d T %d\n",eldia,*cuanto,theConf.slot_Server.slot_time,theConf.connId.connSlot,
-//				theConf.connId.altDay,theConf.connId.dDay,(int)(now-t),(int)now,(int)t);
-//		return true;// its our day and *cuanto time to send metrics
-//	}
-	return false;
+	} while(!(rand>=startw && rand<=endw));
+
+	return rand;
+}
+
+static void check_delivery_date(void *pArg)
+{
+#define MULT	1
+
+	time_t now;
+	struct tm timeinfo;
+	uint32_t nowsecs,randsecs,waitfornextW;
+	uint32_t windows[NUMTELSLOTS][2];//={{0,28799},{28800,57599},{57600,86400}};	//0-8, 8-16,16-24 hours
+	int8_t windNow=-1;
+	int res=0;
+
+	int slice=86400/NUMTELSLOTS;
+	for (int a=0;a<NUMTELSLOTS;a++)
+	{
+		windows[a][0]=res;
+		res+=slice-1;
+		windows[a][1]=res;
+		res++;
+	}
+
+	time(&now);
+	localtime_r(&now, &timeinfo);
+	nowsecs=timeinfo.tm_hour*3600+timeinfo.tm_min*60+timeinfo.tm_sec;
+	for(int a=0;a<NUMTELSLOTS;a++)
+	{
+		if(nowsecs>=windows[a][0] && nowsecs<=windows[a][1])
+		{
+			windNow=a;
+			break;
+		}
+	}
+	if(windNow<0)
+	{
+		printf("Internal Error Window\n");
+		while(1)
+			delay(1000);
+	}
+	while(1)
+	{
+		randsecs=getRandom(windows[windNow][0],windows[windNow][1]);
+		waitfornextW=windows[windNow][1]-randsecs;
+		printf("Next window [%d] Min %d Max %d delay %u wait %u\n",windNow,windows[windNow][0],windows[windNow][1],randsecs-windows[windNow][0],waitfornextW);
+		delay((randsecs-windows[windNow][0])*MULT);//wait within window
+		//send telemetry
+		res=sendTelemetryCmd(NULL);
+		if(res!=ESP_OK)
+		{
+			//failed. MQTT service probable disconnected
+			// retry until you can with a 30 secs delay
+			while(1)
+			{
+				printf("Retrying %d\n",res);
+				delay(3000);
+				res=sendTelemetryCmd(NULL);
+				if(res==ESP_OK)
+					break;
+			}
+		}
+		windNow++;
+		if(windNow>NUMTELSLOTS-1)
+			windNow=0;
+		delay(waitfornextW*MULT);		//wait for Next Window
+	}
+
 }
 
 void clearScreen()
@@ -151,53 +207,65 @@ static void displayActivity()
 {
 
 	char textt[20];
-	int yy=1;
-
-	for(int a=0;a<theConf.reservedCnt;a++)
+	int yy=1,count=0;
+	string sts="";
+	while(count<theConf.reservedCnt)
 	{
-		sprintf(textt,"%d",(int)losMacs[a].msgCount);
-		drawString(64, yy,string(textt), 12, TEXT_ALIGN_CENTER,DISPLAYIT, REPLACE);
-		yy+=14;
+		sprintf(textt," %d ",(int)losMacs[count].msgCount);
+	//	sprintf(textt,"%d ",9999);
+		sts+=string(textt);
+		count++;
+		if(count %3==0)
+		{
+			drawString(64, yy,sts, 12, TEXT_ALIGN_CENTER,DISPLAYIT, REPLACE);
+			sts="";
+			yy+=13;
+		}
 	}
+	if(sts!="")
+		drawString(64, yy,sts, 12, TEXT_ALIGN_CENTER,DISPLAYIT, REPLACE);
+
 }
 
 void displayManager(void *arg) {
 	time_t t = 0;
 	struct tm timeinfo ;
 	char textd[20],textt[20];
-	time_t cuando;
-	int pasaron;
+//	time_t cuando;
+//	int pasaron;
 
 	uint8_t displayMode=0;// kwh
 
 	time(&t);
 	localtime_r(&t, &timeinfo);
 
-	bool ok=check_delivery_date(&pasaron,diag);
-	if(ok)
-	{
-		if(pasaron<0)
-		{
-			//in the past, Check if this month has been processed
-			fram.read_cycle(mesg,(uint8_t*)&cuando);
-			if(cuando>0 && timeinfo.tm_mon==mesg)
-			{
-				printf("Month processed %s...continuing\n",ctime((time_t*)&cuando));
-			}
-			else
-			{
-				//shit. something is wrong
-				printf("In the past and not logged\n");
-			}
-		}
-		else
-		{
-			pasaron*=1000;
-			printf("Start connmgr with time %d\n",pasaron);
-			xTaskCreate(&connMgr,"conmmgr",4096,(void*)pasaron, 10, &connHandle);// Messages from the Meters. Controller Section socket manager
-			//start connMgr task with delay pasaron
-		}
-	}// else not our day
+	xTaskCreate(&check_delivery_date,"telem",4096,NULL, 10, NULL);
+
+//	bool ok=check_delivery_date(&pasaron,diag);
+//	if(ok)
+//	{
+//		if(pasaron<0)
+//		{
+//			//in the past, Check if this month has been processed
+//			fram.read_cycle(mesg,(uint8_t*)&cuando);
+//			if(cuando>0 && timeinfo.tm_mon==mesg)
+//			{
+//				printf("Month processed %s...continuing\n",ctime((time_t*)&cuando));
+//			}
+//			else
+//			{
+//				//shit. something is wrong
+//				printf("In the past and not logged\n");
+//			}
+//		}
+//		else
+//		{
+//			pasaron*=1000;
+//			printf("Start connmgr with time %d\n",pasaron);
+//			xTaskCreate(&connMgr,"conmmgr",4096,(void*)pasaron, 10, &connHandle);// Messages from the Meters. Controller Section socket manager
+//			//start connMgr task with delay pasaron
+//		}
+//	}// else not our day
 
 	memset(oldCurBeat,0,sizeof(oldCurBeat));
 	memset(oldCurLife,0,sizeof(oldCurLife));
@@ -209,7 +277,6 @@ void displayManager(void *arg) {
 	while(true)
 	{
 		time(&mgrTime[DISPLAYMGR]);
-
 		vTaskDelay(howLong/portTICK_PERIOD_MS);
 		if(!gpio_get_level((gpio_num_t)0))
 		{

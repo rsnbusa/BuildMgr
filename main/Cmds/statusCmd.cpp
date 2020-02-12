@@ -23,6 +23,7 @@ extern uint32_t millis();
 	 if(losMacs[cualf].toCount>MAXTIMEOUTS)
 	 {
 		mqttMsg_t mqttMsgHandle;
+		memset(&mqttMsgHandle,0,sizeof(mqttMsgHandle));
 		char *mensaje=(char*)malloc(100);
 		sprintf(mensaje,"Meter(%d) %s triggered\n",cualf,losMacs[cualf].mtmName);
 		mqttMsgHandle.msgLen=strlen(mensaje);

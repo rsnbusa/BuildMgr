@@ -29,7 +29,6 @@ void statusCmd(parg *argument);
 void loginCmd(parg* argument);
 void firmwareCmd(parg *pArg);
 //------------------------------------------------------------------------------
-
 #define OTA_URL_SIZE 1024
 static const char *TAG = "BDMGR";
 
@@ -135,10 +134,17 @@ void write_to_flash() //save our configuration
 	nvs_close(nvshandle);
 }
 
+void mqttCallback(int res)
+{
+	//printf("Telemetry result %d\n",res);
+	telemResult=res;
+    xEventGroupSetBits(wifi_event_group, TELEM_BIT);//message sent bit
+}
 
-void sendTelemetryCmd(parg *pArg)
+int sendTelemetryCmd(parg *pArg)
 {
 	mqttMsg_t mqttMsgHandle;
+	memset(&mqttMsgHandle,0,sizeof(mqttMsgHandle));
 
 #ifdef DEBUGX
 	if(theConf.traceflag & (1<<HOSTD))
@@ -149,9 +155,15 @@ void sendTelemetryCmd(parg *pArg)
 	mqttMsgHandle.message=(uint8_t*)mensaje;
 	mqttMsgHandle.maxTime=4000;
 	mqttMsgHandle.queueName=(char*)controlQueue.c_str();
+	mqttMsgHandle.cb=mqttCallback;
 	if(mqttQ)
 		xQueueSend( mqttQ,&mqttMsgHandle,0 );			//Submode will free the mensaje variable
-	//	printf("Sending Telemetry\n");
+    if(!xEventGroupWaitBits(wifi_event_group, TELEM_BIT, false, true,  mqttMsgHandle.maxTime+10/  portTICK_RATE_MS))
+    {
+		//printf("Telemetric result timeout");
+		telemResult=BITTM;
+    }
+    return telemResult;
 }
 
 static void pcnt_intr_handler(void *arg)
@@ -251,15 +263,21 @@ static void reserveSlot(parg* argument)
 	int8_t yes=1;
 	u32 macc=(u32)argument->macn;
 
+#ifdef DEBUGX
+
 	if(theConf.traceflag & (1<<CMDD))
 		printf("%sReserve slot for %x\n",CMDDT,macc);
+#endif
 
 	for(int a=0;a<theConf.reservedCnt;a++)
 	{
 		if(theConf.reservedMacs[a]==macc)
 		{
 			yes=-2;		//duplicate HOW COME????? in normal conditions
+#ifdef DEBUGX
+	if(theConf.traceflag & (1<<CMDD))
 			printf("Slot already exists\n");
+#endif
 			send(argument->pComm, &yes, sizeof(yes), 0);//already registered
 			return;
 		}
@@ -267,7 +285,10 @@ static void reserveSlot(parg* argument)
 //add it
 	theConf.reservedMacs[theConf.reservedCnt]=macc;
 	time(&theConf.slotReserveDate[theConf.reservedCnt]);
-	printf("Mac reserved %x slot %d %s",theConf.reservedMacs[theConf.reservedCnt],theConf.reservedCnt,ctime(&theConf.slotReserveDate[theConf.reservedCnt]));
+#ifdef DEBUGX
+	if(theConf.traceflag & (1<<CMDD))
+	printf("%sMac reserved %x slot %d %s",CMDDT,theConf.reservedMacs[theConf.reservedCnt],theConf.reservedCnt,ctime(&theConf.slotReserveDate[theConf.reservedCnt]));
+#endif
 	yes=theConf.reservedCnt++;	//send slot assigned
 	send(argument->pComm, &yes, sizeof(yes), 0);
 	write_to_flash();		//independent from FRAM
@@ -311,6 +332,10 @@ static void getMessage(void *pArg)
 #endif
 				   goto exit;
 				} else {
+#ifdef DEBUGX
+					if(theConf.traceflag & (1<<CMDD))
+						printf("%sMsg Rx %s\n",CMDDT, comando.mensaje);
+#endif
 					// check special reserve msg
 					if(strstr(comando.mensaje,"rsvp")!=NULL)
 					{
@@ -447,6 +472,7 @@ static void buildMgr(void *pvParameters)
 					printf("%sInternal error no Ip %x\n",CMDDT,b);
 	#endif
 				// do not test MAC here since we need to get the message for the RSVP command, when there are 0 MACs reserved
+				a=0;
 			}
 			else
 			{
@@ -697,6 +723,7 @@ static void ip_event_handler(void* arg, esp_event_base_t event_base,
 
 static void wifi_init(void)
 {
+    esp_netif_dns_info_t dnsInfo;
 	wifi_init_config_t 				cfg=WIFI_INIT_CONFIG_DEFAULT();
 
 	//	wifi_config_t 					sta_config,configap;
@@ -719,8 +746,59 @@ static void wifi_init(void)
     xEventGroupClearBits(wifi_event_group, WIFI_BIT);
 
     ESP_ERROR_CHECK(esp_event_loop_create_default());
-    esp_netif_create_default_wifi_sta();
-    esp_netif_create_default_wifi_ap();
+    esp_netif_t* wifiSTA=esp_netif_create_default_wifi_sta();
+    esp_netif_t* wifiAP =esp_netif_create_default_wifi_ap();
+
+// CANNOT connect to Remote. Need to find why
+//    esp_netif_ip_info_t ipInfo;
+//    IP4_ADDR(&ipInfo.ip, 192,168,19,1);
+//	IP4_ADDR(&ipInfo.gw, 192,168,19,1);
+//	IP4_ADDR(&ipInfo.netmask, 255,255,255,0);
+//	esp_netif_dhcps_stop(wifiAP);
+//	esp_netif_set_ip_info(wifiAP, &ipInfo);
+//	esp_netif_dhcps_start(wifiAP);
+//    inet_pton(AF_INET, "192.168.19.1", &dnsInfo.ip);
+//    esp_netif_set_dns_info(wifiAP,	ESP_NETIF_DNS_MAIN,&dnsInfo);
+
+#define ENABLE_STATIC_IP
+#define STATIC_IP		"192.168.100.8"
+#define SUBNET_MASK		"255.255.255.0"
+#define GATE_WAY		"192.168.100.1"
+#define DNS_SERVER		"8.8.8.8"
+
+#ifdef ENABLE_STATIC_IP
+    printf("%sSet static ip sta%s\n",LRED,RESETC);
+
+	esp_netif_ip_info_t ipInfo1;
+	inet_pton(AF_INET, STATIC_IP, &ipInfo1.ip);
+	inet_pton(AF_INET, GATE_WAY, &ipInfo1.gw);
+	inet_pton(AF_INET, SUBNET_MASK, &ipInfo1.netmask);
+
+	esp_netif_dhcpc_stop(wifiSTA);
+	esp_netif_set_ip_info(wifiSTA, &ipInfo1);
+	// do not activate DHCP
+	//Now set DNS server address
+
+	//esp_netif_dns_info_t dnsInfo;
+	inet_pton(AF_INET, DNS_SERVER, &dnsInfo.ip);
+	esp_netif_set_dns_info(wifiSTA,	ESP_NETIF_DNS_MAIN,&dnsInfo);
+
+	//old style deprecated
+//	//For using of static IP
+//	tcpip_adapter_dhcpc_stop(TCPIP_ADAPTER_IF_STA); // Don't run a DHCP client
+//
+//	//Set static IP
+//	tcpip_adapter_ip_info_t ipInfo;
+//	inet_pton(AF_INET, STATIC_IP, &ipInfo.ip);
+//	inet_pton(AF_INET, GATE_WAY, &ipInfo.gw);
+//	inet_pton(AF_INET, SUBNET_MASK, &ipInfo.netmask);
+//	tcpip_adapter_set_ip_info(TCPIP_ADAPTER_IF_STA, &ipInfo);
+//
+//	//Set Main DNS server
+//	tcpip_adapter_dns_info_t dnsInfo;
+//	inet_pton(AF_INET, DNS_SERVER, &dnsInfo.ip);
+//	tcpip_adapter_set_dns_info(TCPIP_ADAPTER_IF_STA, ESP_NETIF_DNS_MAIN, &dnsInfo);
+#endif
 
     ESP_ERROR_CHECK(esp_event_handler_register(WIFI_EVENT, ESP_EVENT_ANY_ID, &wifi_event_handler, NULL));
     ESP_ERROR_CHECK(esp_event_handler_register(IP_EVENT, IP_EVENT_STA_GOT_IP, &ip_event_handler, NULL));
@@ -755,28 +833,7 @@ static void wifi_init(void)
 	strcpy((char*)wifi_config.sta.ssid,INTERNET);
 	strcpy((char*)wifi_config.sta.password,INTERNETPASS);
 
-#define ENABLE_STATIC_IP
-#define STATIC_IP		"192.168.100.8"
-#define SUBNET_MASK		"255.255.255.0"
-#define GATE_WAY		"192.168.100.1"
-#define DNS_SERVER		"8.8.8.8"
 
-#ifdef ENABLE_STATIC_IP
-	//For using of static IP
-	tcpip_adapter_dhcpc_stop(TCPIP_ADAPTER_IF_STA); // Don't run a DHCP client
-
-	//Set static IP
-	tcpip_adapter_ip_info_t ipInfo;
-	inet_pton(AF_INET, STATIC_IP, &ipInfo.ip);
-	inet_pton(AF_INET, GATE_WAY, &ipInfo.gw);
-	inet_pton(AF_INET, SUBNET_MASK, &ipInfo.netmask);
-	tcpip_adapter_set_ip_info(TCPIP_ADAPTER_IF_STA, &ipInfo);
-
-	//Set Main DNS server
-	tcpip_adapter_dns_info_t dnsInfo;
-	inet_pton(AF_INET, DNS_SERVER, &dnsInfo.ip);
-	tcpip_adapter_set_dns_info(TCPIP_ADAPTER_IF_STA, ESP_NETIF_DNS_MAIN, &dnsInfo);
-#endif
     ESP_ERROR_CHECK(esp_wifi_set_config(ESP_IF_WIFI_STA, &wifi_config));
     ESP_ERROR_CHECK(esp_wifi_start());
     xEventGroupWaitBits(wifi_event_group, WIFI_BIT, false, true, portMAX_DELAY);
@@ -788,9 +845,20 @@ esp_err_t mqtt_event_handler(esp_mqtt_event_handle_t event)
     // your_context_t *context = event->context;
     switch (event->event_id) {
         case MQTT_EVENT_CONNECTED:
+#ifdef DEBUGX
+			if(theConf.traceflag & (1<<MQTTD))
+				printf("%sMqtt connected\n",MQTTDT);
+#endif
+        	mqttf=true;
             esp_mqtt_client_subscribe(client, cmdQueue.c_str(), 0);
             break;
         case MQTT_EVENT_DISCONNECTED:
+#ifdef DEBUGX
+			if(theConf.traceflag & (1<<MQTTD))
+				printf("%sMqtt Disco\n",MQTTDT);
+#endif
+        	firstmqtt=false;
+        	mqttf=false;
             xEventGroupClearBits(wifi_event_group, MQTT_BIT);
             break;
         case MQTT_EVENT_SUBSCRIBED:
@@ -802,7 +870,7 @@ esp_err_t mqtt_event_handler(esp_mqtt_event_handle_t event)
         case MQTT_EVENT_PUBLISHED:
 #ifdef DEBUGX
         	if(theConf.traceflag & (1<<MQTTD))
-            	printf("%sPublished\n",MQTTDT);
+        		printf("%sPublished MsgId %d\n",MQTTDT,event->msg_id);
 #endif
             esp_mqtt_client_unsubscribe(client, cmdQueue.c_str());//bit is set by unsubscribe
             break;
@@ -824,6 +892,10 @@ esp_err_t mqtt_event_handler(esp_mqtt_event_handle_t event)
             }
             break;
         case MQTT_EVENT_ERROR:
+#ifdef DEBUGX
+			if(theConf.traceflag & (1<<MQTTD))
+				printf("%sMqtt Error\n",MQTTDT);
+#endif
            xEventGroupClearBits(wifi_event_group, MQTT_BIT);
             break;
         case MQTT_EVENT_BEFORE_CONNECT:
@@ -843,6 +915,8 @@ static void submode(void * pArg)
 {
 	mqttMsg_t mqttHandle;
 	u32 timetodelivery=0;
+	int mqtterr;
+
 	while(true)
 	{
 		if(wifif) // is the network up?
@@ -855,8 +929,20 @@ static void submode(void * pArg)
 					printf("%sHeap after submode rx %d\n",CMDDT,esp_get_free_heap_size());
 #endif
 				timetodelivery=millis();
-				if(!clientCloud) //just in case
+				if(!clientCloud || !mqttf) //just in case
+				{
+					if(!clientCloud)
 						printf("Error no client mqtt\n");
+					mqtterr=NOCLIENT;
+					if(!mqttf && clientCloud)
+					{
+						 //  clientCloud = esp_mqtt_client_init(&mqtt_cfg);
+						mqtterr=esp_mqtt_client_reconnect(clientCloud);
+						if(!firstmqtt)
+						    esp_mqtt_client_start(clientCloud); //try restarting
+					}
+						goto mal;
+				}
 				else
 				{
 #ifdef DEBUGX
@@ -864,8 +950,17 @@ static void submode(void * pArg)
 						printf("%sStarting mqtt\n",CMDDT);
 #endif
 					xEventGroupClearBits(wifi_event_group, MQTT_BIT);//clear flag to wait on
-					if(esp_mqtt_client_start(clientCloud)==ESP_OK) //we got an OK
+					mqtterr=0;
+			//		printf("Status %d\n",clientCloud->esp_mqtt_client.status);
+
+					if(firstmqtt)
 					{
+						mqtterr=esp_mqtt_client_reconnect(clientCloud);
+						mqtterr=esp_mqtt_client_start(clientCloud);
+					}
+					if(mqtterr==ESP_OK) //we got an OK
+					{
+						firstmqtt=true;
 							// when connected send the message
 						//wait for the CONNECT mqtt msg
 						if(xEventGroupWaitBits(wifi_event_group, MQTT_BIT, false, true, 4000/  portTICK_RATE_MS))
@@ -875,38 +970,69 @@ static void submode(void * pArg)
 								printf("%sSending Mqtt state\n",CMDDT);
 #endif
 							xEventGroupClearBits(wifi_event_group, PUB_BIT); // clear our waiting bit
-
-							esp_mqtt_client_publish(clientCloud, mqttHandle.queueName, (char*)mqttHandle.message, mqttHandle.msgLen, 1,0);
+//							if(clientCloud)
+//							{
+								mqtterr=esp_mqtt_client_publish(clientCloud, mqttHandle.queueName, (char*)mqttHandle.message, mqttHandle.msgLen, 1,0);
 							//Wait PUB_BIT or 4 secs for Publish then close connection
+								if (mqtterr<0)
+								{
+#ifdef DEBUGX
+									if(theConf.traceflag & (1<<CMDD))
+										printf("%sPublish error %d\n",CMDDT,mqtterr);
+#endif
+									goto mal;
+								}
 
-							if(!xEventGroupWaitBits(wifi_event_group, PUB_BIT, false, true,  mqttHandle.maxTime/  portTICK_RATE_MS))
-							{
+								if(!xEventGroupWaitBits(wifi_event_group, PUB_BIT, false, true,  mqttHandle.maxTime/  portTICK_RATE_MS))
+								{
+#ifdef DEBUGX
+									if(theConf.traceflag & (1<<CMDD))
+										printf("Publish TimedOut\n");
+									mqtterr=PUBTM;
+									goto mal;
+#endif
+								}
+
+						//		if(mqttHandle.message)
+						//			free(mqttHandle.message);			//we free the message HERE
+
+								esp_mqtt_client_stop(clientCloud);
+//								printf("Callback in %p\n",mqttHandle.cb);
+//								if(mqttHandle.cb!=NULL)
+//									(*mqttHandle.cb)(0);
+								mqtterr=ESP_OK;
 #ifdef DEBUGX
 								if(theConf.traceflag & (1<<CMDD))
-									printf("Publish TimedOut\n");
+									printf("%sStopping\n",CMDDT);
 #endif
-							}
-							if(mqttHandle.message)
-								free(mqttHandle.message);			//we free the message HERE
-
-							esp_mqtt_client_stop(clientCloud);
-#ifdef DEBUGX
-							if(theConf.traceflag & (1<<CMDD))
-								printf("%sStopping\n",CMDDT);
-#endif
+//							}
+//							else
+//							{ //it failed to start shouldnt close it
+//								//	esp_mqtt_client_stop(clientCloud);
+//								mqtterr=STARTERR;
+//#ifdef DEBUGX
+//								if(theConf.traceflag & (1<<CMDD))
+//									printf("%sStart Timed out\n",CMDDT);
+//#endif
+//							}
 						}
 						else
-						{ //it failed to start shouldnt close it
-						//	esp_mqtt_client_stop(clientCloud);
+						{
 #ifdef DEBUGX
 							if(theConf.traceflag & (1<<CMDD))
-								printf("%sStart Timed out\n",CMDDT);
+								printf("%sError start timeout mqtt\n",CMDDT);
 #endif
+							mqtterr=STARTTM;
 						}
 					}
 					else
-					 printf("Failed to start when available\n");
-				}
+					{
+#ifdef DEBUGX
+						if(theConf.traceflag & (1<<CMDD))
+							printf("%sFailed to start when available %d\n",CMDDT,mqtterr);
+#endif
+						mqtterr=STARTERR;
+					}
 
 #ifdef DEBUGX
 				if(theConf.traceflag & (1<<CMDD))
@@ -915,12 +1041,27 @@ static void submode(void * pArg)
 					printf("%sSent %d. Heap after submode %d\n",CMDDT,++sentTotal,esp_get_free_heap_size());
 				}
 #endif
-			}
+			}// no clientcloud
+
+		}// queuerx
 		else
+		{
+#ifdef DEBUGX
+			if(theConf.traceflag & (1<<CMDD))
+				printf("%sMqtt Failed queue\n",CMDDT);
+#endif
+			mqtterr=QUEUEFAIL;
 			vTaskDelay(100 /  portTICK_RATE_MS);
 		}
+mal:
+		if(mqttHandle.cb!=NULL)
+			(*mqttHandle.cb)(mqtterr);
+		if(mqttHandle.message)
+			free(mqttHandle.message);			//we free the message HERE
+
 	}
 	//should crash if it gets here.Impossible in theory
+	}
 }
 
 static void mqtt_app_start(void)
@@ -946,7 +1087,11 @@ static void mqtt_app_start(void)
 		if(!mqttQ)
 			printf("Failed queue\n");
 
+		clientCloud=NULL;
+
 	    clientCloud = esp_mqtt_client_init(&mqtt_cfg);
+	    printf("Mqtt start client %p\n",clientCloud);
+
 
 	    if(clientCloud)
 	    	xTaskCreate(&submode,"U571",10240,NULL, 5, &submHandle);
@@ -998,7 +1143,7 @@ static void cmdManager(void* arg)
 				else
 					memset(mtmName,0,sizeof(mtmName));
 
-				if(losMacs[cmd.pos].mtmName!=jmtmName)
+				if(strcmp(losMacs[cmd.pos].mtmName,mtmName)!=0)
 					strcpy(losMacs[cmd.pos].mtmName,mtmName);
 
 
@@ -1014,6 +1159,7 @@ static void cmdManager(void* arg)
 #endif
 						//send Host warning
 						mqttMsg_t 	mqttMsgHandle;
+						memset(&mqttMsgHandle,0,sizeof(mqttMsgHandle));
 						char		*textt=(char*)malloc(100);			//MUST be a malloc, will be Free
 						sprintf(textt,"Fram HW Failure in meter MAC %06x MtM %s\n",(uint32_t)ddmac->valuedouble,mtmName);
 						mqttMsgHandle.msgLen=strlen(textt);
@@ -1146,6 +1292,8 @@ static void init_vars()
 	vanadd=0;
 	llevoMsg=0;
 	miscanf=false;
+	mqttf=false;
+	firstmqtt=false;
 
 	if(theConf.msgTimeOut<10000)
 		theConf.msgTimeOut=61000;	//just in case
@@ -1509,6 +1657,8 @@ char *sendTelemetry()
 void connMgr(void* pArg)
 {
 	mqttMsg_t mqttMsgHandle;
+	memset(&mqttMsgHandle,0,sizeof(mqttMsgHandle));
+
 	delay((int)pArg);
 
 	char *mensaje=sendTelemetry();
@@ -1516,6 +1666,7 @@ void connMgr(void* pArg)
 	mqttMsgHandle.message=(uint8_t*)mensaje;
 	mqttMsgHandle.maxTime=4000;
 	mqttMsgHandle.queueName=(char*)controlQueue.c_str();
+	mqttMsgHandle.cb=mqttCallback;
 	if(mqttQ)
 		xQueueSend( mqttQ,&mqttMsgHandle,0 );			//submode will free Mensaje
 //	printf("Sending Telemetry\n");

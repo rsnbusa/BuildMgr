@@ -11,6 +11,7 @@
 #define SDAW                			21      // SDA
 #endif
 
+#define NUMTELSLOTS						6
 #define MAXTIMEOUTS						5
 #define BUFFSIZE 						4096
 #define BUILDMGRPORT					30000

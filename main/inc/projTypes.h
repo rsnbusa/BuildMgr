@@ -10,6 +10,7 @@ enum debugflags{BOOTD,WIFID,MQTTD,PUBSUBD,OTAD,CMDD,WEBD,GEND,MQTTT,FRMCMD,INTD,
 typedef enum macState{BOOTSTATE,CONNSTATE,LOGINSTATE,MSGSTATE,TOSTATE} meterState;
 typedef enum reportState{NOREPORT,REPORTED} reportState_t;
 enum mgrT{BUILDMGR,CMDMGR,WATCHMGR,DISPLAYMGR,FRAMMGR,PINMGR,SUBMGR};
+enum mqtters{MQTTOK,NOCLIENT,PUBTM,STARTTM,STARTERR,QUEUEFAIL,BITTM};
 
 typedef struct whitel{
 	meterState		dState;
@@ -73,12 +74,14 @@ typedef struct pcomm{
     double	macn;
 }parg;
 
+typedef void (*functmqtt)(int);
 
 typedef struct mqttMsgInt{
 	uint8_t 	*message;	// memory of message. MUST be freed by the Submode Routine and allocated by caller
 	uint16_t	msgLen;
 	char		*queueName;	// queue name to send
-	uint32_t	maxTime;	//max ms to wait for publish ACK
+	uint32_t	maxTime;	//max ms to wait
+	functmqtt	cb;
 }mqttMsg_t;
 
 typedef void (*functrsn)(parg *);

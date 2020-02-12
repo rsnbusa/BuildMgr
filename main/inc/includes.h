@@ -47,7 +47,7 @@ extern "C"{
 #include "rom/rtc.h"
 #include "sntp/sntp.h"
 #include "SSD1306.h"
-#include "tcpip_adapter.h"
+//#include "tcpip_adapter.h"
 void app_main();
 }
 #endif
