@@ -7,6 +7,7 @@
 #include "soc/spi_caps.h"
 
 #define METERSIZE	(DATAEND-BEATSTART)
+extern void pprintf(const char * format, ...);
 
 FramSPI::FramSPI(void)
 {
@@ -52,7 +53,7 @@ bool FramSPI::begin(int MOSI, int MISO, int CLK, int CS,SemaphoreHandle_t *framS
 		getDeviceID(&manufID, &prodId);
 #ifdef DEBUGX
 		if(theConf.traceflag & (1<<FRAMD))
-			printf("%sManufacturerId %04x ProductId %04x\n",FRAMDT,manufID,prodId);
+			pprintf("%sManufacturerId %04x ProductId %04x\n",FRAMDT,manufID,prodId);
 #endif
 		//Set write enable after chip is identified
 		switch(prodId)
@@ -92,13 +93,13 @@ bool FramSPI::begin(int MOSI, int MISO, int CLK, int CS,SemaphoreHandle_t *framS
 			xSemaphoreGive(*framSem);  //SUPER important else its born locked
 		else
 		{
-			printf("Cant allocate Fram Sem\n");
+			pprintf("Cant allocate Fram Sem\n");
 			return false;
 		}
 
 		if(TOTALFRAM>intframWords)
 		{
-			printf("Not enough space for Meter Definition %d vs %d required\n",intframWords,FINTARIFA);
+			pprintf("Not enough space for Meter Definition %d vs %d required\n",intframWords,FINTARIFA);
 			return false;
 		}
 
@@ -316,7 +317,7 @@ int FramSPI::format(uint8_t valor, uint8_t *lbuffer,uint32_t len,bool all)
 	uint8_t *buffer=(uint8_t*)malloc(len);
 	if(!buffer)
 	{
-		printf("Failed format buf\n");
+		pprintf("Failed format buf\n");
 		return -1;
 	}
 
@@ -329,14 +330,14 @@ int FramSPI::format(uint8_t valor, uint8_t *lbuffer,uint32_t len,bool all)
 
 		if (count>len)
 		{
-		//	printf("Format add %d len %d count %d val %d\n",add,len,count,valor);
+		//	pprintf("Format add %d len %d count %d val %d\n",add,len,count,valor);
 			ret=writeMany(add,buffer,len);
 			if (ret!=0)
 				return ret;
 		}
 		else
 		{
-		//	printf("FinalFormat add %d len %d val %d\n",add,count,valor);
+		//	pprintf("FinalFormat add %d len %d val %d\n",add,count,valor);
 			ret=writeMany(add,buffer,count);
 			if (ret!=0)
 				return ret;

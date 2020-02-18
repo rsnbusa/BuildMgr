@@ -14,11 +14,12 @@
 #include "globals.h"
 
 extern uint32_t millis();
+extern void pprintf(const char * format, ...);
 
  void monitorCallback( TimerHandle_t xTimer )
  {
 	 u32 cualf = ( uint32_t ) pvTimerGetTimerID( xTimer );
-	 printf("Timer for Meter(%d) %s triggered\n",cualf,losMacs[cualf].mtmName); //should report to ControlQueue advicing posible problem with this MeterId
+	 pprintf("Timer for Meter(%d) %s triggered\n",cualf,losMacs[cualf].mtmName); //should report to ControlQueue advicing posible problem with this MeterId
 	 losMacs[cualf].toCount++;
 	 if(losMacs[cualf].toCount>MAXTIMEOUTS)
 	 {
@@ -74,12 +75,12 @@ void statusCmd(parg *argument)
 			{
 #ifdef DEBUGX
 				if(theConf.traceflag & (1<<CMDD))
-					printf("%sStarting timer for meterController %d MAC %x\n",CMDDT,argument->pos,losMacs[argument->pos].macAdd);
+					pprintf("%sStarting timer for meterController %d MAC %x\n",CMDDT,argument->pos,losMacs[argument->pos].macAdd);
 #endif
 				int cual=argument->pos;
 				losMacs[argument->pos].timerH=xTimerCreate("Monitor",theConf.msgTimeOut /portTICK_PERIOD_MS,pdTRUE,( void * )cual,&monitorCallback);
 				if(losMacs[argument->pos].timerH==NULL)
-					printf("Failed to create HourChange timer\n");
+					pprintf("Failed to create HourChange timer\n");
 				xTimerStart(losMacs[argument->pos].timerH,0); //Start it
 				//kill timer and start a new one
 			}
@@ -87,7 +88,7 @@ void statusCmd(parg *argument)
 			{
 #ifdef DEBUGX
 				if(theConf.traceflag & (1<<CMDD))
-					printf("%sreseting timer for meterController %d MAC %x\n",CMDDT,argument->pos,losMacs[argument->pos].macAdd);
+					pprintf("%sreseting timer for meterController %d MAC %x\n",CMDDT,argument->pos,losMacs[argument->pos].macAdd);
 #endif
 				xTimerReset(losMacs[argument->pos].timerH,0); //Start it with new
 				losMacs[argument->pos].toCount=0;
@@ -96,7 +97,7 @@ void statusCmd(parg *argument)
 			}
 #ifdef DEBUGX
 			if(theConf.traceflag & (1<<CMDD))
-				printf("%sMeter[%d][%d]=%d\n",CMDDT,argument->pos,pos,tallies[argument->pos][pos]);
+				pprintf("%sMeter[%d][%d]=%d\n",CMDDT,argument->pos,pos,tallies[argument->pos][pos]);
 #endif
 
 

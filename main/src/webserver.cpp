@@ -11,6 +11,8 @@
 #include "projTypes.h"
 #include "globals.h"
 
+extern void pprintf(const char * format, ...);
+
 static esp_err_t challenge_get_handler(httpd_req_t *req);
 static esp_err_t setup_get_handler(httpd_req_t *req);
 static esp_err_t setupend_get_handler(httpd_req_t *req);
@@ -141,7 +143,7 @@ static esp_err_t conn_tariff(httpd_req_t *req)
 
 			if(root==NULL || ar==NULL)
 			{
-				printf("cannot create root tariff\n");
+				pprintf("cannot create root tariff\n");
 				return -1;
 			}
        //     if (httpd_query_key_value(buf, "tariff", param, sizeof(param)) == ESP_OK)
@@ -288,7 +290,7 @@ static esp_err_t challenge_get_handler(httpd_req_t *req)
 							theConf.configured[a]=3;						//final status configured
 							fram.formatMeter(a);
 							fram.write_lifekwh(a,setupHost[a].startKwh);	// write to Fram. Its beginning of life KWH
-							printf("Writing life Meter %d= %d\n",a,setupHost[a].startKwh);
+							pprintf("Writing life Meter %d= %d\n",a,setupHost[a].startKwh);
 						}
 						else
 							theConf.configured[a]=0; //reset it
@@ -450,7 +452,7 @@ void start_webserver(void *pArg)
 
 #ifdef DEBUGX
     if(theConf.traceflag & (1<<WEBD))
-    	printf("%sStarting server on port:%d\n",WEBDT, config.server_port);
+    	pprintf("%sStarting server on port:%d\n",WEBDT, config.server_port);
 #endif
     if (httpd_start(&server, &config) == ESP_OK) {
         // Set URI handlers
@@ -464,7 +466,7 @@ void start_webserver(void *pArg)
     }
 #ifdef DEBUGX
     if(theConf.traceflag & (1<<WEBD))
-    	printf("WebServer Started\n");
+    	pprintf("WebServer Started\n");
 #endif
     vTaskDelete(NULL);
 }

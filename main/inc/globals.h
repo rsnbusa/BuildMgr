@@ -36,7 +36,7 @@ EXTERN mbedtls_md_context_t 			mbedtls_ctx;
 EXTERN meterType						theMeters[MAXDEVS];
 EXTERN nvs_handle 						nvshandle;
 EXTERN QueueHandle_t 					mqttQ,mqttR,framQ,pcnt_evt_queue;
-EXTERN SemaphoreHandle_t 				wifiSem,framSem;
+EXTERN SemaphoreHandle_t 				wifiSem,framSem,printSem;
 EXTERN string							controlQueue,cmdQueue;
 EXTERN TaskHandle_t						webHandle,timeHandle,simHandle,blinkHandle,cmdHandle,framHandle,pinHandle,buildHandle,watchHandle,displayHandle,submHandle;
 EXTERN time_t							mgrTime[7];

@@ -5,7 +5,9 @@
 #include "projTypes.h"
 
 extern void delay(uint32_t cuanto);
-extern uint32_t  millis();
+extern void pprintf(const char * format, ...);
+
+uint32_t  millis();
 
 void watchDog(void * pArg)
 {
@@ -30,7 +32,7 @@ void watchDog(void * pArg)
 						{
 #ifdef DEBUGX
 							if(theConf.traceflag & (1<<CMDD))
-								printf("%sNO Connection from %x Time Elapsed %d Report Host\n",CMDDT,theConf.reservedMacs[a],now-losMacs[a].stateChangeTS[BOOTSTATE]);
+								pprintf("%sNO Connection from %x Time Elapsed %d Report Host\n",CMDDT,theConf.reservedMacs[a],now-losMacs[a].stateChangeTS[BOOTSTATE]);
 #endif
 							losMacs[a].report=REPORTED;
 						}
@@ -42,7 +44,7 @@ void watchDog(void * pArg)
 					{
 #ifdef DEBUGX
 						if(theConf.traceflag & (1<<CMDD))
-							printf("%sConnection from %x \n",CMDDT,theConf.reservedMacs[a]);
+							pprintf("%sConnection from %x \n",CMDDT,theConf.reservedMacs[a]);
 #endif
 						losMacs[a].report=NOREPORT;
 						losMacs[a].stateChangeTS[CONNSTATE]=now;
@@ -55,7 +57,7 @@ void watchDog(void * pArg)
 						{
 #ifdef DEBUGX
 							if(theConf.traceflag & (1<<CMDD))
-								printf("%sNO Login from %x Time Elapsed %d Report Host\n",CMDDT,theConf.reservedMacs[a],now-losMacs[a].stateChangeTS[CONNSTATE]);
+								pprintf("%sNO Login from %x Time Elapsed %d Report Host\n",CMDDT,theConf.reservedMacs[a],now-losMacs[a].stateChangeTS[CONNSTATE]);
 #endif
 							losMacs[a].report=REPORTED;
 						}
@@ -67,7 +69,7 @@ void watchDog(void * pArg)
 					{
 #ifdef DEBUGX
 						if(theConf.traceflag & (1<<CMDD))
-							printf("%sMessage received from %x \n",CMDDT,theConf.reservedMacs[a]);
+							pprintf("%sMessage received from %x \n",CMDDT,theConf.reservedMacs[a]);
 #endif
 						losMacs[a].report=NOREPORT;
 						losMacs[a].stateChangeTS[MSGSTATE]=now;
@@ -80,7 +82,7 @@ void watchDog(void * pArg)
 						{
 #ifdef DEBUGX
 							if(theConf.traceflag & (1<<CMDD))
-								printf("%sNO Msg from %x Time Elapsed %d Report Host\n",CMDDT,theConf.reservedMacs[a],now-losMacs[a].stateChangeTS[MSGSTATE]);
+								pprintf("%sNO Msg from %x Time Elapsed %d Report Host\n",CMDDT,theConf.reservedMacs[a],now-losMacs[a].stateChangeTS[MSGSTATE]);
 #endif
 							losMacs[a].report=REPORTED;
 							losMacs[a].dState=TOSTATE;

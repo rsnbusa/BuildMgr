@@ -33,8 +33,8 @@
 
 #define METER0							4
 #define METER1							14 //22
-#define METER2							16
-#define METER3							17
+#define METER2							25 //16
+#define METER3							26 //17
 #define METER4							13 //21
 
 #define BREAK0							13

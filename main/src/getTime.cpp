@@ -12,11 +12,13 @@
 #include "projTypes.h"
 #include "globals.h"
 
+extern void pprintf(const char * format, ...);
+
 static void initialize_sntp(void)
 {
 #ifdef DEBUGX
 	if(theConf.traceflag & (1<<CMDD))
-    printf("Initializing SNTP\n");
+    pprintf("Initializing SNTP\n");
 #endif
     sntp_setoperatingmode(SNTP_OPMODE_POLL);
     sntp_setservername(0, "pool.ntp.org");
@@ -32,7 +34,7 @@ void sntpget(void *pArgs)
     localtime_r(&now, &timeinfo);
     // Is time set? If not, tm_year will be (1970 - 1900).
     if (timeinfo.tm_year < (2016 - 1900)) {
-  //      printf("Time is not set yet. Connecting to WiFi and getting time over NTP.");
+  //      pprintf("Time is not set yet. Connecting to WiFi and getting time over NTP.");
 
 	initialize_sntp();
 	struct tm timeinfo;
@@ -44,7 +46,7 @@ void sntpget(void *pArgs)
 	}
 	if(retry>retry_count)
 	{
-		printf("SNTP failed\n");
+		pprintf("SNTP failed\n");
 	    vTaskDelete(NULL);
 	}
 	time(&now);
@@ -61,7 +63,7 @@ void sntpget(void *pArgs)
 	strftime(strftime_buf, sizeof(strftime_buf), "%c", &timeinfo);
 #ifdef DEBUGX
 	if(theConf.traceflag & (1<<CMDD))
-		printf("%s[CMDD]The current date/time in %s is: %s day of Year %d\n",CMDDT, LOCALTIME,strftime_buf,timeinfo.tm_yday);
+		pprintf("%s[CMDD]The current date/time in %s is: %s day of Year %d\n",CMDDT, LOCALTIME,strftime_buf,timeinfo.tm_yday);
 #endif
 
     }

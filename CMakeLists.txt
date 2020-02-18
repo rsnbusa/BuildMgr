@@ -10,7 +10,7 @@ set(PROJECT_NAME "mqtt_ssl")
 
 include($ENV{IDF_PATH}/tools/cmake/project.cmake)
 
-set(MAIN_SRCS ${PROJECT_ROOT}/main/app_main.c)
+set(MAIN_SRCS ${PROJECT_ROOT}/main/buildMgr.cpp)
 
 set(EXTRA_COMPONENT_DIRS "${EXTRA_COMPONENT_DIRS} ${SUBMODULE_ROOT}")
 set(BUILD_COMPONENTS "${BUILD_COMPONENTS} espmqtt")

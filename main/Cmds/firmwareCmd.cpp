@@ -12,6 +12,7 @@
 #include "projTypes.h"
 #include "globals.h"
 
+extern void pprintf(const char * format, ...);
 extern void ConfigSystem(void *pArg);
 extern const uint8_t server_cert_pem_start[] asm("_binary_ca_cert_pem_start");
 //extern const uint8_t server_cert_pem_end[] asm("_binary_ca_cert_pem_end");
@@ -29,18 +30,18 @@ void firmUpdate(void *pArg)
 
 	config.skip_cert_common_name_check = true;	//for testing only
 
-	printf("Ota begin\n");
+	pprintf("Ota begin\n");
 
 	xTaskCreate(&ConfigSystem, "cfg", 1024, (void*)50, 3, &blinkHandle);// blink to show ota process is active
 
 	esp_err_t ret = esp_https_ota(&config);
 	if (ret == ESP_OK) {
-		printf("Ota ended OK\n");
+		pprintf("Ota ended OK\n");
 		esp_restart();
 	}
 	else
 	{
-		printf("Firmware failed\n");
+		pprintf("Firmware failed\n");
 		if(blinkHandle)
 			vTaskDelete(blinkHandle);
 		gpio_set_level((gpio_num_t)WIFILED, 0);

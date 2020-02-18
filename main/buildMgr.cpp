@@ -32,6 +32,26 @@ void firmwareCmd(parg *pArg);
 #define OTA_URL_SIZE 1024
 static const char *TAG = "BDMGR";
 
+void pprintf(const char * format, ...)
+{
+	  char *buffer;
+	  va_list args;
+	  if(xSemaphoreTake(printSem, portMAX_DELAY))
+	  	{
+		  buffer=(char*)malloc(4096);
+		  if(buffer)
+		  {
+			  va_start (args, format);
+			  vsprintf (buffer,format, args);
+			  printf(buffer);
+			  va_end (args);
+			  free(buffer);
+		  }
+		  xSemaphoreGive(printSem);
+	}
+
+}
+
 static int find_mac(uint32_t esteMac)
 {
 	for (int a=0;a<theConf.reservedCnt;a++)
@@ -99,7 +119,7 @@ static void read_flash()
 	q = nvs_open("config", NVS_READONLY, &nvshandle);
 	if(q!=ESP_OK)
 	{
-		printf("Error opening NVS Read File %x\n",q);
+		pprintf("Error opening NVS Read File %x\n",q);
 		return;
 	}
 
@@ -107,7 +127,7 @@ static void read_flash()
 	q=nvs_get_blob(nvshandle,"sysconf",(void*)&theConf,&largo);
 
 	if (q !=ESP_OK)
-		printf("Error read %x largo %d aqui %d\n",q,largo,sizeof(theConf));
+		pprintf("Error read %x largo %d aqui %d\n",q,largo,sizeof(theConf));
 	nvs_close(nvshandle);
 
 }
@@ -118,7 +138,7 @@ void write_to_flash() //save our configuration
 	q = nvs_open("config", NVS_READWRITE, &nvshandle);
 	if(q!=ESP_OK)
 	{
-		printf("Error opening NVS File RW %x\n",q);
+		pprintf("Error opening NVS File RW %x\n",q);
 		return;
 	}
 	size_t req=sizeof(theConf);
@@ -127,16 +147,16 @@ void write_to_flash() //save our configuration
 	{
 		q = nvs_commit(nvshandle);
 		if(q!=ESP_OK)
-			printf("Flash commit write failed %d\n",q);
+			pprintf("Flash commit write failed %d\n",q);
 	}
 	else
-		printf("Fail to write flash %x\n",q);
+		pprintf("Fail to write flash %x\n",q);
 	nvs_close(nvshandle);
 }
 
 void mqttCallback(int res)
 {
-	//printf("Telemetry result %d\n",res);
+	//pprintf("Telemetry result %d\n",res);
 	telemResult=res;
     xEventGroupSetBits(wifi_event_group, TELEM_BIT);//message sent bit
 }
@@ -148,7 +168,7 @@ int sendTelemetryCmd(parg *pArg)
 
 #ifdef DEBUGX
 	if(theConf.traceflag & (1<<HOSTD))
-		printf("%sHost requested telemetry readings\n",HOSTDT);
+		pprintf("%sHost requested telemetry readings\n",HOSTDT);
 #endif
 	char *mensaje=sendTelemetry();
 	mqttMsgHandle.msgLen=strlen(mensaje);
@@ -160,7 +180,7 @@ int sendTelemetryCmd(parg *pArg)
 		xQueueSend( mqttQ,&mqttMsgHandle,0 );			//Submode will free the mensaje variable
     if(!xEventGroupWaitBits(wifi_event_group, TELEM_BIT, false, true,  mqttMsgHandle.maxTime+10/  portTICK_RATE_MS))
     {
-		//printf("Telemetric result timeout");
+		//pprintf("Telemetric result timeout");
 		telemResult=BITTM;
     }
     return telemResult;
@@ -266,7 +286,7 @@ static void reserveSlot(parg* argument)
 #ifdef DEBUGX
 
 	if(theConf.traceflag & (1<<CMDD))
-		printf("%sReserve slot for %x\n",CMDDT,macc);
+		pprintf("%sReserve slot for %x\n",CMDDT,macc);
 #endif
 
 	for(int a=0;a<theConf.reservedCnt;a++)
@@ -276,7 +296,7 @@ static void reserveSlot(parg* argument)
 			yes=-2;		//duplicate HOW COME????? in normal conditions
 #ifdef DEBUGX
 	if(theConf.traceflag & (1<<CMDD))
-			printf("Slot already exists\n");
+			pprintf("Slot already exists\n");
 #endif
 			send(argument->pComm, &yes, sizeof(yes), 0);//already registered
 			return;
@@ -287,7 +307,7 @@ static void reserveSlot(parg* argument)
 	time(&theConf.slotReserveDate[theConf.reservedCnt]);
 #ifdef DEBUGX
 	if(theConf.traceflag & (1<<CMDD))
-	printf("%sMac reserved %x slot %d %s",CMDDT,theConf.reservedMacs[theConf.reservedCnt],theConf.reservedCnt,ctime(&theConf.slotReserveDate[theConf.reservedCnt]));
+	pprintf("%sMac reserved %x slot %d %s",CMDDT,theConf.reservedMacs[theConf.reservedCnt],theConf.reservedCnt,ctime(&theConf.slotReserveDate[theConf.reservedCnt]));
 #endif
 	yes=theConf.reservedCnt++;	//send slot assigned
 	send(argument->pComm, &yes, sizeof(yes), 0);
@@ -308,8 +328,8 @@ static void getMessage(void *pArg)
 #ifdef DEBUGX
 	if(theConf.traceflag & (1<<CMDD))
 	{
-		printf("%sStarting GetM Fd %d Pos %d GlobaCount %d Macf %d\n",CMDDT,sock,pos,globalSocks,theP->macf);
-		printf("%sGetm%d heap %d\n",CMDDT,sock,esp_get_free_heap_size());
+		pprintf("%sStarting GetM Fd %d Pos %d GlobaCount %d Macf %d\n",CMDDT,sock,pos,globalSocks,theP->macf);
+		pprintf("%sGetm%d heap %d\n",CMDDT,sock,esp_get_free_heap_size());
 	}
 #endif
 
@@ -321,20 +341,20 @@ static void getMessage(void *pArg)
 				if (len < 0) {
 #ifdef DEBUGX
 					if(theConf.traceflag & (1<<CMDD))
-						printf("%sError occurred during receiving: errno %d fd: %d Pos %d\n",CMDDT, errno,sock,pos);
+						pprintf("%sError occurred during receiving: errno %d fd: %d Pos %d\n",CMDDT, errno,sock,pos);
 #endif
 
 					goto exit;
 				} else if (len == 0) {
 #ifdef DEBUGX
 					if(theConf.traceflag & (1<<CMDD))
-						printf("%sConnection closed: errno %d \n", CMDDT,errno);
+						pprintf("%sConnection closed: errno %d \n", CMDDT,errno);
 #endif
 				   goto exit;
 				} else {
 #ifdef DEBUGX
 					if(theConf.traceflag & (1<<CMDD))
-						printf("%sMsg Rx %s\n",CMDDT, comando.mensaje);
+						pprintf("%sMsg Rx %s\n",CMDDT, comando.mensaje);
 #endif
 					// check special reserve msg
 					if(strstr(comando.mensaje,"rsvp")!=NULL)
@@ -469,7 +489,7 @@ static void buildMgr(void *pvParameters)
 			{
 	#ifdef DEBUGX
 				if(theConf.traceflag & (1<<CMDD))
-					printf("%sInternal error no Ip %x\n",CMDDT,b);
+					pprintf("%sInternal error no Ip %x\n",CMDDT,b);
 	#endif
 				// do not test MAC here since we need to get the message for the RSVP command, when there are 0 MACs reserved
 				a=0;
@@ -489,16 +509,16 @@ static void buildMgr(void *pvParameters)
         }
 #ifdef DEBUGX
 	if(theConf.traceflag & (1<<CMDD))
-		printf("%sBuildmgr listend error %d\n",CMDDT,errno);
+		pprintf("%sBuildmgr listend error %d\n",CMDDT,errno);
 #endif
     }
 
     char them[6];
-    printf("BuildMgr will die OMG. GlobalCount %d VanMacs %d\n",globalSocks,vanMacs);
+    pprintf("BuildMgr will die OMG. GlobalCount %d VanMacs %d\n",globalSocks,vanMacs);
 	for (int a=0;a<vanMacs;a++)
 	{
 		memcpy(&them,&losMacs[a].macAdd,4);
-		printf("Mac[%d][%d]:%.2x:%.2x:%.2x:%.2x Ip:%s (%s)\n",a,losMacs[a].trans[0],
+		pprintf("Mac[%d][%d]:%.2x:%.2x:%.2x:%.2x Ip:%s (%s)\n",a,losMacs[a].trans[0],
 		them[0],them[1],them[2],them[3],(char*)ip4addr_ntoa((ip4_addr_t *)&losMacs[a].theIp),ctime(&losMacs[a].lastUpdate));
 	}
 	esp_restart();// no other option
@@ -517,7 +537,7 @@ static void wifi_event_handler(void* arg, esp_event_base_t event_base,
     case  WIFI_EVENT_AP_STACONNECTED:
 #ifdef DEBUGX
 		if(theConf.traceflag & (1<<WIFID))
-			printf("%sWIFIMac connected %02x:%02x:%02x:%02x:%02x:%02x\n",WIFIDT,ev->mac[0],ev->mac[1],ev->mac[2],ev->mac[3],ev->mac[4],ev->mac[5]);
+			pprintf("%sWIFIMac connected %02x:%02x:%02x:%02x:%02x:%02x\n",WIFIDT,ev->mac[0],ev->mac[1],ev->mac[2],ev->mac[3],ev->mac[4],ev->mac[5]);
 #endif
     	memcpy((void*)&newmac,&ev->mac[2],4);
     	estem=find_mac(newmac);
@@ -525,7 +545,7 @@ static void wifi_event_handler(void* arg, esp_event_base_t event_base,
     	{
     		if(losMacs[estem].dState>BOOTSTATE)
     		{
-    			printf("MtM Rebooted %x last State %s seen %s",losMacs[estem].macAdd,
+    			pprintf("MtM Rebooted %x last State %s seen %s",losMacs[estem].macAdd,
     					stateName[losMacs[estem].dState],ctime(&losMacs[estem].lastUpdate));
     		}
     		if(losMacs[estem].theSock>0)
@@ -553,7 +573,7 @@ static void wifi_event_handler(void* arg, esp_event_base_t event_base,
     	break;
 	case WIFI_EVENT_AP_STADISCONNECTED:
 		if(theConf.traceflag & (1<<WIFID))
-			printf("Mac disco %02x:%02x:%02x:%02x:%02x:%02x\n",ev->mac[0],ev->mac[1],ev->mac[2],ev->mac[3],ev->mac[4],ev->mac[5]);
+			pprintf("Mac disco %02x:%02x:%02x:%02x:%02x:%02x\n",ev->mac[0],ev->mac[1],ev->mac[2],ev->mac[3],ev->mac[4],ev->mac[5]);
 		memcpy((void*)&newmac,&ev->mac[2],4);
 		estem=find_mac(newmac);
 		if(estem>=0)
@@ -636,13 +656,13 @@ static void update_ip()
 #ifdef DEBUGX
 		if(theConf.traceflag & (1<<CMDD))
 		{
-			printf("[%sstation[%d] MAC ",CMDDT,i);
+			pprintf("[%sstation[%d] MAC ",CMDDT,i);
 			for(int i = 0; i< 6; i++)
 			{
-				printf("%02X", station.mac[i]);
-				if(i<5)printf(":");
+				pprintf("%02X", station.mac[i]);
+				if(i<5)pprintf(":");
 			}
-			printf("\n");
+			pprintf("\n");
 		}
 #endif
 		u32 bigmac;
@@ -652,7 +672,7 @@ static void update_ip()
 		{
 #ifdef DEBUGX
 			if(theConf.traceflag & (1<<CMDD))
-				printf("%sNot registered mac %x not found \n",CMDDT,bigmac);
+				pprintf("%sNot registered mac %x not found \n",CMDDT,bigmac);
 #endif
 
 		}
@@ -665,7 +685,7 @@ static void update_ip()
 //{
 //#ifdef DEBUGX
 //	if(theConf.traceflag & (1<<CMDD))
-//		printf("%sClosing[%d] FD %d\n",CMDDT,cual,losMacs[cual].theSock);
+//		pprintf("%sClosing[%d] FD %d\n",CMDDT,cual,losMacs[cual].theSock);
 //#endif
 //	if(losMacs[cual].theHandle)
 //		vTaskDelete(losMacs[cual].theHandle);// kill the task for rx
@@ -703,11 +723,11 @@ static void ip_event_handler(void* arg, esp_event_base_t event_base,
 
     switch (event_id) {
     case IP_EVENT_AP_STAIPASSIGNED:
-  //  	printf("\nAP IP Assigned:" IPSTR "\n", IP2STR(&evip->ip));
+  //  	pprintf("\nAP IP Assigned:" IPSTR "\n", IP2STR(&evip->ip));
     	update_ip();
     	break;
         case IP_EVENT_STA_GOT_IP:
-        	printf("\nIP Assigned:" IPSTR "\n", IP2STR(&ev->ip_info.ip));
+        	pprintf("\nIP Assigned:" IPSTR "\n", IP2STR(&ev->ip_info.ip));
         	wifif=true;
             xEventGroupSetBits(wifi_event_group, WIFI_BIT);
         	xTaskCreate(&sntpget,"sntp",2048,NULL, 4, NULL);
@@ -767,7 +787,7 @@ static void wifi_init(void)
 #define DNS_SERVER		"8.8.8.8"
 
 #ifdef ENABLE_STATIC_IP
-    printf("%sSet static ip sta%s\n",LRED,RESETC);
+    pprintf("%sSet static ip sta%s\n",LRED,RESETC);
 
 	esp_netif_ip_info_t ipInfo1;
 	inet_pton(AF_INET, STATIC_IP, &ipInfo1.ip);
@@ -847,7 +867,7 @@ esp_err_t mqtt_event_handler(esp_mqtt_event_handle_t event)
         case MQTT_EVENT_CONNECTED:
 #ifdef DEBUGX
 			if(theConf.traceflag & (1<<MQTTD))
-				printf("%sMqtt connected\n",MQTTDT);
+				pprintf("%sMqtt connected\n",MQTTDT);
 #endif
         	mqttf=true;
             esp_mqtt_client_subscribe(client, cmdQueue.c_str(), 0);
@@ -855,7 +875,7 @@ esp_err_t mqtt_event_handler(esp_mqtt_event_handle_t event)
         case MQTT_EVENT_DISCONNECTED:
 #ifdef DEBUGX
 			if(theConf.traceflag & (1<<MQTTD))
-				printf("%sMqtt Disco\n",MQTTDT);
+				pprintf("%sMqtt Disco\n",MQTTDT);
 #endif
         	firstmqtt=false;
         	mqttf=false;
@@ -870,7 +890,7 @@ esp_err_t mqtt_event_handler(esp_mqtt_event_handle_t event)
         case MQTT_EVENT_PUBLISHED:
 #ifdef DEBUGX
         	if(theConf.traceflag & (1<<MQTTD))
-        		printf("%sPublished MsgId %d\n",MQTTDT,event->msg_id);
+        		pprintf("%sPublished MsgId %d\n",MQTTDT,event->msg_id);
 #endif
             esp_mqtt_client_unsubscribe(client, cmdQueue.c_str());//bit is set by unsubscribe
             break;
@@ -878,8 +898,8 @@ esp_err_t mqtt_event_handler(esp_mqtt_event_handle_t event)
 #ifdef DEBUGX
        	if(theConf.traceflag & (1<<MQTTD))
            {
-        	   printf("%sTOPIC=%.*s\r\n",MQTTDT,event->topic_len, event->topic);
-        	   printf("%sDATA=%.*s\r\n", MQTTDT,event->data_len, event->data);
+        	   pprintf("%sTOPIC=%.*s\r\n",MQTTDT,event->topic_len, event->topic);
+        	   pprintf("%sDATA=%.*s\r\n", MQTTDT,event->data_len, event->data);
            }
 #endif
            theCmd.mensaje=(char*)malloc(MAXBUFFER);
@@ -894,7 +914,7 @@ esp_err_t mqtt_event_handler(esp_mqtt_event_handle_t event)
         case MQTT_EVENT_ERROR:
 #ifdef DEBUGX
 			if(theConf.traceflag & (1<<MQTTD))
-				printf("%sMqtt Error\n",MQTTDT);
+				pprintf("%sMqtt Error\n",MQTTDT);
 #endif
            xEventGroupClearBits(wifi_event_group, MQTT_BIT);
             break;
@@ -904,7 +924,7 @@ esp_err_t mqtt_event_handler(esp_mqtt_event_handle_t event)
         default:
 #ifdef DEBUGX
         	if(theConf.traceflag & (1<<MQTTD))
-        		printf("%sEvent %d\n",MQTTDT,event->event_id);
+        		pprintf("%sEvent %d\n",MQTTDT,event->event_id);
 #endif
             break;
     }
@@ -926,13 +946,13 @@ static void submode(void * pArg)
 #ifdef DEBUGX
 				time(&mgrTime[SUBMGR]);
 				if(theConf.traceflag & (1<<CMDD))
-					printf("%sHeap after submode rx %d\n",CMDDT,esp_get_free_heap_size());
+					pprintf("%sHeap after submode rx %d\n",CMDDT,esp_get_free_heap_size());
 #endif
 				timetodelivery=millis();
 				if(!clientCloud || !mqttf) //just in case
 				{
 					if(!clientCloud)
-						printf("Error no client mqtt\n");
+						pprintf("Error no client mqtt\n");
 					mqtterr=NOCLIENT;
 					if(!mqttf && clientCloud)
 					{
@@ -947,11 +967,11 @@ static void submode(void * pArg)
 				{
 #ifdef DEBUGX
 					if(theConf.traceflag & (1<<CMDD))
-						printf("%sStarting mqtt\n",CMDDT);
+						pprintf("%sStarting mqtt\n",CMDDT);
 #endif
 					xEventGroupClearBits(wifi_event_group, MQTT_BIT);//clear flag to wait on
 					mqtterr=0;
-			//		printf("Status %d\n",clientCloud->esp_mqtt_client.status);
+			//		pprintf("Status %d\n",clientCloud->esp_mqtt_client.status);
 
 					if(firstmqtt)
 					{
@@ -967,7 +987,7 @@ static void submode(void * pArg)
 						{
 #ifdef DEBUGX
 							if(theConf.traceflag & (1<<CMDD))
-								printf("%sSending Mqtt state\n",CMDDT);
+								pprintf("%sSending Mqtt state\n",CMDDT);
 #endif
 							xEventGroupClearBits(wifi_event_group, PUB_BIT); // clear our waiting bit
 //							if(clientCloud)
@@ -978,7 +998,7 @@ static void submode(void * pArg)
 								{
 #ifdef DEBUGX
 									if(theConf.traceflag & (1<<CMDD))
-										printf("%sPublish error %d\n",CMDDT,mqtterr);
+										pprintf("%sPublish error %d\n",CMDDT,mqtterr);
 #endif
 									goto mal;
 								}
@@ -987,7 +1007,7 @@ static void submode(void * pArg)
 								{
 #ifdef DEBUGX
 									if(theConf.traceflag & (1<<CMDD))
-										printf("Publish TimedOut\n");
+										pprintf("Publish TimedOut\n");
 									mqtterr=PUBTM;
 									goto mal;
 #endif
@@ -997,13 +1017,13 @@ static void submode(void * pArg)
 						//			free(mqttHandle.message);			//we free the message HERE
 
 								esp_mqtt_client_stop(clientCloud);
-//								printf("Callback in %p\n",mqttHandle.cb);
+//								pprintf("Callback in %p\n",mqttHandle.cb);
 //								if(mqttHandle.cb!=NULL)
 //									(*mqttHandle.cb)(0);
 								mqtterr=ESP_OK;
 #ifdef DEBUGX
 								if(theConf.traceflag & (1<<CMDD))
-									printf("%sStopping\n",CMDDT);
+									pprintf("%sStopping\n",CMDDT);
 #endif
 //							}
 //							else
@@ -1012,7 +1032,7 @@ static void submode(void * pArg)
 //								mqtterr=STARTERR;
 //#ifdef DEBUGX
 //								if(theConf.traceflag & (1<<CMDD))
-//									printf("%sStart Timed out\n",CMDDT);
+//									pprintf("%sStart Timed out\n",CMDDT);
 //#endif
 //							}
 						}
@@ -1020,7 +1040,7 @@ static void submode(void * pArg)
 						{
 #ifdef DEBUGX
 							if(theConf.traceflag & (1<<CMDD))
-								printf("%sError start timeout mqtt\n",CMDDT);
+								pprintf("%sError start timeout mqtt\n",CMDDT);
 #endif
 							mqtterr=STARTTM;
 						}
@@ -1029,7 +1049,7 @@ static void submode(void * pArg)
 					{
 #ifdef DEBUGX
 						if(theConf.traceflag & (1<<CMDD))
-							printf("%sFailed to start when available %d\n",CMDDT,mqtterr);
+							pprintf("%sFailed to start when available %d\n",CMDDT,mqtterr);
 #endif
 						mqtterr=STARTERR;
 					}
@@ -1037,8 +1057,8 @@ static void submode(void * pArg)
 #ifdef DEBUGX
 				if(theConf.traceflag & (1<<CMDD))
 				{
-					printf("%sDelivery time %dms\n",CMDDT,millis()-timetodelivery);
-					printf("%sSent %d. Heap after submode %d\n",CMDDT,++sentTotal,esp_get_free_heap_size());
+					pprintf("%sDelivery time %dms\n",CMDDT,millis()-timetodelivery);
+					pprintf("%sSent %d. Heap after submode %d\n",CMDDT,++sentTotal,esp_get_free_heap_size());
 				}
 #endif
 			}// no clientcloud
@@ -1048,7 +1068,7 @@ static void submode(void * pArg)
 		{
 #ifdef DEBUGX
 			if(theConf.traceflag & (1<<CMDD))
-				printf("%sMqtt Failed queue\n",CMDDT);
+				pprintf("%sMqtt Failed queue\n",CMDDT);
 #endif
 			mqtterr=QUEUEFAIL;
 			vTaskDelay(100 /  portTICK_RATE_MS);
@@ -1085,24 +1105,24 @@ static void mqtt_app_start(void)
 #endif
 		mqttQ = xQueueCreate( 20, sizeof( mqttMsg_t ) );
 		if(!mqttQ)
-			printf("Failed queue\n");
+			pprintf("Failed queue\n");
 
 		clientCloud=NULL;
 
 	    clientCloud = esp_mqtt_client_init(&mqtt_cfg);
-	    printf("Mqtt start client %p\n",clientCloud);
+	    pprintf("Mqtt start client %p\n",clientCloud);
 
 
 	    if(clientCloud)
 	    	xTaskCreate(&submode,"U571",10240,NULL, 5, &submHandle);
 	    else
 	    {
-	    	printf("Not configured Mqtt\n");
+	    	pprintf("Not configured Mqtt\n");
 	    	return;
 	    }
 	//    if(esp_mqtt_client_start(clientCloud)!=;
 	  //  if (err !=ESP_OK)
-	    //	printf("Error connect mqtt %d\n",err);
+	    //	pprintf("Error connect mqtt %d\n",err);
 
 	//    esp_mqtt_client_start(clientCloud); //should be started by the SubMode task
 }
@@ -1118,7 +1138,7 @@ static void cmdManager(void* arg)
 
 	mqttR = xQueueCreate( 20, sizeof( cmdType ) );
 			if(!mqttR)
-				printf("Failed queue Rx\n");
+				pprintf("Failed queue Rx\n");
 
 	while(1)
 	{
@@ -1128,7 +1148,7 @@ static void cmdManager(void* arg)
 
 #ifdef DEBUGX
 			if(theConf.traceflag & (1<<MSGD))
-				printf("%sReceived: %s Fd %d Queue %d Heap %d\n",MSGDT,cmd.mensaje,cmd.fd,uxQueueMessagesWaiting(mqttR),esp_get_free_heap_size());
+				pprintf("%sReceived: %s Fd %d Queue %d Heap %d\n",MSGDT,cmd.mensaje,cmd.fd,uxQueueMessagesWaiting(mqttR),esp_get_free_heap_size());
 #endif
 			elcmd= cJSON_Parse(cmd.mensaje);
 			if(elcmd)
@@ -1155,7 +1175,7 @@ static void cmdManager(void* arg)
 					{
 #ifdef DEBUGX
 						if(theConf.traceflag & (1<<CMDD))
-							printf("%sFram HW Failure in meter MAC %06x MtM %s\n",CMDDT,(uint32_t)ddmac->valuedouble,mtmName);
+							pprintf("%sFram HW Failure in meter MAC %06x MtM %s\n",CMDDT,(uint32_t)ddmac->valuedouble,mtmName);
 #endif
 						//send Host warning
 						mqttMsg_t 	mqttMsgHandle;
@@ -1179,7 +1199,7 @@ static void cmdManager(void* arg)
 						cJSON *cmdd= cJSON_GetObjectItem(cmdIteml,"cmd"); //get cmd. Nopt detecting invalid cmd
 #ifdef DEBUGX
 						if(theConf.traceflag & (1<<CMDD))
-							printf("%sArray[%d] cmd is %s\n",CMDDT,a,cmdd->valuestring);
+							pprintf("%sArray[%d] cmd is %s\n",CMDDT,a,cmdd->valuestring);
 #endif
 						int cualf=findCommand(cmdd->valuestring);
 						if(cualf>=0)
@@ -1197,7 +1217,7 @@ static void cmdManager(void* arg)
 								{
 #ifdef DEBUGX
 									if(theConf.traceflag & (1<<CMDD))
-										printf("%sNot our structure\n",CMDDT);
+										pprintf("%sNot our structure\n",CMDDT);
 #endif
 									free(argument);
 									goto exit;
@@ -1206,7 +1226,7 @@ static void cmdManager(void* arg)
 								{
 #ifdef DEBUGX
 									if(theConf.traceflag & (1<<CMDD))
-										printf("%sNot our connMgr %s\n",CMDDT,cmgr->valuestring);
+										pprintf("%sNot our connMgr %s\n",CMDDT,cmgr->valuestring);
 #endif
 									free(argument);
 									goto exit;
@@ -1221,7 +1241,7 @@ static void cmdManager(void* arg)
 						{
 #ifdef DEBUGX
 							if(theConf.traceflag & (1<<CMDD))
-								printf("%sCmd %s not implemented\n",CMDDT,cmdd->valuestring);
+								pprintf("%sCmd %s not implemented\n",CMDDT,cmdd->valuestring);
 #endif
 						}
 					}// array
@@ -1234,21 +1254,21 @@ static void cmdManager(void* arg)
 			{
 #ifdef DEBUGX
 				if(theConf.traceflag & (1<<CMDD))
-					printf("%sCould not parse cmd\n",CMDDT);
+					pprintf("%sCould not parse cmd\n",CMDDT);
 #endif
 			}
 			if(cmd.mensaje)
 				free(cmd.mensaje); 							// Data is transfered via pointer from a malloc. Free it here.
 #ifdef DEBUGX
 			if(theConf.traceflag & (1<<MSGD))
-				printf("%sMqttManger heap %d\n",MSGDT,esp_get_free_heap_size());
+				pprintf("%sMqttManger heap %d\n",MSGDT,esp_get_free_heap_size());
 #endif
 		}
 		else
 		{
 #ifdef DEBUGX
 			if(theConf.traceflag & (1<<CMDD))
-				printf("%sCmdQueue Error\n",CMDDT);
+				pprintf("%sCmdQueue Error\n",CMDDT);
 #endif
 		}
 	}//while
@@ -1274,7 +1294,7 @@ void initScreen()
 		xSemaphoreGive(I2CSem);
 	}
 	else
-		printf("Failed to InitScreen\n");
+		pprintf("Failed to InitScreen\n");
 }
 #endif
 
@@ -1294,6 +1314,7 @@ static void init_vars()
 	miscanf=false;
 	mqttf=false;
 	firstmqtt=false;
+
 
 	if(theConf.msgTimeOut<10000)
 		theConf.msgTimeOut=61000;	//just in case
@@ -1387,7 +1408,7 @@ static void init_fram()
 
 	if(!fram.begin(FMOSI,FMISO,FCLK,FCS,&framSem)) //will create SPI channel and Semaphore
 	{
-		printf("FRAM Begin Failed\n");
+		pprintf("FRAM Begin Failed\n");
 		xTaskCreate(&ConfigSystem,"error",1024,(void*)100, 4, NULL);
 		return;
 	}
@@ -1410,7 +1431,7 @@ void framManager(void * pArg)
 
 	framQ = xQueueCreate( 20, sizeof( meterType ) );
 	if(!framQ)
-		printf("Failed queue Fram\n");
+		pprintf("Failed queue Fram\n");
 
 	while(true)
 	{
@@ -1425,7 +1446,7 @@ void framManager(void * pArg)
 					write_to_fram(theMeter.pos,theMeter.saveit);
 	#ifdef DEBUGX
 					if(theConf.traceflag & (1<<FRAMD))
-						printf("%sSaving Meter %d add %d Beats %d\n",FRAMDT,theMeter.pos,theMeter.saveit,theMeters[theMeter.pos].currentBeat);
+						pprintf("%sSaving Meter %d add %d Beats %d\n",FRAMDT,theMeter.pos,theMeter.saveit,theMeters[theMeter.pos].currentBeat);
 	#endif
 					xSemaphoreGive(framSem);
 				}
@@ -1435,7 +1456,7 @@ void framManager(void * pArg)
 		{
 #ifdef DEBUGX
 			if(theConf.traceflag & (1<<FRAMD))
-				printf("%sFailed framQ Manager\n",FRAMDT);
+				pprintf("%sFailed framQ Manager\n",FRAMDT);
 #endif
 			delay(1000);
 		}
@@ -1451,7 +1472,7 @@ static void pcntManager(void * pArg)
 
 	pcnt_evt_queue = xQueueCreate( 20, sizeof( pcnt_evt_t ) );
 	if(!pcnt_evt_queue)
-		printf("Failed queue PCNT\n");
+		pprintf("Failed queue PCNT\n");
 
 	while(true)
 	{
@@ -1463,7 +1484,7 @@ static void pcntManager(void * pArg)
 
 #ifdef DEBUGX
 			if(theConf.traceflag & (1<<INTD))
-				printf("%sEvent PCNT unit[%d]; cnt: %d status %x\n",INTDT, evt.unit, count,evt.status);
+				pprintf("%sEvent PCNT unit[%d]; cnt: %d status %x\n",INTDT, evt.unit, count,evt.status);
 #endif
 			if (evt.status & PCNT_EVT_THRES_1)
 			{
@@ -1497,7 +1518,7 @@ static void pcntManager(void * pArg)
 
 #ifdef DEBUGX
 				if(theConf.traceflag & (1<<INTD))
-					printf("%sAddKwH %s Beat %d MeterPos %d Time %d Hora %d Tarifa %02x BPK %d\n",INTDT,
+					pprintf("%sAddKwH %s Beat %d MeterPos %d Time %d Hora %d Tarifa %02x BPK %d\n",INTDT,
 							residuo?"N":"Y",theMeters[evt.unit].currentBeat,theMeters[evt.unit].pos,timeDiff,
 									horag,tarifasDia[horag],theMeters[evt.unit].beatsPerkW);
 #endif
@@ -1517,7 +1538,7 @@ static void pcntManager(void * pArg)
 					xQueueSend( framQ,&theMeters[evt.unit],0);//copy to fram Manager
 			}
         } else
-            printf("PCNT Failed Queue\n");
+            pprintf("PCNT Failed Queue\n");
 	}
 }
 
@@ -1525,7 +1546,7 @@ static void pcntManager(void * pArg)
 
 static void erase_config() //do the dirty work
 {
-	printf("Erase config\n");
+	pprintf("Erase config\n");
 	memset(&theConf,0,sizeof(theConf));
 	theConf.centinel=CENTINEL;
 	write_to_flash();
@@ -1538,7 +1559,7 @@ static void erase_config() //do the dirty work
 	//	    	fclose(bitacora); //Close and reopen r+
 	//		    bitacora = fopen("/spiflash/log.txt", "r+");
 	//		    if(!bitacora)
-	//		    	printf("Could not reopen logfile\n");
+	//		    	pprintf("Could not reopen logfile\n");
 	//		    else
 	//			    postLog(0,"Log cleared");
 	//	    }
@@ -1546,7 +1567,7 @@ static void erase_config() //do the dirty work
 	//	}
 #ifdef DEBUGX
 	if(theConf.traceflag & (1<<BOOTD))
-		printf("%sCentinel %x\n",BOOTDT,theConf.centinel);
+		pprintf("%sCentinel %x\n",BOOTDT,theConf.centinel);
 #endif
 }
 
@@ -1571,7 +1592,7 @@ cJSON * makeGroupMeters()
 	cJSON *root=cJSON_CreateObject();
 	if(root==NULL)
 	{
-		printf("cannot create root\n");
+		pprintf("cannot create root\n");
 		return NULL;
 	}
 
@@ -1611,11 +1632,11 @@ void testMqtt()
 		lmessage=cJSON_Print(telemetry);
 #ifdef DEBUGX
 		if(theConf.traceflag & (1<<MQTTD))
-			printf("To Host %s\n",lmessage);
+			pprintf("To Host %s\n",lmessage);
 #endif
 	}
 	else
-		printf("Failed telemetry\n");
+		pprintf("Failed telemetry\n");
 
 	//esp_mqtt_client_publish(clientCloud, "MeterIoT/Chillo/Chillo/CONTROL", lmessage, 0, 1,0);
 	esp_mqtt_client_publish(clientCloud, controlQueue.c_str(), lmessage, 0, 1,0);
@@ -1638,12 +1659,12 @@ char *sendTelemetry()
 		lmessage=cJSON_Print(telemetry);
 #ifdef DEBUGX
 		if(theConf.traceflag & (1<<MSGD))
-			printf("%sTo Host %s\n",MSGDT,lmessage);
+			pprintf("%sTo Host %s\n",MSGDT,lmessage);
 #endif
 	}
 	else
 	{
-		printf("Failed telemetry\n");
+		pprintf("Failed telemetry\n");
 	}
 	time(&now);
 	fram.write_cycle(mesg,now);
@@ -1669,7 +1690,7 @@ void connMgr(void* pArg)
 	mqttMsgHandle.cb=mqttCallback;
 	if(mqttQ)
 		xQueueSend( mqttQ,&mqttMsgHandle,0 );			//submode will free Mensaje
-//	printf("Sending Telemetry\n");
+//	pprintf("Sending Telemetry\n");
 	delay(1000);
 	connHandle=NULL;
 	vTaskDelete(NULL);
@@ -1680,31 +1701,31 @@ void init_boot()
 #ifdef DEBUGX
 
 	if(theConf.traceflag & (1<<BOOTD))
-			printf("%s Fram Id %04x Fram Size %d%s\n",MAGENTA,fram.prodId,fram.intframWords,RESETC);
+			pprintf("%s Fram Id %04x Fram Size %d%s\n",MAGENTA,fram.prodId,fram.intframWords,RESETC);
 
 	if((theConf.traceflag & (1<<BOOTD)) && fram.intframWords>0)
 	{
-		printf("%s=============== FRAM ===============%s\n",RED,YELLOW);
-		printf("FRAMDATE(%s%d%s)=%s%d%s\n",GREEN,FRAMDATE,YELLOW,CYAN,GUARDM-FRAMDATE,RESETC);
-		printf("METERVER(%s%d%s)=%s%d%s\n",GREEN,GUARDM,YELLOW,CYAN,USEDMACS-GUARDM,RESETC);
-		printf("FREEFRAM(%s%d%s)=%s%d%s\n",GREEN,USEDMACS,YELLOW,CYAN,MCYCLE-USEDMACS,RESETC);
-		printf("MCYCLE(%s%d%s)=%s%d%s\n",GREEN,MCYCLE,YELLOW,CYAN,STATIONS-MCYCLE,RESETC);
-		printf("STATIONS(%s%d%s)=%s%d%s\n",GREEN,STATIONS,YELLOW,CYAN,STATIONSEND-STATIONS,RESETC);
-		printf("STATIONSEND(%s%d%s)=%s%d%s\n",GREEN,STATIONSEND,YELLOW,CYAN,TARIFADIA-STATIONSEND,RESETC);
-		printf("TARIFADIA(%s%d%s)=%s%d%s\n",GREEN,TARIFADIA,YELLOW,CYAN,FINTARIFA-TARIFADIA,RESETC);
-		printf("FINTARIFA(%s%d%s)=%s%d%s\n",GREEN,FINTARIFA,YELLOW,CYAN,BEATSTART-FINTARIFA,RESETC);
-		printf("BEATSTART(%s%d%s)=%s%d%s\n",GREEN,BEATSTART,YELLOW,CYAN,LIFEKWH-BEATSTART,RESETC);
-		printf("LIFEKWH(%s%d%s)=%s%d%s\n",GREEN,LIFEKWH,YELLOW,CYAN,LIFEDATE-LIFEKWH,RESETC);
-		printf("LIFEDATE(%s%d%s)=%s%d%s\n",GREEN,LIFEDATE,YELLOW,CYAN,MONTHSTART-LIFEDATE,RESETC);
-		printf("MONTHSTART(%s%d%s)=%s%d%s\n",GREEN,MONTHSTART,YELLOW,CYAN,MONTHRAW-MONTHSTART,RESETC);
-		printf("MONTHRAW(%s%d%s)=%s%d%s\n",GREEN,MONTHRAW,YELLOW,CYAN,DAYSTART-MONTHRAW,RESETC);
-		printf("DAYSTART(%s%d%s)=%s%d%s\n",GREEN,DAYSTART,YELLOW,CYAN,DAYRAW-DAYSTART,RESETC);
-		printf("DAYRAW(%s%d%s)=%s%d%s\n",GREEN,DAYRAW,YELLOW,CYAN,HOURSTART-DAYRAW,RESETC);
-		printf("HOURSTART(%s%d%s)=%s%d%s\n",GREEN,HOURSTART,YELLOW,CYAN,HOURRAW-HOURSTART,RESETC);
-		printf("HOURRAW(%s%d%s)=%s%d%s\n",GREEN,HOURRAW,YELLOW,CYAN,DATAEND-HOURRAW,RESETC);
-		printf("DATAEND(%s%d%s)=%s%d%s\n",GREEN,DATAEND,YELLOW,CYAN,DATAEND-BEATSTART,RESETC);
-		printf("TOTALFRAM(%s%d%s) Devices %s%d%s\n",GREEN,TOTALFRAM,YELLOW,CYAN,(DATAEND-BEATSTART)*MAXDEVS,RESETC);
-		printf("%s=============== FRAM ===============%s\n",RED,RESETC);
+		pprintf("%s=============== FRAM ===============%s\n",RED,YELLOW);
+		pprintf("FRAMDATE(%s%d%s)=%s%d%s\n",GREEN,FRAMDATE,YELLOW,CYAN,GUARDM-FRAMDATE,RESETC);
+		pprintf("METERVER(%s%d%s)=%s%d%s\n",GREEN,GUARDM,YELLOW,CYAN,USEDMACS-GUARDM,RESETC);
+		pprintf("FREEFRAM(%s%d%s)=%s%d%s\n",GREEN,USEDMACS,YELLOW,CYAN,MCYCLE-USEDMACS,RESETC);
+		pprintf("MCYCLE(%s%d%s)=%s%d%s\n",GREEN,MCYCLE,YELLOW,CYAN,STATIONS-MCYCLE,RESETC);
+		pprintf("STATIONS(%s%d%s)=%s%d%s\n",GREEN,STATIONS,YELLOW,CYAN,STATIONSEND-STATIONS,RESETC);
+		pprintf("STATIONSEND(%s%d%s)=%s%d%s\n",GREEN,STATIONSEND,YELLOW,CYAN,TARIFADIA-STATIONSEND,RESETC);
+		pprintf("TARIFADIA(%s%d%s)=%s%d%s\n",GREEN,TARIFADIA,YELLOW,CYAN,FINTARIFA-TARIFADIA,RESETC);
+		pprintf("FINTARIFA(%s%d%s)=%s%d%s\n",GREEN,FINTARIFA,YELLOW,CYAN,BEATSTART-FINTARIFA,RESETC);
+		pprintf("BEATSTART(%s%d%s)=%s%d%s\n",GREEN,BEATSTART,YELLOW,CYAN,LIFEKWH-BEATSTART,RESETC);
+		pprintf("LIFEKWH(%s%d%s)=%s%d%s\n",GREEN,LIFEKWH,YELLOW,CYAN,LIFEDATE-LIFEKWH,RESETC);
+		pprintf("LIFEDATE(%s%d%s)=%s%d%s\n",GREEN,LIFEDATE,YELLOW,CYAN,MONTHSTART-LIFEDATE,RESETC);
+		pprintf("MONTHSTART(%s%d%s)=%s%d%s\n",GREEN,MONTHSTART,YELLOW,CYAN,MONTHRAW-MONTHSTART,RESETC);
+		pprintf("MONTHRAW(%s%d%s)=%s%d%s\n",GREEN,MONTHRAW,YELLOW,CYAN,DAYSTART-MONTHRAW,RESETC);
+		pprintf("DAYSTART(%s%d%s)=%s%d%s\n",GREEN,DAYSTART,YELLOW,CYAN,DAYRAW-DAYSTART,RESETC);
+		pprintf("DAYRAW(%s%d%s)=%s%d%s\n",GREEN,DAYRAW,YELLOW,CYAN,HOURSTART-DAYRAW,RESETC);
+		pprintf("HOURSTART(%s%d%s)=%s%d%s\n",GREEN,HOURSTART,YELLOW,CYAN,HOURRAW-HOURSTART,RESETC);
+		pprintf("HOURRAW(%s%d%s)=%s%d%s\n",GREEN,HOURRAW,YELLOW,CYAN,DATAEND-HOURRAW,RESETC);
+		pprintf("DATAEND(%s%d%s)=%s%d%s\n",GREEN,DATAEND,YELLOW,CYAN,DATAEND-BEATSTART,RESETC);
+		pprintf("TOTALFRAM(%s%d%s) Devices %s%d%s\n",GREEN,TOTALFRAM,YELLOW,CYAN,(DATAEND-BEATSTART)*MAXDEVS,RESETC);
+		pprintf("%s=============== FRAM ===============%s\n",RED,RESETC);
 	}
 #endif
 }
@@ -1728,10 +1749,12 @@ void app_main()
 
 
 	esp_log_level_set("*", ESP_LOG_WARN);
+	printSem= xSemaphoreCreateBinary();
+	xSemaphoreGive(printSem);
 
 	esp_err_t err = nvs_flash_init();
     if (err == ESP_ERR_NVS_NO_FREE_PAGES|| err == ESP_ERR_NVS_NEW_VERSION_FOUND) {
-    	printf("No free pages erased!!!!\n");
+    	pprintf("No free pages erased!!!!\n");
         ESP_ERROR_CHECK(nvs_flash_erase());
         err = nvs_flash_init();
     }
@@ -1743,12 +1766,12 @@ void app_main()
 #ifdef DEBUGX
 	if(theConf.traceflag & (1<<BOOTD))
 	{
-		printf("MeterIoT ConnManager\n");
-		printf("%sBuildMgr starting up\n",BOOTDT);
-		printf("%sFree memory: %d bytes\n", BOOTDT,esp_get_free_heap_size());
-		printf("%sIDF version: %s\n", BOOTDT,esp_get_idf_version());
+		pprintf("MeterIoT ConnManager\n");
+		pprintf("%sBuildMgr starting up\n",BOOTDT);
+		pprintf("%sFree memory: %d bytes\n", BOOTDT,esp_get_free_heap_size());
+		pprintf("%sIDF version: %s\n", BOOTDT,esp_get_idf_version());
 	}
-	printf("\n%sFlash Button to erase config 1 secs%s\n",RED,RESETC);// chance to erase configuration and start fresh
+	pprintf("\n%sFlash Button to erase config 1 secs%s\n",RED,RESETC);// chance to erase configuration and start fresh
 	delay(1000);
 #endif
 
@@ -1790,7 +1813,7 @@ void app_main()
 		memset(&tarifasDia,0,sizeof(tarifasDia));
 		int err=fram.read_tarif_day(yearDay,(u8*)&tarifasDia);
 		if(err!=0)
-			printf("Error %d reading Tariffs day %d...recovering from Host\n",err,yearDay);
+			pprintf("Error %d reading Tariffs day %d...recovering from Host\n",err,yearDay);
 
 		u16 ttar=0;
 		for (int aa=0;aa<24;aa++)
@@ -1801,21 +1824,21 @@ void app_main()
 #ifdef DEBUGX
 		if(theConf.traceflag & (1<<BOOTD))
 		{
-			printf("%sDay[%d]",BOOTDT,yearDay);
+			pprintf("%sDay[%d]",BOOTDT,yearDay);
 			for (int aa=0;aa<24;aa++)
-				printf("[%02d]=%02x ",aa,tarifasDia[aa]);
-			printf("\nHora %d Tarifa %02x\n",horag,tarifasDia[horag]);
+				pprintf("[%02d]=%02x ",aa,tarifasDia[aa]);
+			pprintf("\nHora %d Tarifa %02x\n",horag,tarifasDia[horag]);
 		}
 
 		if(theConf.traceflag & (1<<BOOTD))
-			printf("%sStarting Webserver\n",BOOTDT);
+			pprintf("%sStarting Webserver\n",BOOTDT);
 #endif
 
 	}
 	else
 	{
 		loginT now;
-		printf("Emergency recover time\n");
+		pprintf("Emergency recover time\n");
 		fram.readMany(FRAMDATE,(uint8_t*)&now.thedate,sizeof(now.thedate));
 		updateDateTime(now);
 	}

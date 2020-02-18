@@ -8,6 +8,7 @@
 #define KBDT		"\e[36m[KBD]\e[0m"
 #define MAXCMDSK	26
 
+extern void pprintf(const char * format, ...);
 extern void delay(uint32_t a);
 extern void write_to_flash();
 extern void write_to_fram(u8 meter,bool addit);
@@ -90,7 +91,7 @@ cJSON *makeJson(string ss)
 //	char *lmessage=cJSON_Print(root);
 //	if(lmessage)
 //	{
-//		printf("Root %s\n",lmessage);
+//		pprintf("Root %s\n",lmessage);
 //		free(lmessage);
 //	}
 	return root;
@@ -140,13 +141,13 @@ int kbdCmd(string key)
 	string s1,s2,skey;
 	s1=s2=skey="";
 
-//	printf("Key %s\n",key.c_str());
+//	pprintf("Key %s\n",key.c_str());
 	skey=string(key);
 
 	for(int a=0;a<key.length();a++)
 		skey[a]=toupper(skey[a]);
 
-//	printf("Kbdin =%s=\n",skey.c_str());
+//	pprintf("Kbdin =%s=\n",skey.c_str());
 
 	for (int i=0; i <MAXCMDSK; i++)
 	{
@@ -154,7 +155,7 @@ int kbdCmd(string key)
 
 		for(int a=0;a<s1.length();a++)
 			s2[a]=toupper(s1[a]);
-	//	printf("Cmd =%s=\n",s2.c_str());
+	//	pprintf("Cmd =%s=\n",s2.c_str());
 
 
 		if(strstr(s2.c_str(),skey.c_str())!=NULL)
@@ -178,12 +179,12 @@ int askMeter(cJSON *params) // json should be METER
 	}
 	else
 	{
-		printf("Meter:");
+		pprintf("Meter:");
 		fflush(stdout);
 		len=get_string(UART_NUM_0,10,s1);
 		if(len<=0)
 		{
-			printf("\n");
+			pprintf("\n");
 			return -1;
 		}
 		len= atoi(s1);
@@ -192,7 +193,7 @@ int askMeter(cJSON *params) // json should be METER
 			return len;
 		else
 		{
-			printf("%sMeter out of range 0-%d%s\n",MAGENTA,MAXDEVS-1,RESETC);
+			pprintf("%sMeter out of range 0-%d%s\n",MAGENTA,MAXDEVS-1,RESETC);
 			return -1;
 		}
 }
@@ -210,12 +211,12 @@ int askMonth(cJSON *params)	//JSON should be MONTH
 	}
 	else
 	{
-		printf("Month(0-11):");
+		pprintf("Month(0-11):");
 		fflush(stdout);
 		len=get_string(UART_NUM_0,10,s1);
 		if(len<=0)
 		{
-			printf("\n");
+			pprintf("\n");
 			return -1;
 		}
 		len= atoi(s1);
@@ -224,7 +225,7 @@ int askMonth(cJSON *params)	//JSON should be MONTH
 		return len;
 	else
 	{
-		printf("%sMonth out of range 0-11%s\n",MAGENTA,RESETC);
+		pprintf("%sMonth out of range 0-11%s\n",MAGENTA,RESETC);
 		return -1;
 	}
 }
@@ -242,12 +243,12 @@ int askHour(cJSON *params)	//json should be HOUR
 		}
 	else
 	{
-		printf("Hour(0-23):");
+		pprintf("Hour(0-23):");
 		fflush(stdout);
 		len=get_string(UART_NUM_0,10,s1);
 		if(len<=0)
 		{
-			printf("\n");
+			pprintf("\n");
 			return -1;
 		}
 		len= atoi(s1);
@@ -256,7 +257,7 @@ int askHour(cJSON *params)	//json should be HOUR
 		return len;
 	else
 	{
-		printf("%sHour out of range 0-23%s\n",MAGENTA,RESETC);
+		pprintf("%sHour out of range 0-23%s\n",MAGENTA,RESETC);
 		return -1;
 	}
 }
@@ -274,12 +275,12 @@ int askDay(cJSON *params,int month)	// JSON should be DAY
 		}
 	else
 	{
-		printf("Day(0-%d):",daysInMonth[month]-1);
+		pprintf("Day(0-%d):",daysInMonth[month]-1);
 		fflush(stdout);
 		len=get_string(UART_NUM_0,10,s1);
 		if(len<=0)
 		{
-			printf("\n");
+			pprintf("\n");
 			return -1;
 		}
 		len= atoi(s1);
@@ -288,7 +289,7 @@ int askDay(cJSON *params,int month)	// JSON should be DAY
 			return len;
 		else
 		{
-			printf("%sDay out of range 0-%d%s\n",MAGENTA,daysInMonth[month]-1,RESETC);
+			pprintf("%sDay out of range 0-%d%s\n",MAGENTA,daysInMonth[month]-1,RESETC);
 			return -1;
 		}
 }
@@ -308,12 +309,12 @@ int askValue(const char *title,cJSON *params)	//JSON should be VAL
 		}
 	else
 	{
-		printf("%s:",title);
+		pprintf("%s:",title);
 		fflush(stdout);
 		len=get_string(UART_NUM_0,10,s1);
 		if(len<=0)
 		{
-			printf("\n");
+			pprintf("\n");
 			return -1;
 		}
 
@@ -342,10 +343,10 @@ void confStatus(string ss)
 	}
 
 	time(&now);
-	printf("%s====================\nConfiguration Status %s",KBDT,ctime(&now));
+	pprintf("%s====================\nConfiguration Status %s",KBDT,ctime(&now));
 
-	printf("ConnMgr %s%s%s Whitelisted %s%d%s",CYAN,theConf.meterConnName,RESETC,GREEN,theConf.reservedCnt,RESETC);
-	printf("%sConfiguration RunStatus[%s] Trace %x %sBootCount %d LReset %x @%s",YELLOW,theConf.active?"Run":"Setup",theConf.traceflag,GREEN,theConf.bootcount,theConf.lastResetCode,ctime(&theConf.lastReboot));
+	pprintf("ConnMgr %s%s%s Whitelisted %s%d%s",CYAN,theConf.meterConnName,RESETC,GREEN,theConf.reservedCnt,RESETC);
+	pprintf("%sConfiguration RunStatus[%s] Trace %x %sBootCount %d LReset %x @%s",YELLOW,theConf.active?"Run":"Setup",theConf.traceflag,GREEN,theConf.bootcount,theConf.lastResetCode,ctime(&theConf.lastReboot));
 
 	if(!shortans)
 	{
@@ -353,31 +354,31 @@ void confStatus(string ss)
 		{
 			localtime_r(&theConf.bornDate[a], &timeinfo);
 			strftime(strftime_buf, sizeof(strftime_buf), "%c", &timeinfo);
-			printf("%sMeter[%d] Serial %s BPW %d Born %s BornkWh %d %s\n",(a % 2)?CYAN:GREEN,a,theConf.medidor_id[a],theConf.beatsPerKw[a],
+			pprintf("%sMeter[%d] Serial %s BPW %d Born %s BornkWh %d %s\n",(a % 2)?CYAN:GREEN,a,theConf.medidor_id[a],theConf.beatsPerKw[a],
 					strftime_buf,theConf.bornKwh[a],theConf.configured[a]==3?"Active":"Inactive");
 		}
 	}
 
-	printf("===============\n");
-	printf("  MQTT Section\n");
-	printf("===============%s\n",RESETC);
-	printf("Command Queue %s%s%s\n",GREEN,cmdQueue.c_str(),RESETC);
-	printf("Host Queue %s%s%s\n",CYAN,controlQueue.c_str(),RESETC);
+	pprintf("===============\n");
+	pprintf("  MQTT Section\n");
+	pprintf("===============%s\n",RESETC);
+	pprintf("Command Queue %s%s%s\n",GREEN,cmdQueue.c_str(),RESETC);
+	pprintf("Host Queue %s%s%s\n",CYAN,controlQueue.c_str(),RESETC);
 
 	if(!shortans)
 	{
-		printf("%s===============\n",YELLOW);
-		printf("Control Tasks\n");
-		printf("===============%s\n",RESETC);
+		pprintf("%s===============\n",YELLOW);
+		pprintf("Control Tasks\n");
+		pprintf("===============%s\n",RESETC);
 
-		printf("CmdMgr %s @%s",cmdHandle?GREEN "Alive" RESETC:RED "Dead" RESETC,ctime(&mgrTime[CMDMGR]));
-		printf("FramMgr %s @%s",framHandle?GREEN "Alive" RESETC:RED "Dead" RESETC,ctime(&mgrTime[FRAMMGR]));
-		printf("PinMgr %s @%s",pinHandle?GREEN "Alive" RESETC:RED "Dead" RESETC,ctime(&mgrTime[PINMGR]));
-		printf("WatchMgr %s @%s",watchHandle?GREEN "Alive" RESETC:RED "Dead" RESETC,ctime(&mgrTime[WATCHMGR]));
-		printf("DisplayMgr %s @%s",displayHandle?GREEN "Alive" RESETC:RED "Dead" RESETC,ctime(&mgrTime[DISPLAYMGR]));
-		printf("SubMgr %s @%s",submHandle?GREEN "Alive" RESETC:RED "Dead" RESETC,ctime(&mgrTime[SUBMGR]));
+		pprintf("CmdMgr %s @%s",cmdHandle?GREEN "Alive" RESETC:RED "Dead" RESETC,ctime(&mgrTime[CMDMGR]));
+		pprintf("FramMgr %s @%s",framHandle?GREEN "Alive" RESETC:RED "Dead" RESETC,ctime(&mgrTime[FRAMMGR]));
+		pprintf("PinMgr %s @%s",pinHandle?GREEN "Alive" RESETC:RED "Dead" RESETC,ctime(&mgrTime[PINMGR]));
+		pprintf("WatchMgr %s @%s",watchHandle?GREEN "Alive" RESETC:RED "Dead" RESETC,ctime(&mgrTime[WATCHMGR]));
+		pprintf("DisplayMgr %s @%s",displayHandle?GREEN "Alive" RESETC:RED "Dead" RESETC,ctime(&mgrTime[DISPLAYMGR]));
+		pprintf("SubMgr %s @%s",submHandle?GREEN "Alive" RESETC:RED "Dead" RESETC,ctime(&mgrTime[SUBMGR]));
 	}
-	printf("====================%s\n",KBDT);
+	pprintf("====================%s\n",KBDT);
 
 }
 
@@ -389,49 +390,49 @@ void meterStatus(string ss)
 
 	params=makeJson(ss);
 
-	printf("%s============\nMeter status\n",KBDT);
+	pprintf("%s============\nMeter status\n",KBDT);
 	meter=askMeter(params);
 	if(meter<0||meter>MAXDEVS-1)
 	{
-		printf("Meter %d out of range\n",meter);
+		pprintf("Meter %d out of range\n",meter);
 		return;
 	}
 
-	printf("============%s\n\n",YELLOW);
+	pprintf("============%s\n\n",YELLOW);
 
 	if(xSemaphoreTake(framSem, portMAX_DELAY/  portTICK_RATE_MS))
 	{
-	//	printf("Meter Compare test Year %d Month %d Day %d Hour %d YDAY %d\n",yearg,mesg,diag,horag,yearDay);
+	//	pprintf("Meter Compare test Year %d Month %d Day %d Hour %d YDAY %d\n",yearg,mesg,diag,horag,yearDay);
 		valr=0;
 		fram.read_beat(meter,(uint8_t*)&valr);
-		printf("Beat[%d]=%d %d\n",meter,valr,theMeters[meter].currentBeat);
+		pprintf("Beat[%d]=%d %d\n",meter,valr,theMeters[meter].currentBeat);
 		valr=0;
 		fram.read_lifekwh(meter,(uint8_t*)&valr);
-		printf("LastKwh[%d]=%d %d\n",meter,valr,theMeters[meter].curLife);
+		pprintf("LastKwh[%d]=%d %d\n",meter,valr,theMeters[meter].curLife);
 		valr=0;
 		fram.read_lifedate(meter,(uint8_t*)&valr);
-		printf("LifeDate[%d]=%d %d %s",meter,valr,theMeters[meter].lastKwHDate,ctime((time_t*)&theMeters[meter].lastKwHDate));
+		pprintf("LifeDate[%d]=%d %d %s",meter,valr,theMeters[meter].lastKwHDate,ctime((time_t*)&theMeters[meter].lastKwHDate));
 		valr=0;
 		fram.read_month(meter,mesg,(uint8_t*)&valr);
-		printf("Month[%d]Mes[%d]=%d %d\n",meter,mesg,valr,theMeters[meter].curMonth);
+		pprintf("Month[%d]Mes[%d]=%d %d\n",meter,mesg,valr,theMeters[meter].curMonth);
 		valr=0;
 		fram.read_monthraw(meter,mesg,(uint8_t*)&valr);
-		printf("MonthRaw[%d]Mes[%d]=%d %d\n",meter,mesg,valr,theMeters[meter].curMonthRaw);
+		pprintf("MonthRaw[%d]Mes[%d]=%d %d\n",meter,mesg,valr,theMeters[meter].curMonthRaw);
 		valr=0;
 		fram.read_day(meter,yearDay,(uint8_t*)&valr);
-		printf("Day[%d]Mes[%d]Dia[%d]=%d %d\n",meter,mesg,diag,valr,theMeters[meter].curDay);
+		pprintf("Day[%d]Mes[%d]Dia[%d]=%d %d\n",meter,mesg,diag,valr,theMeters[meter].curDay);
 		valr=0;
 		fram.read_dayraw(meter,yearDay,(uint8_t*)&valr);
-		printf("DayRaw[%d]Mes[%d]Dia[%d]=%d %d\n",meter,mesg,diag,valr,theMeters[meter].curDayRaw);
+		pprintf("DayRaw[%d]Mes[%d]Dia[%d]=%d %d\n",meter,mesg,diag,valr,theMeters[meter].curDayRaw);
 		valr=0;
 		fram.read_hour(meter,yearDay,horag,(uint8_t*)&valr);
-		printf("Hour[%d]Mes[%d]Dia[%d]Hora[%d]=%d %d\n",meter,mesg,diag,horag,valr,theMeters[meter].curHour);
+		pprintf("Hour[%d]Mes[%d]Dia[%d]Hora[%d]=%d %d\n",meter,mesg,diag,horag,valr,theMeters[meter].curHour);
 		valr=0;
 		fram.read_hourraw(meter,yearDay,horag,(uint8_t*)&valr);
-		printf("HourRaw[%d]Mes[%d]Dia[%d]Hora[%d]=%d %d%s\n",meter,mesg,diag,horag,valr,theMeters[meter].curHourRaw,RESETC);
+		pprintf("HourRaw[%d]Mes[%d]Dia[%d]Hora[%d]=%d %d%s\n",meter,mesg,diag,horag,valr,theMeters[meter].curHourRaw,RESETC);
 
 		xSemaphoreGive(framSem);
-		printf("%s============\n",KBDT);
+		pprintf("%s============\n",KBDT);
 
 	}
 }
@@ -446,22 +447,22 @@ void meterTest(string ss)
 	meter=askMeter(params);
 	if(meter<0||meter>MAXDEVS-1)
 	{
-		printf("Meter %d out of range\n",meter);
+		pprintf("Meter %d out of range\n",meter);
 		return;
 	}
 		val=askValue((char*)"Value",params);
 
 
-	printf("%s================\nTest Write Meter\n",KBDT);
+	pprintf("%s================\nTest Write Meter\n",KBDT);
 
 
-	printf("================%s\n\n",RESETC);
+	pprintf("================%s\n\n",RESETC);
 
 	uint32_t valr;
 
 	if(xSemaphoreTake(framSem, portMAX_DELAY/  portTICK_RATE_MS))
 	{
-		printf("Fram Write Meter %d Year %d Month %d Day %d Hour %d Value %d YDAY %d\n",meter,yearg,mesg,diag,horag,val,yearDay);
+		pprintf("Fram Write Meter %d Year %d Month %d Day %d Hour %d Value %d YDAY %d\n",meter,yearg,mesg,diag,horag,val,yearDay);
 
 		fram.write_beat(meter,val);
 		fram.write_lifekwh(meter,val);
@@ -474,25 +475,25 @@ void meterTest(string ss)
 		fram.write_hourraw(meter,yearDay,horag,val);
 
 		valr=0;
-		printf("Reading now\n");
+		pprintf("Reading now\n");
 		fram.read_beat(meter,(uint8_t*)&valr);
-		printf("Beat[%d]=%d\n",meter,valr);
+		pprintf("Beat[%d]=%d\n",meter,valr);
 		fram.read_lifekwh(meter,(uint8_t*)&valr);
-		printf("LifeKwh[%d]=%d\n",meter,valr);
+		pprintf("LifeKwh[%d]=%d\n",meter,valr);
 		fram.read_lifedate(meter,(uint8_t*)&valr);
-		printf("LifeDate[%d]=%d\n",meter,valr);
+		pprintf("LifeDate[%d]=%d\n",meter,valr);
 		fram.read_month(meter,mesg,(uint8_t*)&valr);
-		printf("Month[%d]=%d\n",meter,valr);
+		pprintf("Month[%d]=%d\n",meter,valr);
 		fram.read_monthraw(meter,mesg,(uint8_t*)&valr);
-		printf("MonthRaw[%d]=%d\n",meter,valr);
+		pprintf("MonthRaw[%d]=%d\n",meter,valr);
 		fram.read_day(meter,yearDay,(uint8_t*)&valr);
-		printf("Day[%d]=%d\n",meter,valr);
+		pprintf("Day[%d]=%d\n",meter,valr);
 		fram.read_dayraw(meter,yearDay,(uint8_t*)&valr);
-		printf("DayRaw[%d]=%d\n",meter,valr);
+		pprintf("DayRaw[%d]=%d\n",meter,valr);
 		fram.read_hour(meter,yearDay,horag,(uint8_t*)&valr);
-		printf("Hour[%d]=%d\n",meter,valr);
+		pprintf("Hour[%d]=%d\n",meter,valr);
 		fram.read_hourraw(meter,yearDay,horag,(uint8_t*)&valr);
-		printf("HourRaw[%d]=%d\n",meter,valr);
+		pprintf("HourRaw[%d]=%d\n",meter,valr);
 
 		xSemaphoreGive(framSem);
 	}
@@ -501,8 +502,8 @@ void meterTest(string ss)
 void webReset(string ss)
 {
 	theConf.active=!theConf.active;
-	printf("%sWeb %s\n",KBDT,theConf.active?"RunConf":"SetupConf");
-	printf("===========%s\n",KBDT);
+	pprintf("%sWeb %s\n",KBDT,theConf.active?"RunConf":"SetupConf");
+	pprintf("===========%s\n",KBDT);
 	if(theConf.active)
 		memset(theConf.configured,3,sizeof(theConf.configured));
 	else
@@ -515,18 +516,18 @@ void meterCount(string ss)
 	time_t timeH;
 
 	int tots=0;
-	printf("%s==============\nMeter Counters%s\n",KBDT,RESETC);
+	pprintf("%s==============\nMeter Counters%s\n",KBDT,RESETC);
 
 	for (int a=0;a<MAXDEVS;a++)
 	{
 		tots+=theMeters[a].currentBeat;
-		printf("%sMeter[%d]=%s Beats %d kWh %d BPK %d\n",(a % 2)?GREEN:CYAN,a,RESETC,theMeters[a].currentBeat,theMeters[a].curLife,
+		pprintf("%sMeter[%d]=%s Beats %d kWh %d BPK %d\n",(a % 2)?GREEN:CYAN,a,RESETC,theMeters[a].currentBeat,theMeters[a].curLife,
 				theMeters[a].beatsPerkW);
 	}
-	printf("%sTotal Pulses rx=%s %d (%s)\n",RED,RESETC,totalPulses,tots==totalPulses?"Ok":"No");
+	pprintf("%sTotal Pulses rx=%s %d (%s)\n",RED,RESETC,totalPulses,tots==totalPulses?"Ok":"No");
 	fram.readMany(FRAMDATE,(uint8_t*)&timeH,sizeof(timeH));//last known date
-	printf("Last Date %s",ctime(&timeH));
-	printf("==============%s\n\n",KBDT);
+	pprintf("Last Date %s",ctime(&timeH));
+	pprintf("==============%s\n\n",KBDT);
 
 }
 
@@ -534,7 +535,7 @@ void dumpCore(string ss)
 {
 
 	u8 *p;
-	printf("%sDumping core ins 3 secs%s\n",RED,RESETC);
+	pprintf("%sDumping core ins 3 secs%s\n",RED,RESETC);
 	delay(3000);
 	p=0;
 	*p=0;
@@ -557,16 +558,16 @@ void formatFram(string ss)
 	else
 	{
 
-		printf("%s===========\nFormat FRAM\n",KBDT);
+		pprintf("%s===========\nFormat FRAM\n",KBDT);
 
 		val=askValue((char*)"Init value",params);
-		printf("===========%s\n\n",KBDT);
+		pprintf("===========%s\n\n",KBDT);
 	}
 	if(val<0)
 		return;
 
 	fram.format(val,NULL,100,true);
-	printf("Format done...rebooting\n");
+	pprintf("Format done...rebooting\n");
 
 	memset(&theConf.medidor_id,0,sizeof(theConf.medidor_id));
 	memset(&theConf.beatsPerKw,0,sizeof(theConf.beatsPerKw));
@@ -600,18 +601,18 @@ void readFram(string ss)
 	}
 	else
 	{
-		printf("%s=========\nRead FRAM\n",KBDT);
+		pprintf("%s=========\nRead FRAM\n",KBDT);
 		framAddress=askValue((char*)"Address",params);
 		fueron=askValue((char*)"Count",params);
-		printf("=========%s\n\n",KBDT);
+		pprintf("=========%s\n\n",KBDT);
 	}
 	if(fueron<0 || framAddress<0)
 		return;
 
 	fram.readMany(framAddress,(uint8_t*)tempb,fueron);
 	for (int a=0;a<fueron;a++)
-		printf("%02x-",tempb[a]);
-	printf("\n");
+		pprintf("%02x-",tempb[a]);
+	pprintf("\n");
 
 }
 
@@ -633,10 +634,10 @@ void writeFram(string ss)
 	}
 	else
 	{
-		printf("%s==========\nWrite FRAM\n",KBDT);
+		pprintf("%s==========\nWrite FRAM\n",KBDT);
 		framAddress=askValue((char*)"Address",params);
 		fueron=askValue((char*)"Value",params);
-		printf("==========%s\n\n",KBDT);
+		pprintf("==========%s\n\n",KBDT);
 	}
 	if(fueron<0 || framAddress<0)
 		return;
@@ -662,12 +663,12 @@ void logLevel(string ss)
 	else
 	{
 
-		printf("%sLOG level:(N)one (I)nfo (E)rror (V)erbose (W)arning:",KBDT);
+		pprintf("%sLOG level:(N)one (I)nfo (E)rror (V)erbose (W)arning:",KBDT);
 		fflush(stdout);
 		int len=get_string(UART_NUM_0,10,s1);
 		if(len<=0)
 		{
-			printf("\n");
+			pprintf("\n");
 			return;
 		}
 	}
@@ -719,7 +720,7 @@ void framDays(string ss)
 	else
 	{
 
-		printf("%s==================\nFram Days in Month\n",KBDT);
+		pprintf("%s==================\nFram Days in Month\n",KBDT);
 		meter=askMeter(params);
 		if(meter<0)
 			return;
@@ -737,15 +738,15 @@ void framDays(string ss)
 			if(valor>0 || (startday==yearDay && theMeters[meter].curDay>0 ))
 			{
 				if(startday==yearDay && theMeters[meter].curDay>0 )
-					printf("M[%d]D[%d]=%d RAM=%d ",month,a,valor,theMeters[meter].curDay);
+					pprintf("M[%d]D[%d]=%d RAM=%d ",month,a,valor,theMeters[meter].curDay);
 				else
-					printf("M[%d]D[%d]=%d ",month,a,valor);
+					pprintf("M[%d]D[%d]=%d ",month,a,valor);
 			}
 			tots+=valor;
 		}
 		xSemaphoreGive(framSem);
-		printf(" Total=%d\n",tots);
-		printf("==================%s\n",KBDT);
+		pprintf(" Total=%d\n",tots);
+		pprintf("==================%s\n",KBDT);
 	}
 
 }
@@ -774,7 +775,7 @@ void framHours(string ss)
 	}
 	else
 	{
-		printf("%s=================\nFram Hours in Day\n",KBDT);
+		pprintf("%s=================\nFram Hours in Day\n",KBDT);
 
 		meter=askMeter(params);
 		if(meter<0)
@@ -797,15 +798,15 @@ void framHours(string ss)
 				if(valor>0 || (startday==yearDay && horag==a && theMeters[meter].curHour>0))
 				{
 					if(startday==yearDay && horag==a && theMeters[meter].curHour>0)
-						printf("%sM[%d]D[%d]H[%d]=%d RAM=%d ",(a % 2)?CYAN:GREEN,month,dia,a,valor,theMeters[meter].curHour);
+						pprintf("%sM[%d]D[%d]H[%d]=%d RAM=%d ",(a % 2)?CYAN:GREEN,month,dia,a,valor,theMeters[meter].curHour);
 					else
-						printf("%sM[%d]D[%d]H[%d]=%d ",(a % 2)?CYAN:GREEN,month,dia,a,valor);
+						pprintf("%sM[%d]D[%d]H[%d]=%d ",(a % 2)?CYAN:GREEN,month,dia,a,valor);
 				}
 				tots+=valor;
 		}
 		xSemaphoreGive(framSem);
-		printf(" Total=%d\n",tots);
-		printf("=================%s\n",KBDT);
+		pprintf(" Total=%d\n",tots);
+		pprintf("=================%s\n",KBDT);
 	}
 }
 
@@ -832,7 +833,7 @@ void framMonthsHours(string ss)
 	}
 	else
 	{
-		printf("%s=================\nFram Hours in Month\n",KBDT);
+		pprintf("%s=================\nFram Hours in Month\n",KBDT);
 		meter=askMeter(params);
 		if(meter<0)
 			return;
@@ -854,17 +855,17 @@ void framMonthsHours(string ss)
 					{
 						was=true;
 						if(startday==yearDay && a==horag && theMeters[meter].curHour>0)
-							printf("%sM[%d]D[%d]H[%d]=%d RAM=%d ",(a % 2)?CYAN:GREEN,month,b,a,valor,theMeters[meter].curHour);
+							pprintf("%sM[%d]D[%d]H[%d]=%d RAM=%d ",(a % 2)?CYAN:GREEN,month,b,a,valor,theMeters[meter].curHour);
 						else
-							printf("%sM[%d]D[%d]H[%d]=%d ",(a % 2)?CYAN:GREEN,month,b,a,valor);
+							pprintf("%sM[%d]D[%d]H[%d]=%d ",(a % 2)?CYAN:GREEN,month,b,a,valor);
 					}
 					tots+=valor;
 			}
 			if(was)
-				printf(" Total=%d\n",tots);
+				pprintf(" Total=%d\n",tots);
 		}
 			xSemaphoreGive(framSem);
-			printf("=================%s\n",KBDT);
+			pprintf("=================%s\n",KBDT);
 
 	}
 }
@@ -896,7 +897,7 @@ void framHourSearch(string ss)
 	}
 	else
 	{
-		printf("%s================\nFram Hour Search\n",KBDT);
+		pprintf("%s================\nFram Hour Search\n",KBDT);
 
 		meter=askMeter(params);
 		if(meter<0)
@@ -921,12 +922,12 @@ void framHourSearch(string ss)
 		if(valor>0 || (horag==horag && startday==yearDay && theMeters[meter].curHour>0))
 			{
 			if(horag==horag && startday==yearDay && theMeters[meter].curHour>0)
-				printf("Date %d/%d/%d %d:00:00=%d RAM=%d\n",yearg,month,dia,hora,valor,theMeters[meter].curHour);
+				pprintf("Date %d/%d/%d %d:00:00=%d RAM=%d\n",yearg,month,dia,hora,valor,theMeters[meter].curHour);
 			else
-				printf("Date %d/%d/%d %d:00:00=%d\n",yearg,month,dia,hora,valor);
+				pprintf("Date %d/%d/%d %d:00:00=%d\n",yearg,month,dia,hora,valor);
 			}
 	}
-	printf("================%s\n",KBDT);
+	pprintf("================%s\n",KBDT);
 
 }
 
@@ -954,7 +955,7 @@ void framDaySearch(string ss)
 	}
 	else
 	{
-		printf("%s===============\nFram Day Search\n",KBDT);
+		pprintf("%s===============\nFram Day Search\n",KBDT);
 
 		meter=askMeter(params);
 		if(meter<0)
@@ -976,13 +977,13 @@ void framDaySearch(string ss)
 		if(valor>0 || (theMeters[meter].curDay>0 && startday==yearDay))
 		{
 		if(theMeters[meter].curDay>0 && startday==yearDay)
-			printf("Date %d/%d/%d =%d RAM=%d\n",yearg,month,dia,valor,theMeters[meter].curDay);
+			pprintf("Date %d/%d/%d =%d RAM=%d\n",yearg,month,dia,valor,theMeters[meter].curDay);
 		else
-			printf("Date %d/%d/%d =%d\n",yearg,month,dia,valor);
+			pprintf("Date %d/%d/%d =%d\n",yearg,month,dia,valor);
 
 		}
 	}
-	printf("===============%s\n",KBDT);
+	pprintf("===============%s\n",KBDT);
 
 }
 
@@ -1006,7 +1007,7 @@ void framMonthSearch(string ss)
 	}
 	else
 	{
-		printf("%s=================\nFram Month Search\n",KBDT);
+		pprintf("%s=================\nFram Month Search\n",KBDT);
 
 		meter=askMeter(params);
 		if(meter<0)
@@ -1022,12 +1023,12 @@ void framMonthSearch(string ss)
 		if(valor>0 || (theMeters[meter].curMonth>0 && mesg==month))
 		{
 			if(theMeters[meter].curMonth>0 && mesg==month)
-				printf("Month[%d] =%d RAM=%d\n",month,valor,theMeters[meter].curMonth);
+				pprintf("Month[%d] =%d RAM=%d\n",month,valor,theMeters[meter].curMonth);
 			else
-				printf("Month[%d] =%d\n",month,valor);
+				pprintf("Month[%d] =%d\n",month,valor);
 		}
 	}
-	printf("\n=================%s\n",KBDT);
+	pprintf("\n=================%s\n",KBDT);
 }
 
 void framMonths(string ss)
@@ -1048,7 +1049,7 @@ void framMonths(string ss)
 	}
 	else
 	{
-		printf("%s=================\nFram Month All\n",KBDT);
+		pprintf("%s=================\nFram Month All\n",KBDT);
 		meter=askMeter(params);
 	}
 
@@ -1057,44 +1058,44 @@ void framMonths(string ss)
 
 	if(xSemaphoreTake(framSem, portMAX_DELAY))
 	{
-		printf("Meter[%d]",meter);
+		pprintf("Meter[%d]",meter);
 		for(int a=0;a<12;a++)
 		{
 			fram.read_month(meter,a,(u8*)&valor);
 			if(valor>0)
 			{
 			if(theMeters[meter].curMonth>0 && a==mesg)
-				printf("%s[%d]=%d RAM=%d ",(a % 2)?CYAN:GREEN,a,valor,theMeters[meter].curMonth);
+				pprintf("%s[%d]=%d RAM=%d ",(a % 2)?CYAN:GREEN,a,valor,theMeters[meter].curMonth);
 			else
-				printf("%s[%d]=%d ",(a % 2)?CYAN:GREEN,a,valor);
+				pprintf("%s[%d]=%d ",(a % 2)?CYAN:GREEN,a,valor);
 			}
 			tots+=valor;
 		}
-		printf(" Total=%d\n",tots);
-		printf("=================%s\n",KBDT);
+		pprintf(" Total=%d\n",tots);
+		pprintf("=================%s\n",KBDT);
 
 		xSemaphoreGive(framSem);
 	}
-	printf("\n");
+	pprintf("\n");
 }
 
 void flushFram(string ss)
 {
-	printf("%s=============\nFlushing Fram\n",KBDT);
+	pprintf("%s=============\nFlushing Fram\n",KBDT);
 	for(int a=0;a<MAXDEVS;a++)
 		write_to_fram(a,false);
-	printf("%d meters flushed\n",MAXDEVS);
-	printf("=============%s\n",KBDT);
+	pprintf("%d meters flushed\n",MAXDEVS);
+	pprintf("=============%s\n",KBDT);
 }
 
 void msgCount(string ss)
 {
-	printf("%s=============\nMessage Count\n",KBDT);
+	pprintf("%s=============\nMessage Count\n",KBDT);
 	for (int a=0;a<MAXDEVS;a++)
-		//printf("TotalMsg[%d] sent msgs %d\n",a,totalMsg[a]);
-	printf("TotalMsg[%d] sent msgs %d\n",a,1);
-	printf("Controller Total %d\n",sentTotal);
-	printf("=============%s\n",KBDT);
+		//pprintf("TotalMsg[%d] sent msgs %d\n",a,totalMsg[a]);
+	pprintf("TotalMsg[%d] sent msgs %d\n",a,1);
+	pprintf("Controller Total %d\n",sentTotal);
+	pprintf("=============%s\n",KBDT);
 
 }
 
@@ -1104,16 +1105,16 @@ void traceFlags(string sss)
 	string ss;
 	std::locale loc;
 
-	printf("%sTrace Flags:%s",KBDT,CYAN);
+	pprintf("%sTrace Flags:%s",KBDT,CYAN);
 
 	for (int a=0;a<NKEYS/2;a++)
 	if (theConf.traceflag & (1<<a))
-		printf("%s ",lookuptable[a]);
-	printf("\n");
+		pprintf("%s ",lookuptable[a]);
+	pprintf("\n");
 
 	if(sss=="")
 	{
-		printf("%s\nEnter TRACE FLAG:%s",RED,RESETC);
+		pprintf("%s\nEnter TRACE FLAG:%s",RED,RESETC);
 		fflush(stdout);
 		memset(s1,0,sizeof(s1));
 		get_string(UART_NUM_0,10,s1);
@@ -1133,7 +1134,7 @@ void traceFlags(string sss)
 	  while (ch != NULL)
 	  {
 		  ss=string(ch);
-		//  printf("[%s]\n", ch);
+		//  pprintf("[%s]\n", ch);
 		  ch = strtok(NULL, " ");
 
 		if(strcmp(ss.c_str(),"NONE")==0)
@@ -1153,25 +1154,25 @@ void traceFlags(string sss)
 		int cualf=cmdfromstring((char*)ss.c_str());
 		if(cualf<0)
 		{
-			printf("Invalid Debug Option\n");
+			pprintf("Invalid Debug Option\n");
 			return;
 		}
 		if(cualf<NKEYS/2 )
 		{
-			printf("%s%s+ ",GREEN,lookuptable[cualf]);
+			pprintf("%s%s+ ",GREEN,lookuptable[cualf]);
 			theConf.traceflag |= 1<<cualf;
 			write_to_flash();
 		}
 		else
 		{
 			cualf=cualf-NKEYS/2;
-			printf("%s%s- ",RED,lookuptable[cualf]);
+			pprintf("%s%s- ",RED,lookuptable[cualf]);
 			theConf.traceflag ^= (1<<cualf);
 			write_to_flash();
 		}
 
 	  }
-	  printf("%s\n",KBDT);
+	  pprintf("%s\n",KBDT);
 }
 
 
@@ -1201,23 +1202,23 @@ void showHelp(string ss)
 
     std::sort(cmdds, cmdds+n, compareCmd);
 
-	printf("%s======CMDS======\n",RED);
+	pprintf("%s======CMDS======\n",RED);
 	for (int a=0;a<MAXCMDSK;a++)
 	{
 		if(a % 2)
 		{
-			printf("%s%s ",CYAN,cmdds[a].comando);
+			pprintf("%s%s ",CYAN,cmdds[a].comando);
 			if (longf)
-				printf("(%s)\n",cmdds[a].help.c_str());
+				pprintf("(%s)\n",cmdds[a].help.c_str());
 		}
 		else
 		{
-			printf("%s%s ",GREEN,cmdds[a].comando);
+			pprintf("%s%s ",GREEN,cmdds[a].comando);
 			if (longf)
-				printf("(%s)\n",cmdds[a].help.c_str());
+				pprintf("(%s)\n",cmdds[a].help.c_str());
 		}
 	}
-	printf("\n======CMDS======%s\n",RESETC);
+	pprintf("\n======CMDS======%s\n",RESETC);
 }
 
 static void printControllers(string ss)
@@ -1237,20 +1238,20 @@ static void printControllers(string ss)
 		cJSON_Delete(params);
 	}
 
-	printf("%sListing %d Controllers\n",KBDT,theConf.reservedCnt);
+	pprintf("%sListing %d Controllers\n",KBDT,theConf.reservedCnt);
 
 	if(!shortans)
 	{
-		printf("%s============%s\n",MAGENTA,RESETC);
-		printf("%sLocal Meters%s\n",MAGENTA,RESETC);
-		printf("%s============%s\n",MAGENTA,RESETC);
+		pprintf("%s============%s\n",MAGENTA,RESETC);
+		pprintf("%sLocal Meters%s\n",MAGENTA,RESETC);
+		pprintf("%s============%s\n",MAGENTA,RESETC);
 		for (int a=0;a<MAXDEVS;a++)
-			printf("%sMeter[%d]=%s KwH %6d Beats %9d\n",a%2?CYAN:GREEN,a,theMeters[a].serialNumber,theMeters[a].curLife,theMeters[a].currentBeat);
-		printf("\n");
+			pprintf("%sMeter[%d]=%s KwH %6d Beats %9d\n",a%2?CYAN:GREEN,a,theMeters[a].serialNumber,theMeters[a].curLife,theMeters[a].currentBeat);
+		pprintf("\n");
 	}
-	printf("===============\n");
-	printf("Configured MtMs\n");
-	printf("===============\n");
+	pprintf("===============\n");
+	pprintf("Configured MtMs\n");
+	pprintf("===============\n");
 
 	for(int a=0;a<theConf.reservedCnt;a++)
 	{
@@ -1260,32 +1261,33 @@ static void printControllers(string ss)
 		strftime(tempb, 100, "%D %T ", p);
 
 		inet_ntop( AF_INET,(in_addr*)&losMacs[a].theIp, str2, INET_ADDRSTRLEN );
-		printf("%sSlot[%d]%s=%06x %sIP=%s %sState(#%d)%s%s%s(%s) GTask=%s%s %sHW=%s %sBorn=%s%s %sSeen%s@%s",GREEN,a,CYAN,theConf.reservedMacs[a],YELLOW, str2,WHITEC,
+		pprintf("%sSlot[%d]%s=%06x %sIP=%s %sState(#%d)%s%s%s(%s) GTask=%s%s %sHW=%s %sBorn=%s%s %sSeen%s@%s",GREEN,a,CYAN,theConf.reservedMacs[a],YELLOW, str2,WHITEC,
 				losMacs[a].msgCount,GREEN,stateName[losMacs[a].dState],CYAN,losMacs[a].report==REPORTED? RED "Reported" RESETC:GREEN "OK" RESETC,
 				losMacs[a].theHandle?LYELLOW "Alive":MAGENTA "Dead",RESETC,GRAY,losMacs[a].hwState?LRED "FAIL":LGREEN "OK",LYELLOW,RESETC,tempb,YELLOW,RESETC,ctime(&losMacs[a].lastUpdate));
 		if(!shortans)
 		{
 			antes=0;
-			printf("StateChanges:");
+			pprintf("StateChanges:");
 			for(int b=0;b<4;b++)
 			{
 				son=losMacs[a].stateChangeTS[b]-antes;
-				printf("[%s]=%dms(%d) ",stateName[b],losMacs[a].stateChangeTS[b],son);
+				pprintf("[%s]=%dms(%d) ",stateName[b],losMacs[a].stateChangeTS[b],son);
 				antes=losMacs[a].stateChangeTS[b];
 			}
-				printf("\n");
+				pprintf("\n");
 
 					for (int b=0;b<MAXDEVS;b++)
-						printf("%sMeter[%d]=%s KwH %6d Beats %9d\n",b%2?CYAN:GREEN,b,losMacs[a].meterSerial[b],losMacs[a].controlLastKwH[b],losMacs[a].controlLastBeats[b]);
+						pprintf("%sMeter[%d]=%s KwH %6d Beats %9d\n",b%2?CYAN:GREEN,b,losMacs[a].meterSerial[b],losMacs[a].controlLastKwH[b],losMacs[a].controlLastBeats[b]);
 		}
+		delay(150);
 	}
 
-	printf("%s\n",KBDT);
+	pprintf("%s\n",KBDT);
 }
 
 static void sendTelemetry(string ss)
 {
-	printf("%sSend Telemetry\n",KBDT);
+	pprintf("%sSend Telemetry\n",KBDT);
 	xTaskCreate(&connMgr,"cnmgr",4096,(void*)123, 4, NULL);
 }
 
@@ -1303,14 +1305,14 @@ static void tariffs(string ss)
 
 	err=fram.read_tarif_day(cuando,(u8*)&tarifasDia);
 	if(err!=0)
-		printf("LoadTar Error %d reading Tariffs day %d...recovering from Host\n",err,cuando);
-	printf("Tariffs ");
+		pprintf("LoadTar Error %d reading Tariffs day %d...recovering from Host\n",err,cuando);
+	pprintf("Tariffs ");
 	for (int a=0;a<24;a++)
-		printf("0x%04x ",tarifasDia[a]);
-	printf("\n");
+		pprintf("0x%04x ",tarifasDia[a]);
+	pprintf("\n");
 	err=fram.read_tarif_day(yearDay,(u8*)&tarifasDia);
 		if(err!=0)
-			printf("LoadTar Error %d reading Tariffs day %d...recovering from Host\n",err,yearDay);
+			pprintf("LoadTar Error %d reading Tariffs day %d...recovering from Host\n",err,yearDay);
 }
 
 static void firmware(string ss)
@@ -1323,25 +1325,25 @@ static void firmware(string ss)
 //{
 //    switch (authmode) {
 //    case WIFI_AUTH_OPEN:
-//        printf( "%sAuthmode \tWIFI_AUTH_OPEN%s\n",YELLOW,RESETC);
+//        pprintf( "%sAuthmode \tWIFI_AUTH_OPEN%s\n",YELLOW,RESETC);
 //        break;
 //    case WIFI_AUTH_WEP:
-//        printf( "%sAuthmode \tWIFI_AUTH_WEP%s\n",YELLOW,RESETC);
+//        pprintf( "%sAuthmode \tWIFI_AUTH_WEP%s\n",YELLOW,RESETC);
 //        break;
 //    case WIFI_AUTH_WPA_PSK:
-//        printf( "%sAuthmode \tWIFI_AUTH_WPA_PSK%s\n",YELLOW,RESETC);
+//        pprintf( "%sAuthmode \tWIFI_AUTH_WPA_PSK%s\n",YELLOW,RESETC);
 //        break;
 //    case WIFI_AUTH_WPA2_PSK:
-//        printf( "%sAuthmode \tWIFI_AUTH_WPA2_PSK%s\n",YELLOW,RESETC);
+//        pprintf( "%sAuthmode \tWIFI_AUTH_WPA2_PSK%s\n",YELLOW,RESETC);
 //        break;
 //    case WIFI_AUTH_WPA_WPA2_PSK:
-//        printf( "%sAuthmode \tWIFI_AUTH_WPA_WPA2_PSK%s\n",YELLOW,RESETC);
+//        pprintf( "%sAuthmode \tWIFI_AUTH_WPA_WPA2_PSK%s\n",YELLOW,RESETC);
 //        break;
 //    case WIFI_AUTH_WPA2_ENTERPRISE:
-//        printf( "%sAuthmode \tWIFI_AUTH_WPA2_ENTERPRISE%s\n",YELLOW,RESETC);
+//        pprintf( "%sAuthmode \tWIFI_AUTH_WPA2_ENTERPRISE%s\n",YELLOW,RESETC);
 //        break;
 //    default:
-//        printf( "%sAuthmode \tWIFI_AUTH_UNKNOWN%s\n",YELLOW,RESETC);
+//        pprintf( "%sAuthmode \tWIFI_AUTH_UNKNOWN%s\n",YELLOW,RESETC);
 //        break;
 //    }
 //}
@@ -1350,49 +1352,49 @@ static void firmware(string ss)
 //{
 //    switch (pairwise_cipher) {
 //    case WIFI_CIPHER_TYPE_NONE:
-//    	printf("%sPairw Cipher \tWIFI_CIPHER_TYPE_NONE%s\n",YELLOW,RESETC);
+//    	pprintf("%sPairw Cipher \tWIFI_CIPHER_TYPE_NONE%s\n",YELLOW,RESETC);
 //        break;
 //    case WIFI_CIPHER_TYPE_WEP40:
-//    	printf("%sPairw Cipher \tWIFI_CIPHER_TYPE_WEP40%s\n",YELLOW,RESETC);
+//    	pprintf("%sPairw Cipher \tWIFI_CIPHER_TYPE_WEP40%s\n",YELLOW,RESETC);
 //        break;
 //    case WIFI_CIPHER_TYPE_WEP104:
-//    	printf("%sPairw Cipher \tWIFI_CIPHER_TYPE_WEP104%s\n",YELLOW,RESETC);
+//    	pprintf("%sPairw Cipher \tWIFI_CIPHER_TYPE_WEP104%s\n",YELLOW,RESETC);
 //        break;
 //    case WIFI_CIPHER_TYPE_TKIP:
-//    	printf("%sPairw Cipher \tWIFI_CIPHER_TYPE_TKIP%s\n",YELLOW,RESETC);
+//    	pprintf("%sPairw Cipher \tWIFI_CIPHER_TYPE_TKIP%s\n",YELLOW,RESETC);
 //        break;
 //    case WIFI_CIPHER_TYPE_CCMP:
-//    	printf("%sPairw Cipher \tWIFI_CIPHER_TYPE_CCMP%s\n",YELLOW,RESETC);
+//    	pprintf("%sPairw Cipher \tWIFI_CIPHER_TYPE_CCMP%s\n",YELLOW,RESETC);
 //        break;
 //    case WIFI_CIPHER_TYPE_TKIP_CCMP:
-//    	printf("%sPairw Cipher \tWIFI_CIPHER_TYPE_TKIP_CCMP%s\n",YELLOW,RESETC);
+//    	pprintf("%sPairw Cipher \tWIFI_CIPHER_TYPE_TKIP_CCMP%s\n",YELLOW,RESETC);
 //        break;
 //    default:
-//    	printf("%sPairw Cipher \tWIFI_CIPHER_TYPE_UNKNOWN%s\n",YELLOW,RESETC);
+//    	pprintf("%sPairw Cipher \tWIFI_CIPHER_TYPE_UNKNOWN%s\n",YELLOW,RESETC);
 //        break;
 //    }
 //
 //    switch (group_cipher) {
 //    case WIFI_CIPHER_TYPE_NONE:
-//    	printf("%sGroup Cipher \tWIFI_CIPHER_TYPE_NONE%s\n",YELLOW,RESETC);
+//    	pprintf("%sGroup Cipher \tWIFI_CIPHER_TYPE_NONE%s\n",YELLOW,RESETC);
 //        break;
 //    case WIFI_CIPHER_TYPE_WEP40:
-//    	printf("%sGroup Cipher \tWIFI_CIPHER_TYPE_WEP40%s\n",YELLOW,RESETC);
+//    	pprintf("%sGroup Cipher \tWIFI_CIPHER_TYPE_WEP40%s\n",YELLOW,RESETC);
 //        break;
 //    case WIFI_CIPHER_TYPE_WEP104:
-//    	printf("%sGroup Cipher \tWIFI_CIPHER_TYPE_WEP104%s\n",YELLOW,RESETC);
+//    	pprintf("%sGroup Cipher \tWIFI_CIPHER_TYPE_WEP104%s\n",YELLOW,RESETC);
 //        break;
 //    case WIFI_CIPHER_TYPE_TKIP:
-//    	printf("%sGroup Cipher \tWIFI_CIPHER_TYPE_TKIP%s\n",YELLOW,RESETC);
+//    	pprintf("%sGroup Cipher \tWIFI_CIPHER_TYPE_TKIP%s\n",YELLOW,RESETC);
 //        break;
 //    case WIFI_CIPHER_TYPE_CCMP:
-//    	printf( "%sGroup Cipher \tWIFI_CIPHER_TYPE_CCMP%s\n",YELLOW,RESETC);
+//    	pprintf( "%sGroup Cipher \tWIFI_CIPHER_TYPE_CCMP%s\n",YELLOW,RESETC);
 //        break;
 //    case WIFI_CIPHER_TYPE_TKIP_CCMP:
-//    	printf( "%sGroup Cipher \tWIFI_CIPHER_TYPE_TKIP_CCMP%s\n",YELLOW,RESETC);
+//    	pprintf( "%sGroup Cipher \tWIFI_CIPHER_TYPE_TKIP_CCMP%s\n",YELLOW,RESETC);
 //        break;
 //    default:
-//    	printf("%sGroup Cipher \tWIFI_CIPHER_TYPE_UNKNOWN%s\n",YELLOW,RESETC);
+//    	pprintf("%sGroup Cipher \tWIFI_CIPHER_TYPE_UNKNOWN%s\n",YELLOW,RESETC);
 //        break;
 //    }
 //}
@@ -1410,15 +1412,15 @@ static void firmware(string ss)
 //	   	ESP_ERROR_CHECK(esp_wifi_scan_start(NULL, true));
 //	    ESP_ERROR_CHECK(esp_wifi_scan_get_ap_records(&number, ap_info));
 //	    ESP_ERROR_CHECK(esp_wifi_scan_get_ap_num(&ap_count));
-//	    printf("%sTotal APs scanned = %u%s\n",RED, ap_count,RESETC);
+//	    pprintf("%sTotal APs scanned = %u%s\n",RED, ap_count,RESETC);
 //	    for (int i = 0; (i < 10) && (i < ap_count); i++) {
-//	        printf("%sSSID%s \t\t%s\n",GREEN,RESETC, ap_info[i].ssid);
-//	        printf("%sRSSI%s\t\t%d\n", CYAN,RESETC,ap_info[i].rssi);
+//	        pprintf("%sSSID%s \t\t%s\n",GREEN,RESETC, ap_info[i].ssid);
+//	        pprintf("%sRSSI%s\t\t%d\n", CYAN,RESETC,ap_info[i].rssi);
 //	        print_auth_mode(ap_info[i].authmode);
 //	        if (ap_info[i].authmode != WIFI_AUTH_WEP) {
 //	            print_cipher_type(ap_info[i].pairwise_cipher, ap_info[i].group_cipher);
 //	        }
-//	        printf( "Channel \t%d\n", ap_info[i].primary);
+//	        pprintf( "Channel \t%d\n", ap_info[i].primary);
 //	    }
 //
 //	    miscanf=false;
@@ -1431,26 +1433,26 @@ static void firmware(string ss)
 void eraseTariff(string ss)
 {
 	fram.erase_tarif();
-	printf("%sTariffs erased\n",KBDT);
+	pprintf("%sTariffs erased\n",KBDT);
 }
 
 static void sha256(string ss)
 {
 	char s1[20];
-	printf("Enter SHA256 key:");
+	pprintf("Enter SHA256 key:");
 	fflush(stdout);
 	int fueron=get_string(UART_NUM_0,10,s1);
 	uint8_t  shares[32];
 	shaMake(s1,fueron,(uint8_t*)&shares);
 	for(int a=0;a<32;a++)
-		printf("%02x",shares[a]);
-	printf("\n");
+		pprintf("%02x",shares[a]);
+	pprintf("\n");
 }
 
 static void clearWL(string ss)
 {
 	char s1[20];
-	printf("%sAre you sure clear Whitelist?:%s",MAGENTA,RESETC);
+	pprintf("%sAre you sure clear Whitelist?:%s",MAGENTA,RESETC);
 	fflush(stdout);
 	int fueron=get_string(UART_NUM_0,10,s1);
 	if(fueron<0)
@@ -1458,7 +1460,7 @@ static void clearWL(string ss)
 	memset(theConf.reservedMacs,0,sizeof(theConf.reservedMacs));
 	theConf.reservedCnt=0;
 	write_to_flash();
-	printf("White List Cleared\n");
+	pprintf("White List Cleared\n");
 }
 
 static void WhiteList(string ss)
@@ -1477,7 +1479,7 @@ static void WhiteList(string ss)
 	}
 	else
 	{
-		printf("%sPosition to Delete:%s",MAGENTA,RESETC);
+		pprintf("%sPosition to Delete:%s",MAGENTA,RESETC);
 		fflush(stdout);
 		pos=get_string(UART_NUM_0,10,s1);
 		if(pos<0)
@@ -1485,7 +1487,7 @@ static void WhiteList(string ss)
 	}
 	if(pos<0 || pos>theConf.reservedCnt-1)
 	{
-		printf("Pos %d Out of Range(%d)\n",pos,theConf.reservedCnt);
+		pprintf("Pos %d Out of Range(%d)\n",pos,theConf.reservedCnt);
 		return;
 	}
 	int son=(MAXSTA-(pos+1))*sizeof(uint32_t);
@@ -1495,7 +1497,7 @@ static void WhiteList(string ss)
 
 	theConf.reservedCnt--;
 	write_to_flash();
-	printf("WhiteList Entry %d Cleared Count %d\n",pos,theConf.reservedCnt);
+	pprintf("WhiteList Entry %d Cleared Count %d\n",pos,theConf.reservedCnt);
 }
 
 void init_kbd_commands()
@@ -1553,7 +1555,7 @@ void kbd(void *arg)
 	uart_set_pin(uart_num, UART_PIN_NO_CHANGE, UART_PIN_NO_CHANGE, UART_PIN_NO_CHANGE, UART_PIN_NO_CHANGE);
 	esp_err_t err= uart_driver_install(uart_num, 1024 , 1024, 10, NULL, 0);
 	if(err!=ESP_OK)
-		printf("Error UART Install %d\n",err);
+		pprintf("Error UART Install %d\n",err);
 
 	init_kbd_commands();
 

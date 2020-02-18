@@ -14,6 +14,7 @@
 #include "globals.h"
 
 extern uint32_t millis();
+extern void pprintf(const char * format, ...);
 
 void write_to_fram(u8 meter,bool addit)
 {
@@ -53,7 +54,7 @@ void write_to_fram(u8 meter,bool addit)
 		{
 			fram.read_guard((uint8_t*)&theG);
 			if(theG!=theGuard)
-				printf("Fram is lost\n");
+				pprintf("Fram is lost\n");
 
 			if(millis()-startGuard>600000)
 			{
@@ -88,7 +89,7 @@ void load_from_fram(u8 meter)
 
 	#ifdef DEBUGX
 			if(theConf.traceflag & (1<<FRAMD))
-				printf("[FRAMD]Loaded Meter %d curLife %d beat %d\n",meter,theMeters[meter].curLife,theMeters[meter].currentBeat);
+				pprintf("[FRAMD]Loaded Meter %d curLife %d beat %d\n",meter,theMeters[meter].curLife,theMeters[meter].currentBeat);
 	#endif
 		}
 }

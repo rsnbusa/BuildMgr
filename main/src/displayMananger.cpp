@@ -11,6 +11,7 @@
 extern void connMgr(void* pArg);
 extern void delay(uint32_t son);
 extern int sendTelemetryCmd(parg *pArg);
+extern void pprintf(const char * format, ...);
 
 static uint32_t getRandom(uint32_t startw, uint32_t endw)
 {
@@ -57,7 +58,7 @@ static void check_delivery_date(void *pArg)
 	}
 	if(windNow<0)
 	{
-		printf("Internal Error Window\n");
+		pprintf("Internal Error Window\n");
 		while(1)
 			delay(1000);
 	}
@@ -65,7 +66,7 @@ static void check_delivery_date(void *pArg)
 	{
 		randsecs=getRandom(windows[windNow][0],windows[windNow][1]);
 		waitfornextW=windows[windNow][1]-randsecs;
-		printf("Next window [%d] Min %d Max %d delay %u wait %u\n",windNow,windows[windNow][0],windows[windNow][1],randsecs-windows[windNow][0],waitfornextW);
+		pprintf("Next window [%d] Min %d Max %d delay %u wait %u\n",windNow,windows[windNow][0],windows[windNow][1],randsecs-windows[windNow][0],waitfornextW);
 		delay((randsecs-windows[windNow][0])*MULT);//wait within window
 		//send telemetry
 		res=sendTelemetryCmd(NULL);
@@ -75,7 +76,7 @@ static void check_delivery_date(void *pArg)
 			// retry until you can with a 30 secs delay
 			while(1)
 			{
-				printf("Retrying %d\n",res);
+				pprintf("Retrying %d\n",res);
 				delay(3000);
 				res=sendTelemetryCmd(NULL);
 				if(res==ESP_OK)

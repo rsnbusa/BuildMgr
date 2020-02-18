@@ -11,19 +11,20 @@
 #include "defines.h"
 #include "projTypes.h"
 #include "globals.h"
+extern void pprintf(const char * format, ...);
 
 void hourChange()
 {
 #ifdef DEBUGX
 	if(theConf.traceflag & (1<<CMDD))
-		printf("%sHour change Old %d New %d\n",CMDDT,oldHorag,horag);
+		pprintf("%sHour change Old %d New %d\n",CMDDT,oldHorag,horag);
 #endif
 
 	for (int a=0;a<MAXDEVS;a++)
 	{
 #ifdef DEBUGX
 		if(theConf.traceflag & (1<<CMDD))
-			printf("%sHour change meter %d val %d\n",CMDDT,a,theMeters[a].curHour);
+			pprintf("%sHour change meter %d val %d\n",CMDDT,a,theMeters[a].curHour);
 #endif
 		if(framSem)
 		{
@@ -42,7 +43,7 @@ void hourChange()
 			{
 				int err=fram.read_tarif_day(yearDay,(u8*)&tarifasDia);
 				if(err!=0)
-					printf("Error reading tarifadia %d...using same\n",yearDay);
+					pprintf("Error reading tarifadia %d...using same\n",yearDay);
 			}
 
 			// calculate remaining Beats to convert to next Tariff IF different
@@ -62,7 +63,7 @@ void dayChange()
 {
 #ifdef DEBUGX
 	if(theConf.traceflag & (1<<CMDD))
-		printf("%sDay change Old %d New %d\n",CMDDT,oldDiag,diag);
+		pprintf("%sDay change Old %d New %d\n",CMDDT,oldDiag,diag);
 #endif
 
 	if(framSem)
@@ -71,7 +72,7 @@ void dayChange()
 		{
 	#ifdef DEBUGX
 			if(theConf.traceflag & (1<<CMDD))
-				printf("%sDay change mes %d day %d oldday %d\n",CMDDT,oldMesg,diag,oldDiag);
+				pprintf("%sDay change mes %d day %d oldday %d\n",CMDDT,oldMesg,diag,oldDiag);
 	#endif
 			if(xSemaphoreTake(framSem, portMAX_DELAY))
 			{
@@ -90,7 +91,7 @@ void monthChange()
 {
 #ifdef DEBUGX
 	if(theConf.traceflag & (1<<CMDD))
-		printf("%sMonth change Old %d New %d\n",CMDDT,oldMesg,mesg);
+		pprintf("%sMonth change Old %d New %d\n",CMDDT,oldMesg,mesg);
 #endif
 
 	if(framSem)
@@ -124,7 +125,7 @@ void check_date_change()
 
 #ifdef DEBUGX
 	if(theConf.traceflag & (1<<CMDD))
-		printf("%sHour change mes %d- %d day %d- %d hora %d- %d Min %d Sec %d dYear %d\n",CMDDT,mesg,oldMesg,diag,oldDiag,horag,oldHorag,
+		pprintf("%sHour change mes %d- %d day %d- %d hora %d- %d Min %d Sec %d dYear %d\n",CMDDT,mesg,oldMesg,diag,oldDiag,horag,oldHorag,
 				timep.tm_min,timep.tm_sec,yearDay);
 #endif
 

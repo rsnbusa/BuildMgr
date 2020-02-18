@@ -12,6 +12,8 @@
 #include "projTypes.h"
 #include "globals.h"
 
+extern void pprintf(const char * format, ...);
+
 static esp_err_t http_event_handle(esp_http_client_event_t *evt)
 {
     switch(evt->event_id) {
@@ -36,7 +38,7 @@ void loadit(parg *pArg)
 
 	int vanl=0;
 	esp_http_client_config_t lconfig;
-printf("Load tariffs HTTP\n");
+pprintf("Load tariffs HTTP\n");
 	memset(&lconfig,0,sizeof(lconfig));
 
 	if(elcmd!=NULL)
@@ -55,7 +57,7 @@ printf("Load tariffs HTTP\n");
 
 #ifdef DEBUGX
 	if(theConf.traceflag & (1<<HOSTD))
-		printf("%sLoading tariffs %s\n",HOSTDT,lconfig.url);
+		pprintf("%sLoading tariffs %s\n",HOSTDT,lconfig.url);
 #endif
 
 	lconfig.event_handler = http_event_handle;							//in charge of saving received data to Fram directly
@@ -71,14 +73,14 @@ printf("Load tariffs HTTP\n");
 				{
 	#ifdef DEBUGX
 					if(theConf.traceflag & (1<<HOSTD))
-						printf("%sStatus = %d, content_length = %d\n",HOSTDT,
+						pprintf("%sStatus = %d, content_length = %d\n",HOSTDT,
 							esp_http_client_get_status_code(client),
 							esp_http_client_get_content_length(client));
 	#endif
 					if(esp_http_client_get_status_code(client)!=200)
 					{
 						if(theConf.traceflag & (1<<HOSTD))
-							printf("%sFailed to download Tariff Err %x\n",HOSTDT,esp_http_client_get_status_code(client));
+							pprintf("%sFailed to download Tariff Err %x\n",HOSTDT,esp_http_client_get_status_code(client));
 						esp_http_client_cleanup(client);
 						return;
 					}
@@ -87,7 +89,7 @@ printf("Load tariffs HTTP\n");
 				{
 	#ifdef DEBUGX
 					if(theConf.traceflag & (1<<HOSTD))
-						printf("%sFailed to download Tariff Err %x\n",HOSTDT,err);
+						pprintf("%sFailed to download Tariff Err %x\n",HOSTDT,err);
 					esp_http_client_cleanup(client);
 					return;
 	#endif
@@ -98,20 +100,20 @@ printf("Load tariffs HTTP\n");
 				err=fram.read_tarif_day(yearDay,(u8*)&tarifasDia);
 				xSemaphoreGive(framSem);
 				if(err!=0)
-					printf("%sLoadTariff Error %d reading Tariffs day %d...recovering from Host\n",HOSTDT,err,yearDay);
+					pprintf("%sLoadTariff Error %d reading Tariffs day %d...recovering from Host\n",HOSTDT,err,yearDay);
 			}
 	}
 	else
 	{
 #ifdef DEBUGX
 		if(theConf.traceflag & (1<<HOSTD))
-			printf("%sFailed to start HTTP Client\n",HOSTDT);
+			pprintf("%sFailed to start HTTP Client\n",HOSTDT);
 #endif
 	}
 
 #ifdef DEBUGX
 	if(theConf.traceflag & (1<<HOSTD))
-		printf("%sLoading tariffs successful\n",HOSTDT);
+		pprintf("%sLoading tariffs successful\n",HOSTDT);
 #endif
 }
 
@@ -125,7 +127,7 @@ void loadDefaultTariffs()
 
 	if(root==NULL || ar==NULL)
 	{
-		printf("cannot create root tariff\n");
+		pprintf("cannot create root tariff\n");
 		return;
 	}
 
@@ -141,7 +143,7 @@ void loadDefaultTariffs()
 	char *lmessage=cJSON_Print(root);
 	if(lmessage==NULL)
 	{
-		printf("Error creating JSON Tariff\n");
+		pprintf("Error creating JSON Tariff\n");
 		cJSON_Delete(root);
 		return;
 	}
