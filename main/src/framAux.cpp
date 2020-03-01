@@ -54,7 +54,7 @@ void write_to_fram(u8 meter,bool addit)
 		{
 			fram.read_guard((uint8_t*)&theG);
 			if(theG!=theGuard)
-				pprintf("Fram is lost\n");
+				pprintf("Fram is lost Need %d got %d\n",theGuard,theG);
 
 			if(millis()-startGuard>600000)
 			{

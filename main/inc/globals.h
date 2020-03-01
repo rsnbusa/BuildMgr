@@ -20,7 +20,7 @@ const static int SNTP_BIT 				= BIT4;
 const static int TELEM_BIT 				= BIT5;
 
 EXTERN bool								isrf,connf,wifif,apstaf,displayf,miscanf,mqttf,firstmqtt;
-EXTERN char								http_request[100],tempb[5000],texto[101],stateName[5][20];
+EXTERN char								*tempb,texto[101],stateName[5][20];
 EXTERN cmdRecord 						cmds[MAXCMDS];
 EXTERN cmdType							theCmd;
 EXTERN config_flash						theConf;
@@ -29,7 +29,7 @@ EXTERN esp_mqtt_client_handle_t 		clientCloud;
 EXTERN EventGroupHandle_t 				wifi_event_group;
 EXTERN FramSPI							fram;
 EXTERN gpio_config_t 					io_conf;
-EXTERN host_t							setupHost[MAXDEVS];
+EXTERN host_t							*setupHost[MAXDEVS];
 EXTERN int 								socket_id,binary_file_length,numsensors,diaHoraTarifa,vanMacs,usedMacs,vanadd,vanvueltas,globalSocks,telemResult;
 EXTERN macControl						losMacs[MAXSTA];
 EXTERN mbedtls_md_context_t 			mbedtls_ctx;

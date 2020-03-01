@@ -42,7 +42,7 @@ class FramSPI {
 public:
     FramSPI(void);
     int 		sendCmd (uint8_t cmd);
-    int			readStatus(uint8_t *donde);
+    uint8_t   	readStatus ();
     int  		writeStatus(uint8_t streg);
     bool 		begin(int MOSI, int MISO, int CLK, int CS,SemaphoreHandle_t *framSem);
     int	        write8 (uint32_t framAddr, uint8_t value);
@@ -97,7 +97,7 @@ public:
     bool _framInitialised;
     spi_device_handle_t spi;
     uint8_t addressBytes;
-    uint32_t intframWords;
+    uint32_t intframWords,maxSpeed;
     uint16_t manufID,prodId;
     bool setw;
 

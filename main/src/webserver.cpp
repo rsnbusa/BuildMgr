@@ -218,30 +218,37 @@ static esp_err_t setup_get_handler(httpd_req_t *req)
             		 goto exit;
             }
             if (httpd_query_key_value(buf, "mid", param, sizeof(param)) == ESP_OK)
-            	 strcpy((char*)&setupHost[cualm].meterid,param);
+           	// strcpy((char*)&setupHost[cualm].meterid,param);
+       	 strcpy((char*)setupHost[cualm]->meterid,param);
 
             if (httpd_query_key_value(buf, "kwh", param, sizeof(param)) == ESP_OK)
-            	 setupHost[cualm].startKwh=atoi(param);
+           	 setupHost[cualm]->startKwh=atoi(param);
+       	// setupHost[cualm].startKwh=atoi(param);
 
             if (httpd_query_key_value(buf, "bpk", param, sizeof(param)) == ESP_OK)
-            	 setupHost[cualm].bpkwh=atoi(param);
+           	// setupHost[cualm].bpkwh=atoi(param);
+       	 setupHost[cualm]->bpkwh=atoi(param);
         }
         free(buf);
     }
 
-    if(setupHost[cualm].bpkwh>0 && setupHost[cualm].startKwh>0 && strlen(setupHost[cualm].meterid)>0)
+  //  if(setupHost[cualm].bpkwh>0 && setupHost[cualm].startKwh>0 && strlen(setupHost[cualm].meterid)>0)
+        if(setupHost[cualm]->bpkwh>0 && setupHost[cualm]->startKwh>0 && strlen(setupHost[cualm]->meterid)>0)
     {
 		time(&now);
 		localtime_r(&now, &timeinfo);
 		strftime(strftime_buf, sizeof(strftime_buf), "%c", &timeinfo);
-    	setupHost[cualm].valid=true;
+    	//setupHost[cualm].valid=true;
+    	setupHost[cualm]->valid=true;
     	theConf.configured[cualm]=1; //in transit mode
-    	sprintf(tempb,"[%s]Meter:%d Id=%s kWh=%d BPK=%d ",strftime_buf,cualm,setupHost[cualm].meterid,setupHost[cualm].startKwh,setupHost[cualm].bpkwh);
+    //	sprintf(tempb,"[%s]Meter:%d Id=%s kWh=%d BPK=%d ",strftime_buf,cualm,setupHost[cualm].meterid,setupHost[cualm].startKwh,setupHost[cualm].bpkwh);
+    	sprintf(tempb,"[%s]Meter:%d Id=%s kWh=%d BPK=%d ",strftime_buf,cualm,setupHost[cualm]->meterid,setupHost[cualm]->startKwh,setupHost[cualm]->bpkwh);
     }
     else
     {
     	exit:
-    	setupHost[cualm].valid=false;
+    //	setupHost[cualm].valid=false;
+    	setupHost[cualm]->valid=false;
         sprintf(tempb,"[%s]Invalid parameters",strftime_buf);
     }
 
@@ -283,14 +290,19 @@ static esp_err_t challenge_get_handler(httpd_req_t *req)
 					{
 						if(theConf.configured[a]==2)
 						{
-							strcpy(theConf.medidor_id[a],setupHost[a].meterid);
+					//		strcpy(theConf.medidor_id[a],setupHost[a].meterid);
+							strcpy(theConf.medidor_id[a],setupHost[a]->meterid);
 							time((time_t*)&theConf.bornDate[a]);
-							theConf.beatsPerKw[a]=setupHost[a].bpkwh;
-							theConf.bornKwh[a]=setupHost[a].startKwh;
+						//	theConf.beatsPerKw[a]=setupHost[a].bpkwh;
+							theConf.beatsPerKw[a]=setupHost[a]->bpkwh;
+						//	theConf.bornKwh[a]=setupHost[a].startKwh;
+							theConf.bornKwh[a]=setupHost[a]->startKwh;
 							theConf.configured[a]=3;						//final status configured
 							fram.formatMeter(a);
-							fram.write_lifekwh(a,setupHost[a].startKwh);	// write to Fram. Its beginning of life KWH
-							pprintf("Writing life Meter %d= %d\n",a,setupHost[a].startKwh);
+					//		fram.write_lifekwh(a,setupHost[a].startKwh);	// write to Fram. Its beginning of life KWH
+							fram.write_lifekwh(a,setupHost[a]->startKwh);	// write to Fram. Its beginning of life KWH
+					//		pprintf("Writing life Meter %d= %d\n",a,setupHost[a].startKwh);
+							pprintf("Writing life Meter %d= %d\n",a,setupHost[a]->startKwh);
 						}
 						else
 							theConf.configured[a]=0; //reset it
@@ -455,6 +467,11 @@ void start_webserver(void *pArg)
     	pprintf("%sStarting server on port:%d\n",WEBDT, config.server_port);
 #endif
     if (httpd_start(&server, &config) == ESP_OK) {
+    	for(int a=0;a<MAXDEVS;a++)
+    	{
+    		setupHost[a]=(host_t*)malloc(sizeof(host_t));
+    		memset(setupHost[a],0,sizeof(host_t));
+    	}
         // Set URI handlers
         httpd_register_uri_handler(server, &setup); 		//setup up to 5 meters
         httpd_register_uri_handler(server, &setupend);		//end setup and send challenge

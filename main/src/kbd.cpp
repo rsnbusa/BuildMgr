@@ -347,7 +347,7 @@ void confStatus(string ss)
 
 	pprintf("ConnMgr %s%s%s Whitelisted %s%d%s",CYAN,theConf.meterConnName,RESETC,GREEN,theConf.reservedCnt,RESETC);
 	pprintf("%sConfiguration RunStatus[%s] Trace %x %sBootCount %d LReset %x @%s",YELLOW,theConf.active?"Run":"Setup",theConf.traceflag,GREEN,theConf.bootcount,theConf.lastResetCode,ctime(&theConf.lastReboot));
-
+	delay(100);
 	if(!shortans)
 	{
 		for (int a=0;a<MAXDEVS;a++)
@@ -356,6 +356,7 @@ void confStatus(string ss)
 			strftime(strftime_buf, sizeof(strftime_buf), "%c", &timeinfo);
 			pprintf("%sMeter[%d] Serial %s BPW %d Born %s BornkWh %d %s\n",(a % 2)?CYAN:GREEN,a,theConf.medidor_id[a],theConf.beatsPerKw[a],
 					strftime_buf,theConf.bornKwh[a],theConf.configured[a]==3?"Active":"Inactive");
+			delay(100);
 		}
 	}
 
@@ -373,8 +374,10 @@ void confStatus(string ss)
 
 		pprintf("CmdMgr %s @%s",cmdHandle?GREEN "Alive" RESETC:RED "Dead" RESETC,ctime(&mgrTime[CMDMGR]));
 		pprintf("FramMgr %s @%s",framHandle?GREEN "Alive" RESETC:RED "Dead" RESETC,ctime(&mgrTime[FRAMMGR]));
+		delay(100);
 		pprintf("PinMgr %s @%s",pinHandle?GREEN "Alive" RESETC:RED "Dead" RESETC,ctime(&mgrTime[PINMGR]));
 		pprintf("WatchMgr %s @%s",watchHandle?GREEN "Alive" RESETC:RED "Dead" RESETC,ctime(&mgrTime[WATCHMGR]));
+		delay(100);
 		pprintf("DisplayMgr %s @%s",displayHandle?GREEN "Alive" RESETC:RED "Dead" RESETC,ctime(&mgrTime[DISPLAYMGR]));
 		pprintf("SubMgr %s @%s",submHandle?GREEN "Alive" RESETC:RED "Dead" RESETC,ctime(&mgrTime[SUBMGR]));
 	}
@@ -1436,17 +1439,30 @@ void eraseTariff(string ss)
 	pprintf("%sTariffs erased\n",KBDT);
 }
 
-static void sha256(string ss)
+static void sendDelay(string ss)
 {
 	char s1[20];
-	pprintf("Enter SHA256 key:");
-	fflush(stdout);
-	int fueron=get_string(UART_NUM_0,10,s1);
-	uint8_t  shares[32];
-	shaMake(s1,fueron,(uint8_t*)&shares);
-	for(int a=0;a<32;a++)
-		pprintf("%02x",shares[a]);
-	pprintf("\n");
+
+	cJSON *params=makeJson(ss);
+
+	if(params)
+	{
+		cJSON *del= cJSON_GetObjectItem(params,"DELAY");
+		if(del)
+			theConf.msgTimeOut=del->valueint;
+		cJSON_Delete(params);
+	}
+	else
+	{
+		pprintf("Delay(%d):",theConf.msgTimeOut);
+		fflush(stdout);
+		int fueron=get_string(UART_NUM_0,10,s1);
+		if(fueron<0)
+			return;
+		fueron=atoi(s1);
+		theConf.msgTimeOut=fueron;
+	}
+	write_to_flash();
 }
 
 static void clearWL(string ss)
@@ -1526,7 +1542,7 @@ void init_kbd_commands()
 	strcpy((char*)&cmdds[20].comando,"Telemetry");		cmdds[20].code=sendTelemetry;		cmdds[20].help="";
 	strcpy((char*)&cmdds[21].comando,"Tariff");			cmdds[21].code=tariffs;				cmdds[21].help="";
 	strcpy((char*)&cmdds[22].comando,"Firmware");		cmdds[22].code=firmware;			cmdds[22].help="";
-	strcpy((char*)&cmdds[23].comando,"Sha256");			cmdds[23].code=sha256;				cmdds[23].help="";
+	strcpy((char*)&cmdds[23].comando,"SendDelay");		cmdds[23].code=sendDelay;			cmdds[23].help="Status check TimeOut";
 	strcpy((char*)&cmdds[24].comando,"ClearWL");		cmdds[24].code=clearWL;				cmdds[24].help="";
 	strcpy((char*)&cmdds[25].comando,"WhiteList");		cmdds[25].code=WhiteList;			cmdds[25].help="POS";
 }

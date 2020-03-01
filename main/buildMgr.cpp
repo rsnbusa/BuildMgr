@@ -156,7 +156,10 @@ void write_to_flash() //save our configuration
 
 void mqttCallback(int res)
 {
-	//pprintf("Telemetry result %d\n",res);
+#ifdef DEBUGX
+	if(theConf.traceflag & (1<<HOSTD))
+		pprintf("%sTelemetry result %d\n",HOSTDT,res);
+#endif
 	telemResult=res;
     xEventGroupSetBits(wifi_event_group, TELEM_BIT);//message sent bit
 }
@@ -180,7 +183,7 @@ int sendTelemetryCmd(parg *pArg)
 		xQueueSend( mqttQ,&mqttMsgHandle,0 );			//Submode will free the mensaje variable
     if(!xEventGroupWaitBits(wifi_event_group, TELEM_BIT, false, true,  mqttMsgHandle.maxTime+10/  portTICK_RATE_MS))
     {
-		//pprintf("Telemetric result timeout");
+		pprintf("Telemetric result timeout");
 		telemResult=BITTM;
     }
     return telemResult;
@@ -352,6 +355,7 @@ static void getMessage(void *pArg)
 #endif
 				   goto exit;
 				} else {
+					*(comando.mensaje+len)=0;
 #ifdef DEBUGX
 					if(theConf.traceflag & (1<<CMDD))
 						pprintf("%sMsg Rx %s\n",CMDDT, comando.mensaje);
@@ -388,8 +392,11 @@ static void getMessage(void *pArg)
 		}
 	exit:
 	losMacs[pos].theHandle=NULL;
-	shutdown(sock, 0);
-	close(sock);
+	if(sock)
+	{
+		shutdown(sock, 0);
+		close(sock);
+	}
 	if(comando.mensaje)
 		free(comando.mensaje);
 	globalSocks--;
@@ -457,7 +464,7 @@ static void buildMgr(void *pvParameters)
 				{
 					for (int a=0;a<theConf.reservedCnt;a++)
 						{
-							if(losMacs[a].theSock>3)
+							if(losMacs[a].theSock)
 								close(losMacs[a].theSock);
 						}
 					goto reListen;
@@ -548,7 +555,7 @@ static void wifi_event_handler(void* arg, esp_event_base_t event_base,
     			pprintf("MtM Rebooted %x last State %s seen %s",losMacs[estem].macAdd,
     					stateName[losMacs[estem].dState],ctime(&losMacs[estem].lastUpdate));
     		}
-    		if(losMacs[estem].theSock>0)
+    		if(losMacs[estem].theSock)
     			close(losMacs[estem].theSock);
 
     			//in theory a Disconnect should have happened but not in reality so kill tasks
@@ -594,7 +601,7 @@ static void wifi_event_handler(void* arg, esp_event_base_t event_base,
 						xTimerDelete(losMacs[estem].timerH,0);
 						losMacs[estem].timerH=NULL;
 			}
-    		if(losMacs[estem].theSock>0)
+    		if(losMacs[estem].theSock)
     			close(losMacs[estem].theSock);
 			//a controller is dying should report event to Host or keep an eye on it before sending msg
 		}
@@ -863,6 +870,7 @@ esp_err_t mqtt_event_handler(esp_mqtt_event_handle_t event)
 {
     esp_mqtt_client_handle_t client = event->client;
     // your_context_t *context = event->context;
+
     switch (event->event_id) {
         case MQTT_EVENT_CONNECTED:
 #ifdef DEBUGX
@@ -1110,8 +1118,6 @@ static void mqtt_app_start(void)
 		clientCloud=NULL;
 
 	    clientCloud = esp_mqtt_client_init(&mqtt_cfg);
-	    pprintf("Mqtt start client %p\n",clientCloud);
-
 
 	    if(clientCloud)
 	    	xTaskCreate(&submode,"U571",10240,NULL, 5, &submHandle);
@@ -1120,11 +1126,6 @@ static void mqtt_app_start(void)
 	    	pprintf("Not configured Mqtt\n");
 	    	return;
 	    }
-	//    if(esp_mqtt_client_start(clientCloud)!=;
-	  //  if (err !=ESP_OK)
-	    //	pprintf("Error connect mqtt %d\n",err);
-
-	//    esp_mqtt_client_start(clientCloud); //should be started by the SubMode task
 }
 
  // Messages form Host Controller managed here
@@ -1315,12 +1316,12 @@ static void init_vars()
 	mqttf=false;
 	firstmqtt=false;
 
+	tempb=(char*)malloc(5000);// big sucker with our new psram jaja
 
 	if(theConf.msgTimeOut<10000)
 		theConf.msgTimeOut=61000;	//just in case
 
 	memset(&losMacs,0,sizeof(losMacs));
-	memset(&setupHost,0,sizeof(setupHost));
 	memset(&theMeters,0,sizeof(theMeters));
 
 	vanMacs=0;
@@ -1575,10 +1576,14 @@ void makeMetercJSON(macControl *meterController,cJSON *arr)
 {
 	for(int a=0;a<MAXDEVS;a++)
 	{
-		cJSON *cmdJ=cJSON_CreateObject();
-		cJSON_AddStringToObject(cmdJ,"mid",				meterController->meterSerial[a]);
-		cJSON_AddNumberToObject(cmdJ,"KwH",				meterController->controlLastKwH[a]);
-		cJSON_AddItemToArray(arr, cmdJ);
+		if(strcmp(meterController->meterSerial[a],"")!=0)
+		{
+			cJSON *cmdJ=cJSON_CreateObject();
+			cJSON_AddStringToObject(cmdJ,"MID",				meterController->meterSerial[a]);
+			cJSON_AddNumberToObject(cmdJ,"KwH",				meterController->controlLastKwH[a]);
+			cJSON_AddNumberToObject(cmdJ,"BPS",				meterController->controlLastBeats[a]);
+			cJSON_AddItemToArray(arr, cmdJ);
+		}
 	}
 }
 
@@ -1596,9 +1601,9 @@ cJSON * makeGroupMeters()
 		return NULL;
 	}
 
-	cJSON_AddStringToObject(root,"connId",				theConf.meterConnName);
-	cJSON_AddNumberToObject(root,"Ts",					now);
-	cJSON_AddNumberToObject(root,"macn",				theMacNum);
+	cJSON_AddStringToObject(root,"CONID",				theConf.meterConnName);
+	cJSON_AddNumberToObject(root,"TS",					now);
+	cJSON_AddNumberToObject(root,"MAC",				theMacNum);
 
 	cJSON *ar = cJSON_CreateArray();
 	for (int a=0;a<theConf.reservedCnt;a++)
@@ -1611,8 +1616,9 @@ cJSON * makeGroupMeters()
 	for(int a=0;a<workingDevs;a++)
 	{
 			cJSON *cmdJ=cJSON_CreateObject();
-			cJSON_AddStringToObject(cmdJ,"mid",				theMeters[a].serialNumber);
+			cJSON_AddStringToObject(cmdJ,"MID",				theMeters[a].serialNumber);
 			cJSON_AddNumberToObject(cmdJ,"KwH",				theMeters[a].curLife);
+			cJSON_AddNumberToObject(cmdJ,"BPS",				theMeters[a].currentBeat);
 			cJSON_AddItemToArray(ar, cmdJ);
 
 	}

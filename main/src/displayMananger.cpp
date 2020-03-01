@@ -27,14 +27,14 @@ static uint32_t getRandom(uint32_t startw, uint32_t endw)
 
 static void check_delivery_date(void *pArg)
 {
-#define MULT	1
+#define MULT	1000
 
 	time_t now;
 	struct tm timeinfo;
 	uint32_t nowsecs,randsecs,waitfornextW;
 	uint32_t windows[NUMTELSLOTS][2];//={{0,28799},{28800,57599},{57600,86400}};	//0-8, 8-16,16-24 hours
 	int8_t windNow=-1;
-	int res=0;
+	int res=0,retcount=0;
 
 	int slice=86400/NUMTELSLOTS;
 	for (int a=0;a<NUMTELSLOTS;a++)
@@ -66,7 +66,15 @@ static void check_delivery_date(void *pArg)
 	{
 		randsecs=getRandom(windows[windNow][0],windows[windNow][1]);
 		waitfornextW=windows[windNow][1]-randsecs;
-		pprintf("Next window [%d] Min %d Max %d delay %u wait %u\n",windNow,windows[windNow][0],windows[windNow][1],randsecs-windows[windNow][0],waitfornextW);
+		time_t when;
+		time(&when);
+		when+=randsecs-windows[windNow][0];
+
+#ifdef DEBUGX
+		if(theConf.traceflag & (1<<TIMED))
+			pprintf("%sNext window [%d] Min %d Max %d delay %u wait %u heap %u Fire at %s\n",TIEMPOT,windNow,windows[windNow][0],windows[windNow][1],randsecs-windows[windNow][0],
+				waitfornextW,esp_get_free_heap_size(),ctime(&when));
+#endif
 		delay((randsecs-windows[windNow][0])*MULT);//wait within window
 		//send telemetry
 		res=sendTelemetryCmd(NULL);
@@ -74,13 +82,27 @@ static void check_delivery_date(void *pArg)
 		{
 			//failed. MQTT service probable disconnected
 			// retry until you can with a 30 secs delay
+			retcount=0;
 			while(1)
 			{
 				pprintf("Retrying %d\n",res);
+				retcount++;
 				delay(3000);
 				res=sendTelemetryCmd(NULL);
 				if(res==ESP_OK)
 					break;
+				int son=uxQueueMessagesWaiting(mqttQ);
+				if(son>5)
+				{
+					pprintf("Freeing MqttQueue %d\n",son);
+					xQueueReset(mqttQ);//try to free queue
+				}
+				if(retcount>30)
+				{
+					pprintf("Lost contact Mqtt. Restarting\n");
+					delay(1000);
+					esp_restart();
+				}
 			}
 		}
 		windNow++;

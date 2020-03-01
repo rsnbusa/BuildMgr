@@ -16,7 +16,7 @@ void watchDog(void * pArg)
 
 	while(true)
 	{
-		delay(100);			//minimum delay
+		delay(500);			//minimum delay
 		now=millis();
 		time(&mgrTime[WATCHMGR]);
 
@@ -76,7 +76,8 @@ void watchDog(void * pArg)
 						break;
 					}
 
-					if((now-losMacs[a].stateChangeTS[MSGSTATE])>TSTATE3)
+				//	if((now-losMacs[a].stateChangeTS[MSGSTATE])>TSTATE3)
+						if((now-losMacs[a].stateChangeTS[MSGSTATE])>theConf.msgTimeOut)
 					{
 						if(losMacs[a].report!=REPORTED)
 						{
