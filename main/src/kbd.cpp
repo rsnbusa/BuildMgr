@@ -1283,6 +1283,15 @@ static void printControllers(string ss)
 						pprintf("%sMeter[%d]=%s KwH %6d Beats %9d\n",b%2?CYAN:GREEN,b,losMacs[a].meterSerial[b],losMacs[a].controlLastKwH[b],losMacs[a].controlLastBeats[b]);
 		}
 		delay(150);
+		if(strcmp(losMacs[a].mtmName,"")!=0)
+		{
+			pprintf("\tMeter[%d](%s)\n",a,losMacs[a].mtmName);
+			for (int z=0;z<MAXDEVS;z++)
+			{
+				if(strcmp(losMacs[a].meterSerial[z],"")!=0)
+					pprintf("\t\tMID[%d] %s kWh %d Beats %d\n",z,losMacs[a].meterSerial[z],losMacs[a].controlLastKwH[z],losMacs[a].controlLastBeats[z]);
+			}
+		}
 	}
 
 	pprintf("%s\n",KBDT);

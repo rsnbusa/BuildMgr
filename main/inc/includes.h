@@ -47,6 +47,11 @@ extern "C"{
 #include "rom/rtc.h"
 #include "sntp/sntp.h"
 #include "SSD1306.h"
+#include "esp32/aes.h"
+#include "mbedtls/pk.h"
+#include "mbedtls/ctr_drbg.h"
+#include "mbedtls/entropy.h"
+#include "mbedtls/base64.h"
 //#include "tcpip_adapter.h"
 void app_main();
 }

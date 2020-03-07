@@ -28,7 +28,7 @@
 #define MAXCHARS						40
 #define MAXCMDS							6
 #define MAXDEVS							5
-#define MAXSTA							20
+#define MAXSTA							10
 #define MAXWIFI							100
 
 #define METER0							4
@@ -104,4 +104,5 @@
 #define RESETC							"\e[0m"
 
 
+#define INDEX(base,a,bb,c,d1,d2) (char*)((char*)base+(a*d1*d2)+(bb*d2)+c)
 #endif

@@ -33,7 +33,10 @@ typedef struct macC{
 	uint32_t		stateChangeTS[sizeof(reportState)];
 	uint8_t			hwState,toCount;
 	char			mtmName[20];
+	char			theKey[33];
+	char			*hostCmd;
 } macControl;
+
 
 typedef struct taskp{
 	int	sock_p;

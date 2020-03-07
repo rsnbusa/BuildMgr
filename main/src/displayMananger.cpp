@@ -10,7 +10,7 @@
 
 extern void connMgr(void* pArg);
 extern void delay(uint32_t son);
-extern int sendTelemetryCmd(parg *pArg);
+extern int sendTelemetryCmd();
 extern void pprintf(const char * format, ...);
 
 static uint32_t getRandom(uint32_t startw, uint32_t endw)
@@ -32,7 +32,7 @@ static void check_delivery_date(void *pArg)
 	time_t now;
 	struct tm timeinfo;
 	uint32_t nowsecs,randsecs,waitfornextW;
-	uint32_t windows[NUMTELSLOTS][2];//={{0,28799},{28800,57599},{57600,86400}};	//0-8, 8-16,16-24 hours
+	uint32_t windows[NUMTELSLOTS][2];
 	int8_t windNow=-1;
 	int res=0,retcount=0;
 
@@ -77,7 +77,7 @@ static void check_delivery_date(void *pArg)
 #endif
 		delay((randsecs-windows[windNow][0])*MULT);//wait within window
 		//send telemetry
-		res=sendTelemetryCmd(NULL);
+		res=sendTelemetryCmd();
 		if(res!=ESP_OK)
 		{
 			//failed. MQTT service probable disconnected
@@ -88,7 +88,7 @@ static void check_delivery_date(void *pArg)
 				pprintf("Retrying %d\n",res);
 				retcount++;
 				delay(3000);
-				res=sendTelemetryCmd(NULL);
+				res=sendTelemetryCmd();
 				if(res==ESP_OK)
 					break;
 				int son=uxQueueMessagesWaiting(mqttQ);

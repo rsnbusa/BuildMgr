@@ -20,7 +20,7 @@ const static int SNTP_BIT 				= BIT4;
 const static int TELEM_BIT 				= BIT5;
 
 EXTERN bool								isrf,connf,wifif,apstaf,displayf,miscanf,mqttf,firstmqtt;
-EXTERN char								*tempb,texto[101],stateName[5][20];
+EXTERN char								*tempb,texto[101],stateName[5][20],iv[16],key[32];
 EXTERN cmdRecord 						cmds[MAXCMDS];
 EXTERN cmdType							theCmd;
 EXTERN config_flash						theConf;
@@ -44,6 +44,10 @@ EXTERN TimerHandle_t					hourChangeT,connHandle;
 EXTERN u16 								theGuard,qdelay,llevoMsg,mesg,diag,horag,yearg,wDelay,tarifasDia[24],oldMesg,oldDiag,oldHorag,yearDay,oldYearDay;
 EXTERN uint32_t							totalPulses,oldCurBeat[MAXDEVS],oldCurLife[MAXDEVS],sentTotal,llevo,tallies[MAXSTA][MAXDEVS],theMacNum,startGuard;
 EXTERN uint8_t 							daysInMonth [12],qwait,lastalign,lastFont,workingDevs;
+EXTERN esp_aes_context					ctx ;
+EXTERN mbedtls_pk_context 				pk;
+EXTERN mbedtls_ctr_drbg_context			ctr_drbg;
+EXTERN mbedtls_entropy_context 			entropy;
 #ifdef KBD
 EXTERN char								lookuptable[NKEYS][10];
 #endif

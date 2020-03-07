@@ -23,6 +23,7 @@ void displayManager(void * pArg);
 void drawString(int x, int y, string que, int fsize, int align,displayType showit,overType erase);
 #endif
 
+extern const unsigned char _binary_ca_cert_pem_start[] asm("_binary_ca_cert_pem_start");
 // ------------------------------------------------------------------------------
 // CMDS
 void statusCmd(parg *argument);
@@ -164,9 +165,10 @@ void mqttCallback(int res)
     xEventGroupSetBits(wifi_event_group, TELEM_BIT);//message sent bit
 }
 
-int sendTelemetryCmd(parg *pArg)
+int sendTelemetryCmd()
 {
 	mqttMsg_t mqttMsgHandle;
+
 	memset(&mqttMsgHandle,0,sizeof(mqttMsgHandle));
 
 #ifdef DEBUGX
@@ -174,6 +176,8 @@ int sendTelemetryCmd(parg *pArg)
 		pprintf("%sHost requested telemetry readings\n",HOSTDT);
 #endif
 	char *mensaje=sendTelemetry();
+
+
 	mqttMsgHandle.msgLen=strlen(mensaje);
 	mqttMsgHandle.message=(uint8_t*)mensaje;
 	mqttMsgHandle.maxTime=4000;
@@ -358,12 +362,12 @@ static void getMessage(void *pArg)
 					*(comando.mensaje+len)=0;
 #ifdef DEBUGX
 					if(theConf.traceflag & (1<<CMDD))
-						pprintf("%sMsg Rx %s\n",CMDDT, comando.mensaje);
+						pprintf("%sMsg Rx %s Len %d\n",CMDDT, comando.mensaje,len);
 #endif
 					// check special reserve msg
 					if(strstr(comando.mensaje,"rsvp")!=NULL)
 					{
-						*(comando.mensaje+len)=0;
+					//	*(comando.mensaje+len)=0;
 						// reserve cmd rx. Process it without queue
 						// msg struct simple = rsvp123456789 rsvp=key numbers are macn in chars
 						memcpy(s1,comando.mensaje+4,len-4);
@@ -375,6 +379,27 @@ static void getMessage(void *pArg)
 
 					if(theP->macf<0) //no mac found in buildmgr.
 						goto exit;
+
+					cJSON *nada=cJSON_Parse(comando.mensaje);	//cannot parse so its encrypted
+					if(!nada)
+					{
+						//decrypt message for processing
+						char * output=(char*)malloc(len);
+						bzero(output,len);
+						bzero(iv,sizeof(iv));
+					//	printf("AES Key Pos %d [%s]\n",pos,losMacs[pos].theKey);
+						esp_aes_setkey( &ctx, losMacs[comando.pos].theKey, 256 );
+						esp_aes_crypt_cbc( &ctx, ESP_AES_DECRYPT, len, iv, comando.mensaje, output );
+						memcpy(comando.mensaje,output,len); //back to its original storage position
+						if(output)
+							free(output);
+					}
+					else
+						cJSON_Delete(nada);
+#ifdef DEBUGX
+					if(theConf.traceflag & (1<<CMDD))
+						pprintf("%sDecrypted Msg Rx %s Len %d\n",CMDDT, comando.mensaje,len);
+#endif
 
 					time(&losMacs[pos].lastUpdate);
 					losMacs[pos].msgCount++;
@@ -403,6 +428,38 @@ static void getMessage(void *pArg)
 	if (globalSocks<0)
 		globalSocks=0;
 	vTaskDelete(NULL);
+}
+
+bool decryptLogin(char* b64, uint16_t blen, char *decryp, size_t * fueron)
+{
+
+	int ret;
+	size_t ilen=0;
+
+	char *encryp=malloc(1024);
+	ret=mbedtls_base64_decode(encryp,1024,&ilen,b64,blen);
+	if(ret!=0)
+	{
+		printf("Failed b64 %d\n",ret);
+		return false;
+	}
+	else
+	{
+	//	printf("Private Ok\n");
+		size_t aca;
+		if( ( ret = mbedtls_pk_decrypt( &pk, encryp, ilen,decryp, &aca,1024, mbedtls_ctr_drbg_random, &ctr_drbg ) ) != 0 )
+		{
+		    printf( " failed  mbedtls_pk_decrypt returned -0x%04x\n", -ret );
+		    return false;
+
+		}
+		else
+		{
+	//		printf("Decrypted[%d] >%s<\n",aca,decryp);
+			*fueron=aca;
+		}
+		return true;
+	}
 }
 
 static void buildMgr(void *pvParameters)
@@ -570,8 +627,11 @@ static void wifi_event_handler(void* arg, esp_event_base_t event_base,
 						xTimerDelete(losMacs[estem].timerH,0);
 						losMacs[estem].timerH=NULL;
 			}
-
+			if(losMacs[estem].hostCmd)
+				free(losMacs[estem].hostCmd);
+//			losMacs[estem].hostCmd=(char*)malloc(1500); should be created by the rx part. NULL means no message for that MtM
     		memset(&losMacs[estem],0,sizeof(losMacs[0]));	//initialize it
+    		memcpy(losMacs[estem].theKey,key,32);
     		losMacs[estem].macAdd=newmac;
     		losMacs[estem].dState=CONNSTATE;
     		losMacs[estem].stateChangeTS[CONNSTATE]=millis();
@@ -603,6 +663,8 @@ static void wifi_event_handler(void* arg, esp_event_base_t event_base,
 			}
     		if(losMacs[estem].theSock)
     			close(losMacs[estem].theSock);
+			if(losMacs[estem].hostCmd)
+				free(losMacs[estem].hostCmd);
 			//a controller is dying should report event to Host or keep an eye on it before sending msg
 		}
 		break;
@@ -967,12 +1029,16 @@ static void submode(void * pArg)
 						 //  clientCloud = esp_mqtt_client_init(&mqtt_cfg);
 						mqtterr=esp_mqtt_client_reconnect(clientCloud);
 						if(!firstmqtt)
-						    esp_mqtt_client_start(clientCloud); //try restarting
+							mqtterr= esp_mqtt_client_start(clientCloud); //try restarting
+						goto alla;
+
 					}
+					else
 						goto mal;
 				}
 				else
 				{
+					alla:
 #ifdef DEBUGX
 					if(theConf.traceflag & (1<<CMDD))
 						pprintf("%sStarting mqtt\n",CMDDT);
@@ -1198,6 +1264,17 @@ static void cmdManager(void* arg)
 					{
 						cJSON *cmdIteml = cJSON_GetArrayItem(monton, a);//next item
 						cJSON *cmdd= cJSON_GetObjectItem(cmdIteml,"cmd"); //get cmd. Nopt detecting invalid cmd
+
+						//saving meter name and position for Host commands
+						cJSON *mid= cJSON_GetObjectItem(cmdIteml,"mid"); //get meter id
+						cJSON *lpos= cJSON_GetObjectItem(cmdIteml,"Pos"); //get meter which meter in the MtM
+						int thepos=0;
+						if(lpos)
+							thepos=lpos->valueint;
+						if(mid)
+							strcpy(losMacs[cmd.pos].meterSerial[thepos],mid->valuestring);	//copy the name always
+
+
 #ifdef DEBUGX
 						if(theConf.traceflag & (1<<CMDD))
 							pprintf("%sArray[%d] cmd is %s\n",CMDDT,a,cmdd->valuestring);
@@ -1397,6 +1474,37 @@ static void init_vars()
 		strcpy(lookuptable[a+NKEYS/2],debugs.c_str());
 	}
 #endif
+
+	memset( iv, 0, sizeof( iv ) );
+	memset( key, 65, sizeof( key ) );
+
+	esp_aes_init( &ctx );
+	for (int a=0;a<MAXSTA;a++)
+		memcpy(losMacs[a].theKey,key,sizeof(key));
+
+	esp_aes_setkey( &ctx, key, 256 );
+
+	int ret;
+
+	extern const unsigned char prvtkey_pem_start[] asm("_binary_prvtkey_pem_start");
+	extern const unsigned char prvtkey_pem_end[] asm("_binary_prvtkey_pem_end");
+	int len = prvtkey_pem_end - prvtkey_pem_start;
+
+	mbedtls_ctr_drbg_init(&ctr_drbg);
+	mbedtls_entropy_init(&entropy);
+	if((ret=mbedtls_ctr_drbg_seed(&ctr_drbg,mbedtls_entropy_func,&entropy,NULL,0))!=0)
+	{
+		printf("failed seed %x\n",ret);
+	//	return false;
+	}
+
+	mbedtls_pk_init( &pk );
+
+	if( ( ret = mbedtls_pk_parse_key( &pk, prvtkey_pem_start,len,NULL,0)) != 0 )
+	{
+		    printf( " failed\n  ! mbedtls_pk_parse_private_keyfile returned -0x%04x\n", -ret );
+	//	    return false;
+	}
 }
 
 
@@ -1805,7 +1913,7 @@ void app_main()
 #endif
 
    	// Managers Tasks
-   	xTaskCreate(&cmdManager,"cmdMgr",4096,NULL, 5, &cmdHandle); 							//cmds received from the Host Controller via MQTT or internal TCP/IP. jSON based
+   	xTaskCreate(&cmdManager,"cmdMgr",10240,NULL, 5, &cmdHandle); 							//cmds received from the Host Controller via MQTT or internal TCP/IP. jSON based
 	xTaskCreate(&framManager,"framMgr",4096,NULL, configMAX_PRIORITIES-5, &framHandle);	// Fram Manager
 	xTaskCreate(&pcntManager,"pcntMgr",4096,NULL, configMAX_PRIORITIES-8, &pinHandle);	// We also control 5 meters. Pseudo ISR. This is d manager
 	xTaskCreate(&buildMgr,"TCP",4096,(void*)1, configMAX_PRIORITIES-10, &buildHandle);		// Messages from the Meter Controllers via socket manager
