@@ -11,6 +11,9 @@
 #define SDAW                			21      // SDA
 #endif
 
+#define MAXSAMPLESHEAP					500
+#define AESL							32
+#define MAXLOSTSYNC						3
 #define NUMTELSLOTS						6
 #define MAXTIMEOUTS						5
 #define BUFFSIZE 						4096
@@ -26,7 +29,7 @@
 
 #define MAXBUFFER						2500
 #define MAXCHARS						40
-#define MAXCMDS							6
+#define MAXCMDS							7
 #define MAXDEVS							5
 #define MAXSTA							10
 #define MAXWIFI							100

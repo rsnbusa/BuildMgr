@@ -47,7 +47,8 @@ extern "C"{
 #include "rom/rtc.h"
 #include "sntp/sntp.h"
 #include "SSD1306.h"
-#include "esp32/aes.h"
+//#include "esp32/aes.h"
+#include "aes_alt.h"			//hw acceleration
 #include "mbedtls/pk.h"
 #include "mbedtls/ctr_drbg.h"
 #include "mbedtls/entropy.h"

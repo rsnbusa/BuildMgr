@@ -15,7 +15,6 @@
 extern void pprintf(const char * format, ...);
 extern void ConfigSystem(void *pArg);
 extern const uint8_t server_cert_pem_start[] asm("_binary_ca_cert_pem_start");
-//extern const uint8_t server_cert_pem_end[] asm("_binary_ca_cert_pem_end");
 
 
 void firmUpdate(void *pArg)
@@ -56,8 +55,9 @@ void firmUpdate(void *pArg)
 
 
 //load firmware
-void firmwareCmd(parg *pArg) //called by cmdManager
+int firmwareCmd(parg *pArg) //called by cmdManager
 {
 	// use task so as to keep registering pulses
 	xTaskCreate(&firmUpdate,"U571",10240,NULL, 5, NULL);
+	return 0;
 }

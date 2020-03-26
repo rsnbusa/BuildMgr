@@ -30,7 +30,7 @@ static esp_err_t http_event_handle(esp_http_client_event_t *evt)
     return ESP_OK;
 }
 
-void loadit(parg *pArg)
+int loadit(parg *pArg)
 {
 	char	textl[80];
 	parg 	*elcmd=(parg*)pArg;
@@ -82,7 +82,7 @@ pprintf("Load tariffs HTTP\n");
 						if(theConf.traceflag & (1<<HOSTD))
 							pprintf("%sFailed to download Tariff Err %x\n",HOSTDT,esp_http_client_get_status_code(client));
 						esp_http_client_cleanup(client);
-						return;
+						return -1;
 					}
 				}
 				else
@@ -91,7 +91,7 @@ pprintf("Load tariffs HTTP\n");
 					if(theConf.traceflag & (1<<HOSTD))
 						pprintf("%sFailed to download Tariff Err %x\n",HOSTDT,err);
 					esp_http_client_cleanup(client);
-					return;
+					return -1;
 	#endif
 				}
 				// all is well, cleanup and read back to our working array
@@ -115,6 +115,7 @@ pprintf("Load tariffs HTTP\n");
 	if(theConf.traceflag & (1<<HOSTD))
 		pprintf("%sLoading tariffs successful\n",HOSTDT);
 #endif
+	return ESP_OK;
 }
 
 

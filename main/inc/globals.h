@@ -18,6 +18,7 @@ const static int PUB_BIT 				= BIT2;
 const static int DONE_BIT 				= BIT3;
 const static int SNTP_BIT 				= BIT4;
 const static int TELEM_BIT 				= BIT5;
+const static int SENDH_BIT 				= BIT6;
 
 EXTERN bool								isrf,connf,wifif,apstaf,displayf,miscanf,mqttf,firstmqtt;
 EXTERN char								*tempb,texto[101],stateName[5][20],iv[16],key[32];
@@ -30,24 +31,26 @@ EXTERN EventGroupHandle_t 				wifi_event_group;
 EXTERN FramSPI							fram;
 EXTERN gpio_config_t 					io_conf;
 EXTERN host_t							*setupHost[MAXDEVS];
-EXTERN int 								socket_id,binary_file_length,numsensors,diaHoraTarifa,vanMacs,usedMacs,vanadd,vanvueltas,globalSocks,telemResult;
+EXTERN int 								socket_id,binary_file_length,numsensors,diaHoraTarifa,vanMacs,usedMacs,vanadd,vanvueltas,globalSocks,telemResult,MQTTDelay,sendH;
 EXTERN macControl						losMacs[MAXSTA];
 EXTERN mbedtls_md_context_t 			mbedtls_ctx;
 EXTERN meterType						theMeters[MAXDEVS];
 EXTERN nvs_handle 						nvshandle;
-EXTERN QueueHandle_t 					mqttQ,mqttR,framQ,pcnt_evt_queue;
+EXTERN QueueHandle_t 					mqttQ,mqttR,framQ,pcnt_evt_queue,mtm[MAXSTA];
 EXTERN SemaphoreHandle_t 				wifiSem,framSem,printSem;
 EXTERN string							controlQueue,cmdQueue;
 EXTERN TaskHandle_t						webHandle,timeHandle,simHandle,blinkHandle,cmdHandle,framHandle,pinHandle,buildHandle,watchHandle,displayHandle,submHandle;
 EXTERN time_t							mgrTime[7];
 EXTERN TimerHandle_t					hourChangeT,connHandle;
-EXTERN u16 								theGuard,qdelay,llevoMsg,mesg,diag,horag,yearg,wDelay,tarifasDia[24],oldMesg,oldDiag,oldHorag,yearDay,oldYearDay;
-EXTERN uint32_t							totalPulses,oldCurBeat[MAXDEVS],oldCurLife[MAXDEVS],sentTotal,llevo,tallies[MAXSTA][MAXDEVS],theMacNum,startGuard;
+EXTERN u16 								theGuard,qdelay,llevoMsg,mesg,diag,horag,yearg,wDelay,tarifasDia[24],oldMesg,oldDiag,oldHorag,yearDay,oldYearDay,vanHeap;
+EXTERN uint32_t							totalPulses,oldCurBeat[MAXDEVS],oldCurLife[MAXDEVS],sentTotal,llevo,tallies[MAXSTA][MAXDEVS],theMacNum,startGuard,stcount;
 EXTERN uint8_t 							daysInMonth [12],qwait,lastalign,lastFont,workingDevs;
 EXTERN esp_aes_context					ctx ;
 EXTERN mbedtls_pk_context 				pk;
 EXTERN mbedtls_ctr_drbg_context			ctr_drbg;
 EXTERN mbedtls_entropy_context 			entropy;
+EXTERN heaper							theheap[MAXSAMPLESHEAP];
+EXTERN task_param						tParam[MAXSTA];
 #ifdef KBD
 EXTERN char								lookuptable[NKEYS][10];
 #endif

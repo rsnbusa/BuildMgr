@@ -10,7 +10,16 @@ enum debugflags{BOOTD,WIFID,MQTTD,PUBSUBD,OTAD,CMDD,WEBD,GEND,MQTTT,FRMCMD,INTD,
 typedef enum macState{BOOTSTATE,CONNSTATE,LOGINSTATE,MSGSTATE,TOSTATE} meterState;
 typedef enum reportState{NOREPORT,REPORTED} reportState_t;
 enum mgrT{BUILDMGR,CMDMGR,WATCHMGR,DISPLAYMGR,FRAMMGR,PINMGR,SUBMGR};
-enum mqtters{MQTTOK,NOCLIENT,PUBTM,STARTTM,STARTERR,QUEUEFAIL,BITTM};
+enum mqtters{MQTTOK=5500,NOCLIENT,PUBTM,STARTTM,STARTERR,QUEUEFAIL,BITTM};
+enum pausers{PNONE,PSTAT,PTEL,PCMD};
+
+
+typedef struct pcomm{
+    int 	pComm;
+    uint8_t pos;
+    void 	*pMessage;
+    double	macn;
+}parg;
 
 typedef struct whitel{
 	meterState		dState;
@@ -31,17 +40,31 @@ typedef struct macC{
 	meterState		dState,pState;
 	reportState		report;
 	uint32_t		stateChangeTS[sizeof(reportState)];
-	uint8_t			hwState,toCount;
+	uint8_t			hwState,toCount,lostSync;
 	char			mtmName[20];
 	char			theKey[33];
-	char			*hostCmd;
+//	uint8_t			meterPos;
 } macControl;
 
+typedef struct heaper{
+	time_t		ts;
+	uint32_t	theHeap;
+	char		routine[20];
+}heaper;
+
+typedef struct hostC{
+	uint8_t	meter;
+	char	*msg;
+} hostCmd;
 
 typedef struct taskp{
-	int	sock_p;
-	int pos_p;
-	int macf;
+	int		sock_p;
+	int 	pos_p;
+	int 	macf;
+	cJSON	*elcmd;
+	parg	*argument;
+	char	*mensaje;
+	char 	*getM;
 } task_param;
 
 typedef struct meterType{
@@ -54,9 +77,10 @@ typedef struct meterType{
 } meterType;
 
 typedef struct mqttMsgCmd{
-	char	*mensaje;
-	int		fd;
-	u16		pos;
+	char		*mensaje;
+	int			fd;
+	u16			pos;
+	task_param	*tParam;
 }cmdType;
 
 typedef struct i2cType{
@@ -70,12 +94,6 @@ typedef struct loginTarif{
 } loginT;
 
 
-typedef struct pcomm{
-    int 	pComm;
-    uint8_t pos;
-    void 	*pMessage;
-    double	macn;
-}parg;
 
 typedef void (*functmqtt)(int);
 
@@ -87,10 +105,10 @@ typedef struct mqttMsgInt{
 	functmqtt	cb;
 }mqttMsg_t;
 
-typedef void (*functrsn)(parg *);
+typedef int (*functrsn)(parg *);
 
 typedef struct cmdRecord{
-    char comando[20];
+    char 		comando[20];
     uint8_t 	source;
     functrsn 	code;
     uint32_t	count;
@@ -105,6 +123,8 @@ typedef struct config {
     uint32_t	reservedMacs[MAXSTA],msgTimeOut;
     uint16_t	reservedCnt;
     time_t		lastReboot,slotReserveDate[MAXSTA];
+    char		lkey[MAXSTA][32];
+    uint16_t	crypt,pause;
 } config_flash;
 
 typedef struct framq{

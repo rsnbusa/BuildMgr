@@ -6,7 +6,7 @@
 #include <bits/stdc++.h>
 
 #define KBDT		"\e[36m[KBD]\e[0m"
-#define MAXCMDSK	26
+#define MAXCMDSK	33
 
 extern void pprintf(const char * format, ...);
 extern void delay(uint32_t a);
@@ -14,7 +14,6 @@ extern void write_to_flash();
 extern void write_to_fram(u8 meter,bool addit);
 extern void connMgr(void *pArg);
 extern void firmUpdate(void *pArg);
-extern void shaMake(char * key,uint8_t klen,uint8_t* shaResult);
 
 using namespace std;
 
@@ -1333,115 +1332,6 @@ static void firmware(string ss)
 
 }
 
-//static void print_auth_mode(int authmode)
-//{
-//    switch (authmode) {
-//    case WIFI_AUTH_OPEN:
-//        pprintf( "%sAuthmode \tWIFI_AUTH_OPEN%s\n",YELLOW,RESETC);
-//        break;
-//    case WIFI_AUTH_WEP:
-//        pprintf( "%sAuthmode \tWIFI_AUTH_WEP%s\n",YELLOW,RESETC);
-//        break;
-//    case WIFI_AUTH_WPA_PSK:
-//        pprintf( "%sAuthmode \tWIFI_AUTH_WPA_PSK%s\n",YELLOW,RESETC);
-//        break;
-//    case WIFI_AUTH_WPA2_PSK:
-//        pprintf( "%sAuthmode \tWIFI_AUTH_WPA2_PSK%s\n",YELLOW,RESETC);
-//        break;
-//    case WIFI_AUTH_WPA_WPA2_PSK:
-//        pprintf( "%sAuthmode \tWIFI_AUTH_WPA_WPA2_PSK%s\n",YELLOW,RESETC);
-//        break;
-//    case WIFI_AUTH_WPA2_ENTERPRISE:
-//        pprintf( "%sAuthmode \tWIFI_AUTH_WPA2_ENTERPRISE%s\n",YELLOW,RESETC);
-//        break;
-//    default:
-//        pprintf( "%sAuthmode \tWIFI_AUTH_UNKNOWN%s\n",YELLOW,RESETC);
-//        break;
-//    }
-//}
-//
-//static void print_cipher_type(int pairwise_cipher, int group_cipher)
-//{
-//    switch (pairwise_cipher) {
-//    case WIFI_CIPHER_TYPE_NONE:
-//    	pprintf("%sPairw Cipher \tWIFI_CIPHER_TYPE_NONE%s\n",YELLOW,RESETC);
-//        break;
-//    case WIFI_CIPHER_TYPE_WEP40:
-//    	pprintf("%sPairw Cipher \tWIFI_CIPHER_TYPE_WEP40%s\n",YELLOW,RESETC);
-//        break;
-//    case WIFI_CIPHER_TYPE_WEP104:
-//    	pprintf("%sPairw Cipher \tWIFI_CIPHER_TYPE_WEP104%s\n",YELLOW,RESETC);
-//        break;
-//    case WIFI_CIPHER_TYPE_TKIP:
-//    	pprintf("%sPairw Cipher \tWIFI_CIPHER_TYPE_TKIP%s\n",YELLOW,RESETC);
-//        break;
-//    case WIFI_CIPHER_TYPE_CCMP:
-//    	pprintf("%sPairw Cipher \tWIFI_CIPHER_TYPE_CCMP%s\n",YELLOW,RESETC);
-//        break;
-//    case WIFI_CIPHER_TYPE_TKIP_CCMP:
-//    	pprintf("%sPairw Cipher \tWIFI_CIPHER_TYPE_TKIP_CCMP%s\n",YELLOW,RESETC);
-//        break;
-//    default:
-//    	pprintf("%sPairw Cipher \tWIFI_CIPHER_TYPE_UNKNOWN%s\n",YELLOW,RESETC);
-//        break;
-//    }
-//
-//    switch (group_cipher) {
-//    case WIFI_CIPHER_TYPE_NONE:
-//    	pprintf("%sGroup Cipher \tWIFI_CIPHER_TYPE_NONE%s\n",YELLOW,RESETC);
-//        break;
-//    case WIFI_CIPHER_TYPE_WEP40:
-//    	pprintf("%sGroup Cipher \tWIFI_CIPHER_TYPE_WEP40%s\n",YELLOW,RESETC);
-//        break;
-//    case WIFI_CIPHER_TYPE_WEP104:
-//    	pprintf("%sGroup Cipher \tWIFI_CIPHER_TYPE_WEP104%s\n",YELLOW,RESETC);
-//        break;
-//    case WIFI_CIPHER_TYPE_TKIP:
-//    	pprintf("%sGroup Cipher \tWIFI_CIPHER_TYPE_TKIP%s\n",YELLOW,RESETC);
-//        break;
-//    case WIFI_CIPHER_TYPE_CCMP:
-//    	pprintf( "%sGroup Cipher \tWIFI_CIPHER_TYPE_CCMP%s\n",YELLOW,RESETC);
-//        break;
-//    case WIFI_CIPHER_TYPE_TKIP_CCMP:
-//    	pprintf( "%sGroup Cipher \tWIFI_CIPHER_TYPE_TKIP_CCMP%s\n",YELLOW,RESETC);
-//        break;
-//    default:
-//    	pprintf("%sGroup Cipher \tWIFI_CIPHER_TYPE_UNKNOWN%s\n",YELLOW,RESETC);
-//        break;
-//    }
-//}
-
-//static void scan()
-//{
-//	 	uint16_t number = 10;
-//	    wifi_ap_record_t ap_info[10];
-//	    uint16_t ap_count = 0;
-//	    memset(ap_info, 0, sizeof(ap_info));
-//	    miscanf=true;
-//	    ESP_ERROR_CHECK(esp_wifi_stop());
-//	    ESP_ERROR_CHECK(esp_wifi_set_mode(WIFI_MODE_STA));
-//	    esp_wifi_start();
-//	   	ESP_ERROR_CHECK(esp_wifi_scan_start(NULL, true));
-//	    ESP_ERROR_CHECK(esp_wifi_scan_get_ap_records(&number, ap_info));
-//	    ESP_ERROR_CHECK(esp_wifi_scan_get_ap_num(&ap_count));
-//	    pprintf("%sTotal APs scanned = %u%s\n",RED, ap_count,RESETC);
-//	    for (int i = 0; (i < 10) && (i < ap_count); i++) {
-//	        pprintf("%sSSID%s \t\t%s\n",GREEN,RESETC, ap_info[i].ssid);
-//	        pprintf("%sRSSI%s\t\t%d\n", CYAN,RESETC,ap_info[i].rssi);
-//	        print_auth_mode(ap_info[i].authmode);
-//	        if (ap_info[i].authmode != WIFI_AUTH_WEP) {
-//	            print_cipher_type(ap_info[i].pairwise_cipher, ap_info[i].group_cipher);
-//	        }
-//	        pprintf( "Channel \t%d\n", ap_info[i].primary);
-//	    }
-//
-//	    miscanf=false;
-//	    ESP_ERROR_CHECK(esp_wifi_stop());
-//	    ESP_ERROR_CHECK(esp_wifi_set_mode(WIFI_MODE_APSTA));
-//	    esp_wifi_start();
-//	    clientCloud = esp_mqtt_client_init(&mqtt_cfg);
-//}
-
 void eraseTariff(string ss)
 {
 	fram.erase_tarif();
@@ -1466,7 +1356,7 @@ static void sendDelay(string ss)
 		pprintf("Delay(%d):",theConf.msgTimeOut);
 		fflush(stdout);
 		int fueron=get_string(UART_NUM_0,10,s1);
-		if(fueron<0)
+		if(fueron<=0)
 			return;
 		fueron=atoi(s1);
 		theConf.msgTimeOut=fueron;
@@ -1480,7 +1370,7 @@ static void clearWL(string ss)
 	pprintf("%sAre you sure clear Whitelist?:%s",MAGENTA,RESETC);
 	fflush(stdout);
 	int fueron=get_string(UART_NUM_0,10,s1);
-	if(fueron<0)
+	if(fueron<=0)
 		return;
 	memset(theConf.reservedMacs,0,sizeof(theConf.reservedMacs));
 	theConf.reservedCnt=0;
@@ -1507,7 +1397,7 @@ static void WhiteList(string ss)
 		pprintf("%sPosition to Delete:%s",MAGENTA,RESETC);
 		fflush(stdout);
 		pos=get_string(UART_NUM_0,10,s1);
-		if(pos<0)
+		if(pos<=0)
 			return;
 	}
 	if(pos<0 || pos>theConf.reservedCnt-1)
@@ -1525,15 +1415,198 @@ static void WhiteList(string ss)
 	pprintf("WhiteList Entry %d Cleared Count %d\n",pos,theConf.reservedCnt);
 }
 
+static void zeroKeys(string ss)
+{
+	char s1[10];
+	int len;
+
+	pprintf("Zero Keys sure?");
+	fflush(stdout);
+	len=get_string(UART_NUM_0,10,s1);
+	if(len<=0)
+		return;
+	for (int a=0;a<MAXSTA;a++)
+	{
+		memset(&theConf.lkey[a],0,AESL);
+		memset(&losMacs[a].theKey[a],0,AESL);
+
+	}
+	write_to_flash();
+	pprintf("Keys erased\n");
+}
+
+static void mqttDelay(string ss)
+{
+	char s1[10];
+	int pos;
+
+	cJSON *params=makeJson(ss);
+
+	if(params)
+	{
+		cJSON *dly= cJSON_GetObjectItem(params,"DELAY");
+		if(dly)
+			MQTTDelay=dly->valueint;
+		cJSON_Delete(params);
+	}
+	else
+	{
+		pprintf("%sMqtt Delay(%d):%s",MAGENTA,MQTTDelay,RESETC);
+		fflush(stdout);
+		pos=get_string(UART_NUM_0,10,s1);
+		if(pos<=0)
+			return;
+		MQTTDelay=atoi(s1);
+	}
+}
+
+static void cryptoOption(string ss)
+{
+	char s1[10];
+	int pos;
+
+	cJSON *params=makeJson(ss);
+
+	if(params)
+	{
+		cJSON *dly= cJSON_GetObjectItem(params,"MODE");
+		if(dly)
+			theConf.crypt=dly->valueint;
+		cJSON_Delete(params);
+	}
+	else
+	{
+		pprintf("%sCrypto(%d):%s",MAGENTA,theConf.crypt,RESETC);
+		fflush(stdout);
+		pos=get_string(UART_NUM_0,10,s1);
+		if(pos<=0)
+			return;
+		theConf.crypt=atoi(s1);
+	}
+	write_to_flash();
+}
+
+static void telPause(string ss)
+{
+	char s1[10];
+	int pos,pauseTel;
+
+	pauseTel=theConf.pause & 1<<PTEL;
+
+	cJSON *params=makeJson(ss);
+
+	if(params)
+	{
+		cJSON *dly= cJSON_GetObjectItem(params,"MODE");
+		if(dly)
+			pauseTel=dly->valueint;
+		cJSON_Delete(params);
+	}
+	else
+	{
+		pprintf("%sPause Telemetry(%d):%s",MAGENTA,pauseTel?1:0,RESETC);
+		fflush(stdout);
+		pos=get_string(UART_NUM_0,10,s1);
+		if(pos<=0)
+			return;
+		pauseTel=atoi(s1);
+	}
+	if(pauseTel)
+		theConf.pause |= 1<<PTEL;
+	else
+		theConf.pause  &= ~(1 << PTEL);
+	write_to_flash();
+}
+
+static void statPause(string ss)
+{
+	char s1[10];
+	int pos,pauseStatus;
+	pauseStatus=theConf.pause & 1<<PSTAT;
+
+	cJSON *params=makeJson(ss);
+
+	if(params)
+	{
+		cJSON *dly= cJSON_GetObjectItem(params,"MODE");
+		if(dly)
+			pauseStatus=dly->valueint;
+		cJSON_Delete(params);
+	}
+	else
+	{
+		pprintf("%sPause Status(%d):%s",MAGENTA,pauseStatus?1:0,RESETC);
+		fflush(stdout);
+		pos=get_string(UART_NUM_0,10,s1);
+		if(pos<=0)
+			return;
+		pauseStatus=atoi(s1);
+	}
+	if(pauseStatus)
+		theConf.pause |= 1<<PSTAT;
+	else
+		theConf.pause  &= ~(1 << PSTAT);
+	write_to_flash();
+}
+
+static void cmdPause(string ss)
+{
+	char s1[10];
+	int pos,pauseCmd;
+	pauseCmd=theConf.pause & 1<<PCMD;
+
+	cJSON *params=makeJson(ss);
+
+	if(params)
+	{
+		cJSON *dly= cJSON_GetObjectItem(params,"MODE");
+		if(dly)
+			pauseCmd=dly->valueint;
+		cJSON_Delete(params);
+	}
+	else
+	{
+		pprintf("%sPause Cmd(%d):%s",MAGENTA,pauseCmd?1:0,RESETC);
+		fflush(stdout);
+		pos=get_string(UART_NUM_0,10,s1);
+		if(pos<=0)
+			return;
+		pauseCmd=atoi(s1);
+	}
+	if(pauseCmd)
+		theConf.pause |= 1<<PCMD;
+	else
+		theConf.pause  &= ~(1 << PCMD);
+
+	write_to_flash();
+}
+
+
+#ifdef HEAPSAMPLE
+static void showHeap(string ss)
+{
+	int van=vanHeap;
+
+	pprintf("Heap Record %d current %d\n",van,esp_get_free_heap_size());
+	uint32_t prev=theheap[0].theHeap;
+
+	for (int a=0;a<van;a++)
+	{
+		pprintf("Routine %s\t Heap %d diff=%6d\t @%s",theheap[a].routine,theheap[a].theHeap,theheap[a].theHeap-prev,ctime(&theheap[a].ts));
+		prev=theheap[a].theHeap;
+	}
+}
+#endif
+
 void init_kbd_commands()
 {
 	strcpy((char*)&cmdds[0].comando,"Config");			cmdds[ 0].code=confStatus;			cmdds[0].help="SHORT";
-	strcpy((char*)&cmdds[1].comando,"WebReset");		cmdds[ 1].code=webReset;			cmdds[1].help="";
+	strcpy((char*)&cmdds[1].comando,"WebReset");		cmdds[ 1].code=webReset;			cmdds[1].help="WebReset";
 	strcpy((char*)&cmdds[2].comando,"Controllers");		cmdds[ 2].code=printControllers;	cmdds[2].help="LONG";
 	strcpy((char*)&cmdds[3].comando,"MeterStat");		cmdds[ 3].code=meterStatus;			cmdds[3].help="METER";
-	strcpy((char*)&cmdds[4].comando,"EraseTariff");		cmdds[ 4].code=eraseTariff;			cmdds[4].help="";
-	strcpy((char*)&cmdds[5].comando,"MeterCount");		cmdds[ 5].code=meterCount;			cmdds[5].help="";
-	strcpy((char*)&cmdds[6].comando,"DumpCore");		cmdds[ 6].code=dumpCore;			cmdds[6].help="";
+	strcpy((char*)&cmdds[4].comando,"EraseTariff");		cmdds[ 4].code=eraseTariff;			cmdds[4].help="EraseTariff";
+	strcpy((char*)&cmdds[5].comando,"MeterCount");		cmdds[ 5].code=meterCount;			cmdds[5].help="MeterCount";
+	strcpy((char*)&cmdds[6].comando,"DumpCore");		cmdds[ 6].code=dumpCore;			cmdds[6].help="DumpCore";
 	strcpy((char*)&cmdds[7].comando,"FormatFram");		cmdds[ 7].code=formatFram;			cmdds[7].help="VAL";
 	strcpy((char*)&cmdds[8].comando,"ReadFram");		cmdds[ 8].code=readFram;			cmdds[8].help="COUNT";
 	strcpy((char*)&cmdds[9].comando,"WriteFram");		cmdds[ 9].code=writeFram;			cmdds[9].help="ADDR VAL";
@@ -1542,18 +1615,27 @@ void init_kbd_commands()
 	strcpy((char*)&cmdds[12].comando,"FramHour");		cmdds[12].code=framHourSearch;		cmdds[12].help="METER MONTH DAY HOUR";
 	strcpy((char*)&cmdds[13].comando,"FramDay");		cmdds[13].code=framDaySearch;		cmdds[13].help="METER MONTH";
 	strcpy((char*)&cmdds[14].comando,"FramMonth");		cmdds[14].code=framMonthSearch;		cmdds[14].help="METER MONTH";
-	strcpy((char*)&cmdds[15].comando,"Flush");			cmdds[15].code=flushFram;			cmdds[15].help="";
-	strcpy((char*)&cmdds[16].comando,"MessageCount");	cmdds[16].code=msgCount;			cmdds[16].help="";
+	strcpy((char*)&cmdds[15].comando,"Flush");			cmdds[15].code=flushFram;			cmdds[15].help="Flush to Fram";
+	strcpy((char*)&cmdds[16].comando,"MessageCount");	cmdds[16].code=msgCount;			cmdds[16].help="Messasge Count";
 	strcpy((char*)&cmdds[17].comando,"Help");			cmdds[17].code=showHelp;			cmdds[17].help="LONG";
 	strcpy((char*)&cmdds[18].comando,"Trace");			cmdds[18].code=traceFlags;
 	cmdds[18].help="NONE ALL BOOTD WIFID MQTTD PUBSUBD OTAD CMDD WEBD GEND MQTTT FRMCMD INTD FRAMD MSGD TIMED SIMD HOSTD";
 	strcpy((char*)&cmdds[19].comando,"FramMonthsAll");	cmdds[19].code=framMonths;			cmdds[19].help="METER";
-	strcpy((char*)&cmdds[20].comando,"Telemetry");		cmdds[20].code=sendTelemetry;		cmdds[20].help="";
-	strcpy((char*)&cmdds[21].comando,"Tariff");			cmdds[21].code=tariffs;				cmdds[21].help="";
-	strcpy((char*)&cmdds[22].comando,"Firmware");		cmdds[22].code=firmware;			cmdds[22].help="";
+	strcpy((char*)&cmdds[20].comando,"Telemetry");		cmdds[20].code=sendTelemetry;		cmdds[20].help="Send Telemetry";
+	strcpy((char*)&cmdds[21].comando,"Tariff");			cmdds[21].code=tariffs;				cmdds[21].help="Get Tariffs";
+	strcpy((char*)&cmdds[22].comando,"Firmware");		cmdds[22].code=firmware;			cmdds[22].help="Load Firmaware";
 	strcpy((char*)&cmdds[23].comando,"SendDelay");		cmdds[23].code=sendDelay;			cmdds[23].help="Status check TimeOut";
-	strcpy((char*)&cmdds[24].comando,"ClearWL");		cmdds[24].code=clearWL;				cmdds[24].help="";
+	strcpy((char*)&cmdds[24].comando,"ClearWL");		cmdds[24].code=clearWL;				cmdds[24].help="Clear Macs White list";
 	strcpy((char*)&cmdds[25].comando,"WhiteList");		cmdds[25].code=WhiteList;			cmdds[25].help="POS";
+	strcpy((char*)&cmdds[26].comando,"ZeroK");			cmdds[26].code=zeroKeys;			cmdds[26].help="ZKeys";
+	strcpy((char*)&cmdds[27].comando,"MQTT");			cmdds[27].code=mqttDelay;			cmdds[27].help="Mqtt Delay";
+	strcpy((char*)&cmdds[28].comando,"Crypto");			cmdds[28].code=cryptoOption;		cmdds[28].help="SetCrypt";
+	strcpy((char*)&cmdds[29].comando,"TelPause");		cmdds[29].code=telPause;			cmdds[29].help="Pause Telemetry";
+	strcpy((char*)&cmdds[30].comando,"StatPause");		cmdds[30].code=statPause;			cmdds[30].help="Pause Status";
+	strcpy((char*)&cmdds[31].comando,"CmdPause");		cmdds[31].code=cmdPause;			cmdds[31].help="Pause Cmd";
+#ifdef HEAPSAMPLE
+	strcpy((char*)&cmdds[32].comando,"Heap");			cmdds[32].code=showHeap;			cmdds[32].help="HeapRec";
+#endif
 }
 
 void kbd(void *arg)
@@ -1563,9 +1645,6 @@ void kbd(void *arg)
 	char kbdstr[100],oldcmd[100];
 	string ss;
 	std::locale loc;
-
-
-	//cJSON *params;
 
 	uart_config_t uart_config = {
 			.baud_rate = 460800,
@@ -1607,11 +1686,10 @@ void kbd(void *arg)
 			cualf=kbdCmd(string(kbdstr));
 			if(cualf>=0)
 			{
-				(*cmdds[cualf].code)(ss);
+				if(cmdds[cualf].code)
+					(*cmdds[cualf].code)(ss);
 				strcpy(oldcmd,kbdstr);
 			}
-		//	if(params)
-		//		cJSON_Delete(params);
 
 		vTaskDelay(100 / portTICK_PERIOD_MS);
 	}

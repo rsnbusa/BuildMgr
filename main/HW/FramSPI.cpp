@@ -18,6 +18,7 @@ FramSPI::FramSPI(void)
 	prodId=0;
 	manufID=0;
 	setw=true;
+	maxSpeed=SPI_MASTER_FREQ_20M;
 }
 
 bool FramSPI::begin(int MOSI, int MISO, int CLK, int CS,SemaphoreHandle_t *framSem)
@@ -157,7 +158,6 @@ int FramSPI::read_guard(uint8_t*  value)			//guard is used to check if the HW is
 uint8_t  FramSPI::readStatus ()
 {
 	spi_transaction_ext_t t;
-	esp_err_t ret;
 
 	memset(&t, 0, sizeof(t));       //Zero out the transaction no need to set to 0 or null unused params
 
@@ -166,7 +166,7 @@ uint8_t  FramSPI::readStatus ()
 	t.base.rxlength=	8;
 	t.command_bits = 	8;
 	t.address_bits =	0;
-	ret=spi_device_polling_transmit(spi, (spi_transaction_t*)&t);  //Transmit!
+	spi_device_polling_transmit(spi, (spi_transaction_t*)&t);  //Transmit!
 	return t.base.rx_data[0];
 }
 
@@ -354,6 +354,7 @@ int FramSPI::formatMeter(uint8_t cual)
 		return -1;
 	memset(buf,0,count);
 	ret=writeMany(add,(uint8_t*)buf,count);
+	free(buf);
 	return ret;
 
 }
@@ -382,6 +383,7 @@ int FramSPI::erase_tarif()
 		return -1;
 	memset(buf,0,FINTARIFA-TARIFADIA);
 	ret=writeMany(add,(uint8_t*)buf,FINTARIFA-TARIFADIA);
+	free(buf);
 	return ret;
 }
 

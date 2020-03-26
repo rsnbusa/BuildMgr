@@ -8,9 +8,8 @@
 #ifdef DISPLAY
 #include "displayManager.h"
 
-extern void connMgr(void* pArg);
 extern void delay(uint32_t son);
-extern int sendTelemetryCmd();
+extern int sendTelemetryCmd(parg *arg);
 extern void pprintf(const char * format, ...);
 
 static uint32_t getRandom(uint32_t startw, uint32_t endw)
@@ -27,7 +26,7 @@ static uint32_t getRandom(uint32_t startw, uint32_t endw)
 
 static void check_delivery_date(void *pArg)
 {
-#define MULT	1000
+#define MULT	1
 
 	time_t now;
 	struct tm timeinfo;
@@ -64,53 +63,61 @@ static void check_delivery_date(void *pArg)
 	}
 	while(1)
 	{
-		randsecs=getRandom(windows[windNow][0],windows[windNow][1]);
-		waitfornextW=windows[windNow][1]-randsecs;
-		time_t when;
-		time(&when);
-		when+=randsecs-windows[windNow][0];
-
-#ifdef DEBUGX
-		if(theConf.traceflag & (1<<TIMED))
-			pprintf("%sNext window [%d] Min %d Max %d delay %u wait %u heap %u Fire at %s\n",TIEMPOT,windNow,windows[windNow][0],windows[windNow][1],randsecs-windows[windNow][0],
-				waitfornextW,esp_get_free_heap_size(),ctime(&when));
-#endif
-		delay((randsecs-windows[windNow][0])*MULT);//wait within window
-		//send telemetry
-		res=sendTelemetryCmd();
-		if(res!=ESP_OK)
+		if(!(theConf.pause & (1<<PTEL)))
 		{
-			//failed. MQTT service probable disconnected
-			// retry until you can with a 30 secs delay
-			retcount=0;
-			while(1)
+			randsecs=getRandom(windows[windNow][0],windows[windNow][1]);
+			waitfornextW=windows[windNow][1]-randsecs;
+			time_t when;
+			time(&when);
+			when+=randsecs-windows[windNow][0];
+
+	#ifdef DEBUGX
+			if(theConf.traceflag & (1<<TIMED))
+				pprintf("%sNext window [%d] Min %d Max %d delay %u wait %u heap %u MqttDelay %d Fire at %s",TIEMPOT,windNow,windows[windNow][0],windows[windNow][1],randsecs-windows[windNow][0],
+					waitfornextW,esp_get_free_heap_size(),MQTTDelay,ctime(&when));
+	#endif
+			if(MQTTDelay<0)
+				delay((randsecs-windows[windNow][0])*MULT);//wait within window
+			else
+				delay(MQTTDelay);
+
+			//send telemetry
+			res=sendTelemetryCmd(NULL);
+			if(res!=ESP_OK)
 			{
-				pprintf("Retrying %d\n",res);
-				retcount++;
-				delay(3000);
-				res=sendTelemetryCmd();
-				if(res==ESP_OK)
-					break;
-				int son=uxQueueMessagesWaiting(mqttQ);
-				if(son>5)
+				//failed. MQTT service probable disconnected
+				// retry until you can with a 30 secs delay
+				retcount=0;
+				while(1)
 				{
-					pprintf("Freeing MqttQueue %d\n",son);
-					xQueueReset(mqttQ);//try to free queue
-				}
-				if(retcount>30)
-				{
-					pprintf("Lost contact Mqtt. Restarting\n");
-					delay(1000);
-					esp_restart();
+					pprintf("Retrying %d\n",res);
+					retcount++;
+					delay(3000);
+					res=sendTelemetryCmd(NULL);
+					if(res==ESP_OK)
+						break;
+					int son=uxQueueMessagesWaiting(mqttQ);
+					if(son>5)
+					{
+						pprintf("Freeing MqttQueue %d\n",son);
+						xQueueReset(mqttQ);//try to free queue
+					}
+					if(retcount>30)
+					{
+						pprintf("Lost contact Mqtt. Restarting\n");
+						delay(1000);
+						esp_restart();
+					}
 				}
 			}
-		}
-		windNow++;
-		if(windNow>NUMTELSLOTS-1)
-			windNow=0;
-		delay(waitfornextW*MULT);		//wait for Next Window
+			windNow++;
+			if(windNow>NUMTELSLOTS-1)
+				windNow=0;
+			delay(waitfornextW*MULT);		//wait for Next Window
 	}
-
+		else
+			delay(1000);
+	}
 }
 
 void clearScreen()
