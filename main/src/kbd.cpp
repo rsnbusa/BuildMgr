@@ -6,7 +6,7 @@
 #include <bits/stdc++.h>
 
 #define KBDT		"\e[36m[KBD]\e[0m"
-#define MAXCMDSK	33
+#define MAXCMDSK	34
 
 extern void pprintf(const char * format, ...);
 extern void delay(uint32_t a);
@@ -1581,6 +1581,32 @@ static void cmdPause(string ss)
 	write_to_flash();
 }
 
+static void cmdSession(string ss)
+{
+	char s1[10];
+	int pos;
+
+	cJSON *params=makeJson(ss);
+
+	if(params)
+	{
+		cJSON *dly= cJSON_GetObjectItem(params,"MODE");
+		if(dly)
+			sessionf=dly->valueint;
+		cJSON_Delete(params);
+	}
+	else
+	{
+		pprintf("%sSession On/OFF(%d):%s",MAGENTA,sessionf,RESETC);
+		fflush(stdout);
+		pos=get_string(UART_NUM_0,10,s1);
+		if(pos<=0)
+			return;
+		sessionf=atoi(s1);
+	}
+
+}
+
 
 #ifdef HEAPSAMPLE
 static void showHeap(string ss)
@@ -1633,8 +1659,9 @@ void init_kbd_commands()
 	strcpy((char*)&cmdds[29].comando,"TelPause");		cmdds[29].code=telPause;			cmdds[29].help="Pause Telemetry";
 	strcpy((char*)&cmdds[30].comando,"StatPause");		cmdds[30].code=statPause;			cmdds[30].help="Pause Status";
 	strcpy((char*)&cmdds[31].comando,"CmdPause");		cmdds[31].code=cmdPause;			cmdds[31].help="Pause Cmd";
+	strcpy((char*)&cmdds[32].comando,"Session");		cmdds[32].code=cmdSession;			cmdds[32].help="SetSession";
 #ifdef HEAPSAMPLE
-	strcpy((char*)&cmdds[32].comando,"Heap");			cmdds[32].code=showHeap;			cmdds[32].help="HeapRec";
+	strcpy((char*)&cmdds[33].comando,"Heap");			cmdds[33].code=showHeap;			cmdds[33].help="HeapRec";
 #endif
 }
 

@@ -308,15 +308,15 @@ void displayManager(void *arg) {
 	{
 		time(&mgrTime[DISPLAYMGR]);
 		vTaskDelay(howLong/portTICK_PERIOD_MS);
-		if(!gpio_get_level((gpio_num_t)0))
-		{
-			displayMode++;
-			if(displayMode>2)
-				displayMode=0;
-			memset(oldCurBeat,0,sizeof(oldCurBeat));
-			memset(oldCurLife,0,sizeof(oldCurLife));
-			clearScreen();
-		}
+//		if(!gpio_get_level((gpio_num_t)0))
+//		{
+//			displayMode++;
+//			if(displayMode>2)
+//				displayMode=0;
+//			memset(oldCurBeat,0,sizeof(oldCurBeat));
+//			memset(oldCurLife,0,sizeof(oldCurLife));
+//			clearScreen();
+//		}
 
 		time(&t);
 		localtime_r(&t, &timeinfo);
@@ -327,7 +327,7 @@ void displayManager(void *arg) {
 		{
 			drawString(0, 51, string(textd), 10, TEXT_ALIGN_LEFT,NODISPLAY, REPLACE);
 			drawString(86, 51, string(textt), 10, TEXT_ALIGN_LEFT,DISPLAYIT, REPLACE);
-			switch(displayMode)
+			switch(theConf.displayMode)
 			{
 			case 0:
 				howLong=1000;

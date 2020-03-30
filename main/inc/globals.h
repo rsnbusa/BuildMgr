@@ -20,7 +20,7 @@ const static int SNTP_BIT 				= BIT4;
 const static int TELEM_BIT 				= BIT5;
 const static int SENDH_BIT 				= BIT6;
 
-EXTERN bool								isrf,connf,wifif,apstaf,displayf,miscanf,mqttf,firstmqtt;
+EXTERN bool								isrf,connf,wifif,apstaf,displayf,miscanf,mqttf,firstmqtt,sessionf;
 EXTERN char								*tempb,texto[101],stateName[5][20],iv[16],key[32];
 EXTERN cmdRecord 						cmds[MAXCMDS];
 EXTERN cmdType							theCmd;
@@ -44,13 +44,14 @@ EXTERN time_t							mgrTime[7];
 EXTERN TimerHandle_t					hourChangeT,connHandle;
 EXTERN u16 								theGuard,qdelay,llevoMsg,mesg,diag,horag,yearg,wDelay,tarifasDia[24],oldMesg,oldDiag,oldHorag,yearDay,oldYearDay,vanHeap;
 EXTERN uint32_t							totalPulses,oldCurBeat[MAXDEVS],oldCurLife[MAXDEVS],sentTotal,llevo,tallies[MAXSTA][MAXDEVS],theMacNum,startGuard,stcount;
-EXTERN uint8_t 							daysInMonth [12],qwait,lastalign,lastFont,workingDevs;
+EXTERN uint8_t 							daysInMonth [12],qwait,lastalign,lastFont,workingDevs,llevoTempMac;
 EXTERN esp_aes_context					ctx ;
 EXTERN mbedtls_pk_context 				pk;
 EXTERN mbedtls_ctr_drbg_context			ctr_drbg;
 EXTERN mbedtls_entropy_context 			entropy;
 EXTERN heaper							theheap[MAXSAMPLESHEAP];
 EXTERN task_param						tParam[MAXSTA];
+EXTERN mactemp							tempMac[MAXSTA];
 #ifdef KBD
 EXTERN char								lookuptable[NKEYS][10];
 #endif

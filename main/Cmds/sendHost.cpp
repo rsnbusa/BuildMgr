@@ -13,15 +13,12 @@
 #include "projTypes.h"
 #include "globals.h"
 
-extern uint32_t millis();
 extern void pprintf(const char * format, ...);
-extern cJSON *answerMsg(char* toWhom, int err,int tariff,char *cmds);
-extern int aes_encrypt(char* src, size_t son, char *dst,char *cualKey);
 
 void sendHostCallback(int res)
 {
 #ifdef DEBUGX
-//	if(theConf.traceflag & (1<<HOSTD))
+	if(theConf.traceflag & (1<<HOSTD))
 		pprintf("%sSendHostCmd result %d\n",HOSTDT,res);
 #endif
 	sendH=res;

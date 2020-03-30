@@ -54,48 +54,61 @@ char * hostMsg(uint8_t theMtM)
 	uint8_t van=0;
 	char *lmsg=NULL;
 
-	int son=uxQueueMessagesWaiting(mtm[theMtM]);
-	if(son>0)
+	if(mtm[theMtM])
 	{
-		cJSON *batch=cJSON_CreateObject();
-		if(!batch)
-			return NULL;
-		cJSON *ar = cJSON_CreateArray();
-		if(!ar)
+		int son=uxQueueMessagesWaiting(mtm[theMtM]);
+		if(son>0)
 		{
-			cJSON_Delete(batch);
-			return NULL;
-		}
+			cJSON *batch=cJSON_CreateObject();
+			if(!batch)
+				return NULL;
+			cJSON *ar = cJSON_CreateArray();
+			if(!ar)
+			{
+				cJSON_Delete(batch);
+				return NULL;
+			}
 
-		for(int a=0;a<son;a++)
-		{
-			if( xQueueReceive( mtm[theMtM], &cmd, 100/  portTICK_RATE_MS ))
+			for(int a=0;a<son;a++)
 			{
-				cJSON *cmdJ=cJSON_CreateObject();
-				if(cmdJ)
+				bzero(&cmd,sizeof(cmd));
+
+				if( xQueueReceive( mtm[theMtM], &cmd, 100/  portTICK_RATE_MS ))
 				{
-					van++;
-					cJSON_AddNumberToObject(cmdJ,"MID",cmd.meter);
-					cJSON_AddStringToObject(cmdJ,"cmd",cmd.msg);
-					cJSON_AddItemToArray(ar, cmdJ);
+					if(cmd.msg)
+					{
+						cJSON *cmdJ=cJSON_CreateObject();
+						if(cmdJ)
+						{
+							van++;
+							cJSON_AddNumberToObject(cmdJ,"MID",cmd.meter);
+							cJSON_AddStringToObject(cmdJ,"cmd",cmd.msg);
+							cJSON_AddItemToArray(ar, cmdJ);
+						}
+					}
+					else
+						printf("No Msg\n");
 				}
-				//NOW we free the Message received in Mqtt Msg Handler.
-				if(cmd.msg)
+				else
 				{
-					pprintf("Freeing MtM Msg %d %d bytes long\n",theMtM,strlen(cmd.msg));
-					free(cmd.msg);			//if it was NULL it will crahs tellin something wrong logic
+					//weird
 				}
 			}
-			else
+			cJSON_AddItemToObject(batch, "hostCmd",ar);
+			lmsg=cJSON_PrintUnformatted(batch);
+			//NOW we free the Message received in Mqtt Msg Handler.
+			if(cmd.msg)
 			{
-				//weird
+				if(theConf.traceflag & (1<<MSGD))
+					pprintf("%sFreeing MtM Msg %d %d bytes long\n",MSGDT,theMtM,strlen(cmd.msg));
+				free(cmd.msg);			//if it was NULL it will crahs tellin something wrong logic
 			}
+			cJSON_Delete(batch);
 		}
-		cJSON_AddItemToObject(batch, "hostCmd",ar);
-		lmsg=cJSON_PrintUnformatted(batch);
-		cJSON_Delete(batch);
+		return lmsg;
 	}
-	return lmsg;
+	else
+		return NULL;			//no queue means no MAC reserved. No Whitelist
 }
 
 
@@ -177,6 +190,7 @@ int statusCmd(parg *argument)
 	{
 		//find if any msg for that mtm
 		char *lbuf=hostMsg(mtmPos);			//can be NULL as in No Msg from Host
+
 		cJSON *theAnswer=answerMsg(losMacs[mtmPos].mtmName,ESP_OK,100,lbuf);
 		if(theAnswer)
 		{
@@ -184,7 +198,7 @@ int statusCmd(parg *argument)
 			if(res)
 			{
 				if(theConf.traceflag & (1<<MSGD))
-					pprintf("STAnswer %s\n",res);
+					pprintf("%sSTAnswer %d %s\n",MSGDT,mtmPos,res);
 				int len=strlen(res);
 				int theSize=len;
 				int rem= theSize % 16;

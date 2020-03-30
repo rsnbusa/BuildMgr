@@ -18,6 +18,17 @@ void loadDefaultTariffs();
 void write_to_fram(u8 meter,bool addit);
 void load_from_fram(u8 meter);
 int sendHostCmd(parg *argument);
+int cmd_sendbeats(parg *argument);
+int cmd_sendkwh(parg *argument);
+int cmd_sendday(parg *argument);
+int cmd_senddy(parg *argument);
+int cmd_senddm(parg *argument);
+int cmd_sendmy(parg *argument);
+int cmd_sendmonth(parg *argument);
+int cmd_setdelay(parg *argument);
+int cmd_setdisplay(parg *argument);
+int cmd_zerokeys(parg *argument);
+int cmd_setbpk(parg *argument);
 
 #ifdef DISPLAY
 void displayManager(void * pArg);
@@ -46,6 +57,111 @@ void heapSample(char *subr)
 }
 #endif
 
+int findMID(char *mid)
+{
+	for (int a=0;a<MAXDEVS;a++)
+	{
+		if(strcmp(mid,theConf.medidor_id[a])==0)
+			return a;
+	}
+	return ESP_FAIL;
+}
+
+bool isnumber(char* data)
+{
+	for (int a=0;a<strlen(data);a++)
+	{
+		if (!isdigit(data[a]))
+			return false;
+	}
+	return true;
+}
+
+int sendReplyToHost(int cualm,int response,int son,char* cmdI, ...)
+{
+	va_list args;
+	mqttMsg_t mqttMsgHandle;
+	memset(&mqttMsgHandle,0,sizeof(mqttMsgHandle));
+	time_t	now;
+
+	va_start(args,cmdI);
+
+	cJSON *root=cJSON_CreateObject();
+
+	if(root)
+	{
+		cJSON *ar = cJSON_CreateArray();
+		if(ar)
+		{
+			cJSON *cmdJ=cJSON_CreateObject();
+			if(cmdJ)
+			{
+				time(&now);
+				cJSON_AddNumberToObject			(cmdJ,"TS",now);
+				cJSON_AddNumberToObject			(cmdJ,"RESPONSE",response);
+				cJSON_AddStringToObject			(cmdJ,"Connmgr",theConf.meterConnName);
+				cJSON_AddStringToObject			(cmdJ,"MID",theConf.medidor_id[cualm]);
+				char *key=cmdI;
+				for(int a=0;a<son;a++)
+				{
+					char *xx=(char*)va_arg(args,int);
+					if(!isnumber(xx))
+						cJSON_AddStringToObject			(cmdJ,key,xx);
+					else
+						cJSON_AddNumberToObject			(cmdJ,key,atoi(xx));
+
+					if(a<son-1)
+						key=(char*)va_arg(args,int);
+				}
+				va_end(args);
+				cJSON_AddItemToArray			(ar, cmdJ);
+			}
+			double dmac						=(double)theMacNum;
+			cJSON_AddItemToObject			(root,"Batch",ar);
+			cJSON_AddNumberToObject			(root,"macn",dmac);
+			char *lmessage=cJSON_Print(root);
+			if(lmessage)
+			{
+				cJSON_Delete(root);
+				//sent to host
+				printf("To host form Conn %s\n",lmessage);
+
+				if(mqttQ)
+				{
+					mqttMsgHandle.msgLen=strlen(lmessage);
+					mqttMsgHandle.message=(uint8_t*)lmessage;
+					mqttMsgHandle.maxTime=4000;
+					mqttMsgHandle.queueName=(char*)"MeterIoT/EEQ/RESPONSE";
+					mqttMsgHandle.cb=NULL;	//best effort
+					xQueueSend( mqttQ,&mqttMsgHandle,0 );
+					//Submode will free the lmessage variable ans we the cjson as above
+				}
+				//on failure must delete json and lmessage if available for Heap recovery
+				else
+				{
+					cJSON_Delete(root);
+					free(lmessage);
+					return ESP_FAIL;
+				}
+			}
+			else
+			{
+				cJSON_Delete(root);
+				return ESP_FAIL;
+			}
+		}
+		else
+		{
+			cJSON_Delete(root);
+			return ESP_FAIL;
+		}
+		return ESP_OK;
+	}
+	else
+		return ESP_FAIL;
+}
+
+
 void pprintf(const char * format, ...)
 {
 	  char *buffer;
@@ -66,6 +182,16 @@ void pprintf(const char * format, ...)
 
 }
 
+static int find_temp_mac(char *cualmac)
+{
+	for (int a=0;a<llevoTempMac;a++)
+	{
+		if (strcmp(tempMac[a].mac,cualmac)==0)
+			return a;
+	}
+	return ESP_FAIL;
+}
+
 static int find_mac(uint32_t esteMac)
 {
 	for (int a=0;a<theConf.reservedCnt;a++)
@@ -81,6 +207,16 @@ static int find_ip(uint32_t esteIp)
 	for (int a=0;a<theConf.reservedCnt;a++)
 	{
 		if(losMacs[a].theIp==esteIp)
+			return a;
+	}
+	return -1;
+}
+
+static int find_ip_temp(uint32_t esteIp)
+{
+	for (int a=0;a<llevoTempMac;a++)
+	{
+		if(tempMac[a].ip==esteIp)
 			return a;
 	}
 	return -1;
@@ -305,6 +441,8 @@ static void pcnt_init(void)
 
 static int reserveSlot(parg* argument)
 {
+	//send wont get to the requester,comment for the time being
+
 	int8_t yes=1;
 	u32 macc=(u32)argument->macn;
 
@@ -323,7 +461,7 @@ static int reserveSlot(parg* argument)
 	if(theConf.traceflag & (1<<CMDD))
 			pprintf("Slot already exists\n");
 #endif
-			send(argument->pComm, &yes, sizeof(yes), 0);//already registered
+//			send(argument->pComm, &yes, sizeof(yes), 0);//already registered
 			return ESP_OK;
 		}
 	}
@@ -336,7 +474,7 @@ static int reserveSlot(parg* argument)
 #endif
 	//todo make a better answer in JSON
 	yes=theConf.reservedCnt++;	//send slot assigned
-	send(argument->pComm, &yes, sizeof(yes), 0);
+//	send(argument->pComm, &yes, sizeof(yes), 0);
 	write_to_flash();		//independent from FRAM
 	return ESP_OK;
 }
@@ -346,13 +484,13 @@ static void getMessage(void *pArg)
     int len;
     cmdType comando;
     task_param *theP=(task_param*)pArg;
-    char s1[10];
-    parg argument;
     char *elmensaje;
 
-    elmensaje=NULL;
-    int sock =theP->sock_p;		// MtM socket
-    int pos=theP->pos_p;		//which MtM
+    //Init the Task
+
+    elmensaje				=NULL;
+    int sock 				=theP->sock_p;		// MtM socket
+    int pos					=theP->pos_p;		//which MtM
 
 #ifdef DEBUGX
 	if(theConf.traceflag & (1<<CMDD))
@@ -361,8 +499,8 @@ static void getMessage(void *pArg)
 		pprintf("%sGetm%d heap %d\n",CMDDT,sock,esp_get_free_heap_size());
 	}
 #endif
-		elmensaje=(char*)malloc(MAXBUFFER);		//once
-		tParam[pos].getM=elmensaje;				//copy if we crash or something
+		elmensaje			=(char*)malloc(MAXBUFFER);		//once
+		tParam[pos].getM	=elmensaje;				//copy if we crash or something
 
 	while(true)
 	{
@@ -399,18 +537,6 @@ static void getMessage(void *pArg)
 					goto exit;
 				}
 
-				// check special reserve msg
-				if(strstr(elmensaje,"rsvp")!=NULL)
-				{
-					// reserve cmd rx. Process it without queue
-					// msg struct simple = rsvp123456789 rsvp=key numbers are macn in chars
-					memcpy(s1,elmensaje+4,len-4);
-					argument.macn=atof(s1);
-					argument.pComm=sock;
-					reserveSlot(&argument);
-					goto exit; //done. Kill task and start again. MtM Station will reboot
-				}
-
 				aes_decrypt((const char*)elmensaje,(size_t)len,output,(const unsigned char*)losMacs[pos].theKey);
 				comando.mensaje=output;
 #ifdef DEBUGX
@@ -418,10 +544,9 @@ static void getMessage(void *pArg)
 					pprintf("%sMsg Rx %s Len %d\n",CMDDT, comando.mensaje,len);
 #endif
 
-
-				if(theP->macf<0) //no mac found in buildmgr.
+				if(theP->macf<0) //no mac found in tcpConnMgr.
 				{
-					pprintf("No mac. Exiting Getmsg\n");
+					pprintf("No mac. Internal Error. Exiting Getmsg\n");
 					free(output);
 					output=NULL;
 					goto exit;
@@ -577,6 +702,56 @@ bool decryptLogin(char* b64, uint16_t blen, char *decryp, size_t * fueron)
 	return true;
 }
 
+static void rsvpTask(void* pArg)
+{
+#define RSVPHEAP	100
+
+	tempS		*temporal=(tempS*)pArg;
+	int			len;
+    parg 		argument;
+    char		s1[10];
+
+
+	char *rsvpmsg=(char*)malloc(RSVPHEAP);
+	len = recv(temporal->theSock,rsvpmsg, RSVPHEAP-1, 0);
+	if (len < 0)
+	{
+	   shutdown(temporal->theSock,0);
+	   close(temporal->theSock);
+	   esp_wifi_deauth_sta(tempMac[temporal->theTempMacPos].aid);
+	   vTaskDelete(NULL);
+	}
+	else if (len == 0)
+	{
+	   shutdown(temporal->theSock,0);
+	   close(temporal->theSock);
+	   esp_wifi_deauth_sta(tempMac[temporal->theTempMacPos].aid);
+	   vTaskDelete(NULL);
+	}
+	else
+	{		// valid Msg send it to CmdMgr
+		if(strstr(rsvpmsg,"rsvp")!=NULL)
+		{
+			// reserve cmd rx. Process it without queue
+			// msg struct simple = rsvp123456789 rsvp=key numbers are macn in chars
+			memcpy(s1,rsvpmsg+4,len-4);
+			argument.macn=atof(s1);
+			argument.pComm=temporal->theSock;
+			reserveSlot(&argument);
+		}
+		else
+		{
+			if(rsvpmsg)
+				free(rsvpmsg);
+		}
+// On sucess he has to Reboot so close conn
+		   shutdown(temporal->theSock,0);
+		   close(temporal->theSock);
+		   esp_wifi_deauth_sta(tempMac[temporal->theTempMacPos].aid);	//force him to reboot
+		   vTaskDelete(NULL);
+	}
+}
+
 static void tcpConnMgr(void *pvParameters)
 {
     char 						addr_str[50];
@@ -587,7 +762,7 @@ static void tcpConnMgr(void *pvParameters)
     uint 						addr_len = sizeof(source_addr);
     struct sockaddr_in 			dest_addr;
     char						tt[20];
-  //  task_param					theP;
+    tempS						temporal;
 
     while (true)
     {
@@ -660,39 +835,45 @@ static void tcpConnMgr(void *pvParameters)
 
 			sprintf(tt,"getm%d",sock);		//launch a task with fd number as trailer
 			int  a,b;
-	//		memcpy((void*)&a,(void*)&losMacs[0].theIp,4);
 			memcpy((void*)&b,(void*)&ipAddr,4);
 
-			a=find_ip(b);
+			a=find_ip(b);		//find this ip in Allowed conns
 			if(a<0)
 			{
 	#ifdef DEBUGX
 				if(theConf.traceflag & (1<<CMDD))
 					pprintf("%sInternal error no Ip %x\n",CMDDT,b);
 	#endif
-				// do not test MAC here since we need to get the message for the RSVP command, when there are 0 MACs reserved
-				a=0;
+				a=find_ip_temp(b);			//check if ip in Temp conns
+				if(a<0)
+				{	// how did it get here?????
+					pprintf("Internal Inconsistency MAC\n");
+					shutdown(sock,0);
+					close(sock);
+					goto again;
+				}
+				else
+				{
+					temporal.theSock=sock;
+					temporal.theTempMacPos=a;
+					xTaskCreate(rsvpTask,"dispMgr",2048,(void*)&temporal, 4, NULL);
+					goto again;
+				}
 			}
-			else
-			{
-				losMacs[a].theSock=sock;
 
-			}
-			tParam[a].pos_p=a;
-			tParam[a].sock_p=sock;
-			tParam[a].macf=a;
-			tParam[a].argument=NULL;
-			tParam[a].elcmd=NULL;
+			losMacs[a].theSock		=sock;
+			tParam[a].pos_p			=a;
+			tParam[a].sock_p		=sock;
+			tParam[a].macf			=a;
+			tParam[a].argument		=NULL;
+			tParam[a].elcmd			=NULL;
 
-//			theP.pos_p=a;
-//			theP.sock_p=sock;
-//			theP.macf=a;
+			globalSocks++;			//for internal control
 
-			globalSocks++;
 			if(theConf.traceflag & (1<<INTD))
 				pprintf("Connection Sock %d van %d\n",sock,globalSocks);
 
-			xTaskCreate(&getMessage,tt,GETMT,(void*)&tParam[a], 4, &losMacs[a].theHandle);
+			xTaskCreate(&getMessage,tt,GETMT*2,(void*)&tParam[a], 4, &losMacs[a].theHandle);
         }
 #ifdef DEBUGX
 	if(theConf.traceflag & (1<<CMDD))
@@ -712,6 +893,47 @@ static void tcpConnMgr(void *pvParameters)
     vTaskDelete(NULL);
 }
 
+static void houseKeeping(int estem)
+{
+		if(losMacs[estem].theSock)
+			close(losMacs[estem].theSock);
+
+    			//in theory a Disconnect should have happened but not in reality so kill tasks
+		if(losMacs[estem].theHandle)
+		{
+			vTaskDelete(losMacs[estem].theHandle);
+			losMacs[estem].theHandle=NULL;
+
+			//free memory if available
+			if(tParam[estem].argument)
+			{
+				free(tParam[estem].argument);
+				tParam[estem].argument=NULL;
+			}
+			if(tParam[estem].elcmd)
+			{
+				cJSON_Delete(tParam[estem].elcmd);
+				tParam[estem].elcmd=NULL;
+			}
+			if(tParam[estem].mensaje)
+			{
+				free(tParam[estem].mensaje);
+				tParam[estem].mensaje=NULL;
+			}
+
+			if(tParam[estem].getM)
+			{
+				free(tParam[estem].getM);
+				tParam[estem].getM=NULL;
+			}
+		}
+		if(losMacs[estem].timerH)
+		{
+			xTimerStop(losMacs[estem].timerH,0);
+					xTimerDelete(losMacs[estem].timerH,0);
+					losMacs[estem].timerH=NULL;
+		}
+}
 static void wifi_event_handler(void* arg, esp_event_base_t event_base,
                                 int32_t event_id, void* event_data)
 {
@@ -723,7 +945,7 @@ static void wifi_event_handler(void* arg, esp_event_base_t event_base,
 
     case  WIFI_EVENT_AP_STACONNECTED:
 #ifdef DEBUGX
-	//	if(theConf.traceflag & (1<<WIFID))
+		if(theConf.traceflag & (1<<WIFID))
 			pprintf("%sWIFIMac connected %02x:%02x:%02x:%02x:%02x:%02x\n",WIFIDT,ev->mac[0],ev->mac[1],ev->mac[2],ev->mac[3],ev->mac[4],ev->mac[5]);
 #endif
     	memcpy((void*)&newmac,&ev->mac[2],4);
@@ -735,61 +957,29 @@ static void wifi_event_handler(void* arg, esp_event_base_t event_base,
     			pprintf("MtM %d Rebooted %x last State %s seen %s",estem,losMacs[estem].macAdd,
     					stateName[losMacs[estem].dState],ctime(&losMacs[estem].lastUpdate));
     		}
-    		if(losMacs[estem].theSock)
-    			close(losMacs[estem].theSock);
+    		houseKeeping(estem);		//do some housekeeping
 
-    			//in theory a Disconnect should have happened but not in reality so kill tasks
-    		if(losMacs[estem].theHandle)
-			{
-					vTaskDelete(losMacs[estem].theHandle);
-					losMacs[estem].theHandle=NULL;
-
-    				//free memory if available
-    				if(tParam[estem].argument)
-    				{
-    					printf("WIFI argument\n");
-    					free(tParam[estem].argument);
-    					tParam[estem].argument=NULL;
-    				}
-    				if(tParam[estem].elcmd)
-    				{
-    					printf("WIFI elcmd\n");
-    					cJSON_Delete(tParam[estem].elcmd);
-    					tParam[estem].elcmd=NULL;
-    				}
-    				if(tParam[estem].mensaje)
-    				{
-    					printf("WIFI mensaje]\n");
-    					free(tParam[estem].mensaje);
-    					tParam[estem].mensaje=NULL;
-    				}
-
-    				if(tParam[estem].getM)
-    				{
-    					printf("WIFI Free getM\n");
-    					free(tParam[estem].getM);
-    					tParam[estem].getM=NULL;
-    				}
-			}
-			if(losMacs[estem].timerH)
-			{
-				xTimerStop(losMacs[estem].timerH,0);
-						xTimerDelete(losMacs[estem].timerH,0);
-						losMacs[estem].timerH=NULL;
-			}
-
-//			losMacs[estem].hostCmd=(char*)malloc(1500); should be created by the rx part. NULL means no message for that MtM
- //   		memset(&losMacs[estem],0,sizeof(losMacs[0]));	//initialize it
-//			memcpy(&losMacs[estem].theKey,&theConf.lkey[estem],AESL);
-//			printf("LosMacs[%d] %s Flash %s\n",estem,losMacs[estem].theKey,theConf.lkey[estem]);
     		losMacs[estem].macAdd=newmac;
     		losMacs[estem].dState=CONNSTATE;
     		losMacs[estem].stateChangeTS[CONNSTATE]=millis();
     		time(&losMacs[estem].lastUpdate);
     	}
+    	else
+    	{
+    		if(theConf.closedForRSVP)
+    			esp_wifi_deauth_sta(ev->aid);	//no more MTMs allowed. Reject connection
+    		else
+    		{
+    			//let tcpConnMgr decide. got ip will save Ip to associate with this mac
+    			bzero(&tempMac[llevoTempMac],sizeof(tempMac[0]));
+    			tempMac[llevoTempMac].aid=ev->aid;			//save aid for possible disconnection
+    			memcpy(tempMac[llevoTempMac].mac,ev->mac,6);
+    			llevoTempMac++; //for next
+    		}
+    	}
     	break;
 	case WIFI_EVENT_AP_STADISCONNECTED:
-//		if(theConf.traceflag & (1<<WIFID))
+		if(theConf.traceflag & (1<<WIFID))
 			pprintf("Mac disco %02x:%02x:%02x:%02x:%02x:%02x\n",ev->mac[0],ev->mac[1],ev->mac[2],ev->mac[3],ev->mac[4],ev->mac[5]);
 		memcpy((void*)&newmac,&ev->mac[2],4);
 		estem=find_mac(newmac);
@@ -918,10 +1108,26 @@ static void update_ip()
 			if(theConf.traceflag & (1<<CMDD))
 				pprintf("%sNot registered mac %x not found \n",CMDDT,bigmac);
 #endif
+		//find if in tempmac for rsvp
+			int neste=find_temp_mac((char*)station.mac);
+			if(neste<0)
+			{
+				printf("No idea whats going on\n");
+				return;
+			}
+			else
+			{
+		//		printf("Found temp %x:%x:%x:%x:%x:%x at pos %d aid %d\n",station.mac[0],station.mac[1],station.mac[2],station.mac[3],
+		//						station.mac[4],station.mac[5],neste,tempMac[neste].aid);
+				memcpy(&tempMac[neste].ip,(void*)&station.ip,4);
+		//		printf("TempIP %x\n",tempMac[neste].ip);
+			}
 
 		}
 		else
+		{
 			memcpy((void*)&losMacs[este].theIp,(void*)&station.ip,4);
+		}
 	}
 }
 
@@ -949,17 +1155,20 @@ static void ip_event_handler(void* arg, esp_event_base_t event_base,
 
     switch (event_id) {
     case IP_EVENT_AP_STAIPASSIGNED:
-    	pprintf("\nAP MTM IP Assigned:" IPSTR "\n", IP2STR(&evip->ip));
-    	update_ip();
+			if(theConf.traceflag & (1<<WIFID))
+				pprintf("\nAP MTM IP Assigned:" IPSTR "\n", IP2STR(&evip->ip));
+			update_ip();
     	break;
         case IP_EVENT_STA_GOT_IP:
-        	pprintf("\nHOST IP Assigned:" IPSTR "\n", IP2STR(&ev->ip_info.ip));
+    		if(theConf.traceflag & (1<<WIFID))
+    			pprintf("\nHOST IP Assigned:" IPSTR "\n", IP2STR(&ev->ip_info.ip));
         	wifif=true;
             xEventGroupSetBits(wifi_event_group, WIFI_BIT);
         	xTaskCreate(&sntpget,"sntp",2048,NULL, 4, NULL);
             break;
         case IP_EVENT_STA_LOST_IP:
-        	pprintf("\nLOST HOST IP:" IPSTR "\n", IP2STR(&ev->ip_info.ip));
+    		if(theConf.traceflag & (1<<WIFID))
+    			pprintf("\nLOST HOST IP:" IPSTR "\n", IP2STR(&ev->ip_info.ip));
     		gpio_set_level((gpio_num_t)WIFILED, 0);		//indicate WIFI is active with IP
     		break;
         default:
@@ -1091,6 +1300,7 @@ esp_err_t mqtt_event_handler(esp_mqtt_event_handle_t event)
 {
     esp_mqtt_client_handle_t client = event->client;
     // your_context_t *context = event->context;
+    cmdType lcmd;
 
     switch (event->event_id) {
         case MQTT_EVENT_CONNECTED:
@@ -1131,14 +1341,17 @@ esp_err_t mqtt_event_handler(esp_mqtt_event_handle_t event)
         	   pprintf("%sDATA=%.*s\r\n", MQTTDT,event->data_len, event->data);
            }
 #endif
-           theCmd.mensaje=(char*)malloc(MAXBUFFER);
-            if(event->data_len)// 0 will be the retained msg being erased
-            {
-            	memcpy(theCmd.mensaje,event->data,event->data_len);
-            	theCmd.mensaje[event->data_len]=0;
-            	xQueueSend( mqttR,&theCmd,0 );							//memory will be freed down the line by cmdManager
-            	esp_mqtt_client_publish(clientCloud, cmdQueue.c_str(), "", 0, 0,1);//delete retained
-            }
+           lcmd.mensaje=(char*)malloc(MAXBUFFER);
+           if(lcmd.mensaje)
+           {
+				if(event->data_len)// 0 will be the retained msg being erased
+				{
+					memcpy(lcmd.mensaje,event->data,event->data_len);
+					lcmd.mensaje[event->data_len]=0;
+					xQueueSend( mqttR,&lcmd,0 );							//memory will be freed down the line by cmdManager
+					esp_mqtt_client_publish(clientCloud, cmdQueue.c_str(), "", 0, 0,1);//delete retained
+				}
+           }
             break;
         case MQTT_EVENT_ERROR:
 #ifdef DEBUGX
@@ -1160,166 +1373,318 @@ esp_err_t mqtt_event_handler(esp_mqtt_event_handle_t event)
     return ESP_OK;
 }
 
+static void cleanMqtt(mqttMsg_t mqttHandle,int mqtterr)
+{
+	if(mqttHandle.cb!=NULL)
+		(*mqttHandle.cb)(mqtterr);
+	if(mqttHandle.message)
+	{
+		free(mqttHandle.message);			//we free the message HERE
+		mqttHandle.message=NULL;
+	}
+}
+
 static void submode(void * pArg)
 {
 	mqttMsg_t mqttHandle;
 	u32 timetodelivery=0;
 	int mqtterr;
 
+	// (1) Read Queue
+	// (2) esp_start, handler--> connect which (3) SUBSCRIBE handler--> (4) set BIT MQTT_BIT
+	// Wait BIT MQTT_BIT, timeout clean and again
+	// (5) esp_publish, handler -->(6) PUBLISH which(7) UNSUBSCRIBE handler--> (8)set Bit PUB_BIT
+	// Wait BIT PUB_BIT, timeout clean and again
+	// (9) esp_stop, no timeout here just clean and again
+	//
+
 	while(true)
 	{
-		if(wifif) // is the network up?
+		alla:
+		if(wifif) // is the network up? No keep them queued, more than 20 will be lost jaja
 		{
-			if( xQueueReceive( mqttQ, &mqttHandle, portMAX_DELAY ))
+			if(!sessionf)		//let them queue if in Session
 			{
-#ifdef HEAPSAMPLE
-				 heapSample((char*)"SubmodeStart");
-#endif
-
-#ifdef DEBUGX
-				time(&mgrTime[SUBMGR]);
-				if(theConf.traceflag & (1<<CMDD))
-					pprintf("%sHeap after submode rx %d\n",CMDDT,esp_get_free_heap_size());
-#endif
-				timetodelivery=millis();
-				if(!clientCloud || !mqttf) //just in case
+				if( xQueueReceive( mqttQ, &mqttHandle, portMAX_DELAY ))
 				{
-					if(!clientCloud)
-						pprintf("Error no client mqtt\n");
-					mqtterr=NOCLIENT;
-					if(!mqttf && clientCloud)
-					{
-						mqtterr=esp_mqtt_client_reconnect(clientCloud);
-						if(!firstmqtt)
-							mqtterr= esp_mqtt_client_start(clientCloud); //try restarting
-						goto alla;
+	#ifdef HEAPSAMPLE
+					 heapSample((char*)"SubmodeStart");
+	#endif
 
-					}
-					else
-						goto mal;
-				}
-				else
-				{
-					alla:
-#ifdef DEBUGX
+	#ifdef DEBUGX
+					time(&mgrTime[SUBMGR]);
+					if(theConf.traceflag & (1<<CMDD))
+						pprintf("%sHeap after submode rx %d\n",CMDDT,esp_get_free_heap_size());
+	#endif
+					timetodelivery=millis();
+	#ifdef DEBUGX
 					if(theConf.traceflag & (1<<CMDD))
 						pprintf("%sStarting mqtt\n",CMDDT);
-#endif
+	#endif
 					xEventGroupClearBits(wifi_event_group, MQTT_BIT);//clear flag to wait on
 					mqtterr=0;
 
-					if(firstmqtt)
-					{
-						mqtterr=esp_mqtt_client_reconnect(clientCloud);
-						mqtterr=esp_mqtt_client_start(clientCloud);
-					}
+					mqtterr=esp_mqtt_client_start(clientCloud);
 					if(mqtterr==ESP_OK) //we got an OK
 					{
-						firstmqtt=true;
-							// when connected send the message
-						//wait for the CONNECT mqtt msg.Set bit MQTT_BIT
 						if(xEventGroupWaitBits(wifi_event_group, MQTT_BIT, false, true, 4000/  portTICK_RATE_MS))
 						{
-#ifdef DEBUGX
+	#ifdef DEBUGX
 							if(theConf.traceflag & (1<<CMDD))
 								pprintf("%sSending Mqtt state\n",CMDDT);
 #endif
 							xEventGroupClearBits(wifi_event_group, PUB_BIT); // clear our waiting bit
-							if(clientCloud)
-							{
-								mqtterr=esp_mqtt_client_publish(clientCloud, mqttHandle.queueName, (char*)mqttHandle.message, mqttHandle.msgLen, 2,0);
+
+							mqtterr=esp_mqtt_client_publish(clientCloud, mqttHandle.queueName, (char*)mqttHandle.message, mqttHandle.msgLen, 2,0);
 							//Wait PUB_BIT or 4 secs for Publish then close connection
-								if (mqtterr<0)
-								{
-#ifdef DEBUGX
-									if(theConf.traceflag & (1<<CMDD))
-										pprintf("%sPublish error %d\n",CMDDT,mqtterr);
-#endif
-									goto mal;
-								}
-
-								if(!xEventGroupWaitBits(wifi_event_group, PUB_BIT, false, true,  mqttHandle.maxTime/  portTICK_RATE_MS))
-								{
-#ifdef DEBUGX
-									if(theConf.traceflag & (1<<CMDD))
-										pprintf("Publish TimedOut\n");
-									mqtterr=PUBTM;
-									goto mal;
-#endif
-								}
-
-								esp_mqtt_client_stop(clientCloud);
-//								pprintf("Callback in %p\n",mqttHandle.cb);
-//								if(mqttHandle.cb!=NULL)
-//									(*mqttHandle.cb)(0);
-								mqtterr=ESP_OK;
+							if (mqtterr<0)
+							{
 #ifdef DEBUGX
 								if(theConf.traceflag & (1<<CMDD))
-									pprintf("%sStopping\n",CMDDT);
+									pprintf("%sPublish error %d\n",CMDDT,mqtterr);
+#endif
+								cleanMqtt(mqttHandle,mqtterr);
+								goto alla;
+							}
+
+							if(!xEventGroupWaitBits(wifi_event_group, PUB_BIT, false, true,  mqttHandle.maxTime/  portTICK_RATE_MS))
+							{
+#ifdef DEBUGX
+								if(theConf.traceflag & (1<<CMDD))
+									pprintf("Publish TimedOut\n");
+								mqtterr=PUBTM;
+								cleanMqtt(mqttHandle,mqtterr);
+								goto alla;
 #endif
 							}
-//							else
-//							{ //it failed to start shouldnt close it
-//								//	esp_mqtt_client_stop(clientCloud);
-//								mqtterr=STARTERR;
-//#ifdef DEBUGX
-//								if(theConf.traceflag & (1<<CMDD))
-//									pprintf("%sStart Timed out\n",CMDDT);
-//#endif
-//							}
+
+							mqtterr=esp_mqtt_client_stop(clientCloud);
+#ifdef DEBUGX
+							if(theConf.traceflag & (1<<CMDD))
+								pprintf("%sStopping\n",CMDDT);
+#endif
+							cleanMqtt(mqttHandle,mqtterr);		//all should be fine
+							goto alla;
 						}
-						else
+						else		//start timeout
 						{
 #ifdef DEBUGX
 							if(theConf.traceflag & (1<<CMDD))
 								pprintf("%sError start timeout mqtt\n",CMDDT);
 #endif
+							esp_mqtt_client_stop(clientCloud);
 							mqtterr=STARTTM;
+							cleanMqtt(mqttHandle,mqtterr);
 						}
 					}
-					else
+					else	//mqtt start error
 					{
 #ifdef DEBUGX
 						if(theConf.traceflag & (1<<CMDD))
 							pprintf("%sFailed to start when available %d\n",CMDDT,mqtterr);
 #endif
 						mqtterr=STARTERR;
+						cleanMqtt(mqttHandle,mqtterr);
 					}
 
 #ifdef DEBUGX
-				if(theConf.traceflag & (1<<CMDD))
-				{
-					pprintf("%sDelivery time %dms\n",CMDDT,millis()-timetodelivery);
-					pprintf("%sSent %d. Heap after submode %d\n",CMDDT,++sentTotal,esp_get_free_heap_size());
-				}
+					if(theConf.traceflag & (1<<CMDD))
+					{
+						pprintf("%sDelivery time %dms\n",CMDDT,millis()-timetodelivery);
+						pprintf("%sSent %d. Heap after submode %d\n",CMDDT,++sentTotal,esp_get_free_heap_size());
+					}
 #endif
-			}// no clientcloud
 
-		}// queuerx
-		else
-		{
-#ifdef DEBUGX
-			if(theConf.traceflag & (1<<CMDD))
-				pprintf("%sMqtt Failed queue\n",CMDDT);
-#endif
-			mqtterr=QUEUEFAIL;
-			vTaskDelay(100 /  portTICK_RATE_MS);
-		}
-mal:
-		if(mqttHandle.cb!=NULL)
-			(*mqttHandle.cb)(mqtterr);
-		if(mqttHandle.message)
-		{
-			free(mqttHandle.message);			//we free the message HERE
-			mqttHandle.message=NULL;
-		}
 #ifdef HEAPSAMPLE
 		 heapSample((char*)"SubmodeEnd");
 #endif
+
+			}// queuerx
+			else
+			{
+	#ifdef DEBUGX
+				if(theConf.traceflag & (1<<CMDD))
+					pprintf("%sMqtt Failed queue\n",CMDDT);
+	#endif
+				mqtterr=QUEUEFAIL;
+				vTaskDelay(100 /  portTICK_RATE_MS);
+			}
+		} //sessionf
+		else
+			delay(1000);
+	}//wifi
+	else
+		delay(1000); //wifi
 	}
 	//should crash if it gets here.Impossible in theory
-	}
+	pprintf("Crash subMode\n");
 }
+
+//static void submode(void * pArg)
+//{
+//	mqttMsg_t mqttHandle;
+//	u32 timetodelivery=0;
+//	int mqtterr;
+//
+//	while(true)
+//	{
+//		if(wifif) // is the network up?
+//		{
+//			if(!sessionf)		//let them queue if in Session
+//			{
+//				if( xQueueReceive( mqttQ, &mqttHandle, portMAX_DELAY ))
+//				{
+//	#ifdef HEAPSAMPLE
+//					 heapSample((char*)"SubmodeStart");
+//	#endif
+//
+//	#ifdef DEBUGX
+//					time(&mgrTime[SUBMGR]);
+//					if(theConf.traceflag & (1<<CMDD))
+//						pprintf("%sHeap after submode rx %d\n",CMDDT,esp_get_free_heap_size());
+//	#endif
+//					timetodelivery=millis();
+//					if(!clientCloud || !mqttf) //just in case
+//					{
+//						if(!clientCloud)
+//							pprintf("Error no client mqtt\n");
+//						mqtterr=NOCLIENT;
+//						if(!mqttf && clientCloud)
+//						{
+//							mqtterr=esp_mqtt_client_reconnect(clientCloud);
+//							if(!firstmqtt)
+//								mqtterr= esp_mqtt_client_start(clientCloud); //try restarting
+//							goto alla;
+//
+//						}
+//						else
+//							goto mal;
+//					}
+//					else
+//					{
+//						alla:
+//	#ifdef DEBUGX
+//						if(theConf.traceflag & (1<<CMDD))
+//							pprintf("%sStarting mqtt\n",CMDDT);
+//	#endif
+//						xEventGroupClearBits(wifi_event_group, MQTT_BIT);//clear flag to wait on
+//						mqtterr=0;
+//
+//						if(firstmqtt)
+//						{
+//							mqtterr=esp_mqtt_client_reconnect(clientCloud);
+//							mqtterr=esp_mqtt_client_start(clientCloud);
+//						}
+//						if(mqtterr==ESP_OK) //we got an OK
+//						{
+//							firstmqtt=true;
+//								// when connected send the message
+//							//wait for the CONNECT mqtt msg.Set bit MQTT_BIT
+//							if(xEventGroupWaitBits(wifi_event_group, MQTT_BIT, false, true, 4000/  portTICK_RATE_MS))
+//							{
+//	#ifdef DEBUGX
+//								if(theConf.traceflag & (1<<CMDD))
+//									pprintf("%sSending Mqtt state\n",CMDDT);
+//	#endif
+//								xEventGroupClearBits(wifi_event_group, PUB_BIT); // clear our waiting bit
+//								if(clientCloud)
+//								{
+//									mqtterr=esp_mqtt_client_publish(clientCloud, mqttHandle.queueName, (char*)mqttHandle.message, mqttHandle.msgLen, 2,0);
+//								//Wait PUB_BIT or 4 secs for Publish then close connection
+//									if (mqtterr<0)
+//									{
+//	#ifdef DEBUGX
+//										if(theConf.traceflag & (1<<CMDD))
+//											pprintf("%sPublish error %d\n",CMDDT,mqtterr);
+//	#endif
+//										goto mal;
+//									}
+//
+//									if(!xEventGroupWaitBits(wifi_event_group, PUB_BIT, false, true,  mqttHandle.maxTime/  portTICK_RATE_MS))
+//									{
+//	#ifdef DEBUGX
+//										if(theConf.traceflag & (1<<CMDD))
+//											pprintf("Publish TimedOut\n");
+//										mqtterr=PUBTM;
+//										goto mal;
+//	#endif
+//									}
+//
+//									esp_mqtt_client_stop(clientCloud);
+//	//								pprintf("Callback in %p\n",mqttHandle.cb);
+//	//								if(mqttHandle.cb!=NULL)
+//	//									(*mqttHandle.cb)(0);
+//									mqtterr=ESP_OK;
+//	#ifdef DEBUGX
+//									if(theConf.traceflag & (1<<CMDD))
+//										pprintf("%sStopping\n",CMDDT);
+//	#endif
+//								}
+//	//							else
+//	//							{ //it failed to start shouldnt close it
+//	//								//	esp_mqtt_client_stop(clientCloud);
+//	//								mqtterr=STARTERR;
+//	//#ifdef DEBUGX
+//	//								if(theConf.traceflag & (1<<CMDD))
+//	//									pprintf("%sStart Timed out\n",CMDDT);
+//	//#endif
+//	//							}
+//							}
+//							else
+//							{
+//	#ifdef DEBUGX
+//								if(theConf.traceflag & (1<<CMDD))
+//									pprintf("%sError start timeout mqtt\n",CMDDT);
+//	#endif
+//								mqtterr=STARTTM;
+//							}
+//						}
+//						else
+//						{
+//	#ifdef DEBUGX
+//							if(theConf.traceflag & (1<<CMDD))
+//								pprintf("%sFailed to start when available %d\n",CMDDT,mqtterr);
+//	#endif
+//							mqtterr=STARTERR;
+//						}
+//
+//	#ifdef DEBUGX
+//					if(theConf.traceflag & (1<<CMDD))
+//					{
+//						pprintf("%sDelivery time %dms\n",CMDDT,millis()-timetodelivery);
+//						pprintf("%sSent %d. Heap after submode %d\n",CMDDT,++sentTotal,esp_get_free_heap_size());
+//					}
+//	#endif
+//				}// no clientcloud
+//
+//			}// queuerx
+//			else
+//			{
+//	#ifdef DEBUGX
+//				if(theConf.traceflag & (1<<CMDD))
+//					pprintf("%sMqtt Failed queue\n",CMDDT);
+//	#endif
+//				mqtterr=QUEUEFAIL;
+//				vTaskDelay(100 /  portTICK_RATE_MS);
+//			}
+//	mal:
+//			if(mqttHandle.cb!=NULL)
+//				(*mqttHandle.cb)(mqtterr);
+//			if(mqttHandle.message)
+//			{
+//				free(mqttHandle.message);			//we free the message HERE
+//				mqttHandle.message=NULL;
+//			}
+//	#ifdef HEAPSAMPLE
+//			 heapSample((char*)"SubmodeEnd");
+//	#endif
+//			}
+//		else
+//			delay(1000);
+//	}
+//	//should crash if it gets here.Impossible in theory
+//	}
+//}
 
 static void mqtt_app_start(void)
 {
@@ -1455,7 +1820,7 @@ cJSON *answerMsg(char* toWhom, int err,int tariff,char *cmds)
 
 	if(cmds)
 		cJSON_AddStringToObject(root,"cmdHost",cmds);
-	pprintf("AnswerMsgEnd %d\n",esp_get_free_heap_size());
+//	pprintf("AnswerMsgEnd %d\n",esp_get_free_heap_size());
 #ifdef HEAPSAMPLE
 			 heapSample((char*)"AnswerEnd");
 #endif
@@ -1477,28 +1842,51 @@ int findMeter(char * cualM,uint8_t* mtm,uint8_t*meter)
 	return -1;
 }
 
-static void deliverToMTM(cJSON* dest, char *mensaje)
+static int deliverToMTM(cJSON* dest, char *mensaje)
 {
 	uint8_t theMtM,theMeter;
 	hostCmd	theCmd;
 
-//	if(strcmp(dest->valuestring,theConf.meterConnName)!=0)			//check its address to thsi ConnMgr
+	bzero(&theCmd,sizeof(theCmd));
+
+//	if(strcmp(cntrl->valuestring,theConf.meterConnName)!=0)			//check its address to thsi ConnMgr
 //	{
-		//find if name is one of our stored meters
+//		bzero(&comando,sizeof(comando));
+//		pprintf("Destination %s is for us %s msg %s\n",dest->valuestring,theConf.meterConnName,mensaje);
+//		comando.pos=0;
+//		comando.fd=0;
+//		comando.mensaje=mensaje;
+//		comando.tParam=NULL;
+//		if(mqttR)
+//			xQueueSend(mqttR,&comando,(TickType_t)10);
+//	}
+//	else
+//	{
+		//find if name is one of our stored meters from out managed MtM
 		int ret=findMeter(dest->valuestring,&theMtM,&theMeter);
 		if(ret<0)
 		{
 			pprintf("Invalid meter sent %s from Host\n",dest->valuestring);
-			return;
+			return ESP_FAIL;
 		}
 		//cmd for the MtM-theMeter combo
 		theCmd.meter=theMeter;
 		theCmd.msg=mensaje;					//this memory will be freed by the sending routine in SendStatus (should be in any answer to MtM)
-//		printf("add to queue %s\n",theCmd.msg);
-		xQueueSend(mtm[theMtM],&theCmd,0);
+	//	printf("%p add to queue %s %d\n",theCmd.msg,theCmd.msg,theMtM);
+		if(xQueueSend(mtm[theMtM],&theCmd,0))
+		{
+	//		xQueueReceive( mtm[theMtM], &theCmd, 100/  portTICK_RATE_MS );
+		//	printf("ReRead %s\n",theCmd.msg);
+			return ESP_OK;
+		}
+		else
+		{
+			printf("failed queue insert\n");
+			return ESP_FAIL;
+		}
+
 //	}
-//	else
-//		pprintf("Destination %s not us %s\n",dest->valuestring,theConf.meterConnName);
+//	return ESP_FAIL;	//its for connmgr
 }
 
 static void checkFramStatus(uint16_t pos, uint8_t framSt,double dmac, char *mtmName)
@@ -1536,7 +1924,17 @@ static void cmdManager(void* arg)
 
 	mqttR = xQueueCreate( 20, sizeof( cmdType ) );
 			if(!mqttR)
+			{
 				pprintf("Failed queue Rx\n");
+				if(xSemaphoreTake(I2CSem, portMAX_DELAY))
+				{
+					display.clear();
+					drawString(64,8,"CMDMGR",24,TEXT_ALIGN_CENTER,DISPLAYIT,NOREP);
+					xSemaphoreGive(I2CSem);
+				}
+				while(true)
+					delay(1000);	// useless to work without this queue
+			}
 
 	// Process is
 	// 1) Get message from Queue
@@ -1558,28 +1956,37 @@ static void cmdManager(void* arg)
 				pprintf("%sReceivedCmdMgr: %s len %d Fd %d Queue %d Heap %d\n",MSGDT,cmd.mensaje,strlen(cmd.mensaje),cmd.fd,uxQueueMessagesWaiting(mqttR),esp_get_free_heap_size());
 #endif
 
-				elcmd= cJSON_Parse(cmd.mensaje);
-				if(elcmd)
-				{
+			elcmd= cJSON_Parse(cmd.mensaje);
+			if(elcmd)
+			{
 					if(cmd.tParam)		//for host cmd which has no tparam var yet
 						cmd.tParam->elcmd=elcmd;
 				// each message rx MUST have a BATCH (monton) and MAC (macn) others are optional
 				// dest is use to relay messages to host via SendHost Cmd via a Queue
-			//	printf("Parsed %s\n",cmd.mensaje);
+
 				cJSON *monton= 		cJSON_GetObjectItem(elcmd,"Batch");
 				cJSON *ddmac= 		cJSON_GetObjectItem(elcmd,"macn");
 				cJSON *framGuard= 	cJSON_GetObjectItem(elcmd,"fram");
 				cJSON *jmtmName= 	cJSON_GetObjectItem(elcmd,"Controller");
 				cJSON *kkey= 		cJSON_GetObjectItem(elcmd,"rsync");
 				cJSON *dest= 		cJSON_GetObjectItem(elcmd,"to");
-			//	cJSON *from= 		cJSON_GetObjectItem(elcmd,"from");
-			//	cJSON *cmdHost= 	cJSON_GetObjectItem(elcmd,"cmd");
 
+				// Special cases are:
+				// if DEST exists we are to relay message from Host to execute a cmd
+				// if kkey exits, a new key was sent by an MtM
+				//
 				if(dest)
 				{
-					deliverToMTM(dest,cmd.mensaje);
-					cJSON_Delete(elcmd);
+					if(deliverToMTM(dest,cmd.mensaje)==ESP_OK)
+						cJSON_Delete(elcmd);
+					else
+					{
+						free(cmd.mensaje);		// nobody is going to do it
+						cmd.mensaje=NULL;		// for tracing els we think its ok
+						cJSON_Delete(elcmd);
+					}
 					goto again;
+
 				}
 				if(kkey)
 				{
@@ -1631,8 +2038,9 @@ static void cmdManager(void* arg)
 						if(cualf>=0)
 						{
 							parg *argument;
-							cmd.tParam->argument	=(parg*)malloc(sizeof(parg));
-							argument				=cmd.tParam->argument;
+							argument	=(parg*)malloc(sizeof(parg));
+							if(cmd.tParam)
+								cmd.tParam->argument	=argument;
 							argument->pMessage		=(void*)cmdIteml;				//the command line parameters
 							argument->pos			=cmd.pos;						//MtM array pos
 							argument->pComm			=cmd.fd;						//Socket fro direct response
@@ -1640,23 +2048,26 @@ static void cmdManager(void* arg)
 
 							if(cmds[cualf].source==HOSTT) 					//if from Central Host VALIDATE it is for us, our theConf.meterConnName id
 							{
-								cJSON *cmgr= cJSON_GetObjectItem(cmdIteml,"connmgr");
-								if(!cmgr)
+								if(jmtmName)
+								{
+									if(strcmp(jmtmName->valuestring,theConf.meterConnName)!=0)
+									{
+	#ifdef DEBUGX
+										if(theConf.traceflag & (1<<MSGD))
+											pprintf("%sNot our connMgr %s\n",MSGDT,jmtmName->valuestring);
+	#endif
+										goto nexter;
+									}
+								}
+								else
 								{
 #ifdef DEBUGX
-									if(theConf.traceflag & (1<<CMDD))
-										pprintf("%sNot our structure\n",CMDDT);
+									if(theConf.traceflag & (1<<MSGD))
+										pprintf("%sController missing\n",MSGDT);
 #endif
 									goto nexter;
 								}
-								if(strcmp(cmgr->valuestring,theConf.meterConnName)!=0)
-								{
-#ifdef DEBUGX
-									if(theConf.traceflag & (1<<CMDD))
-										pprintf("%sNot our connMgr %s\n",CMDDT,cmgr->valuestring);
-#endif
-									goto nexter;
-								}
+
 //								argument->macn=(u32)theMacNum;				//this allows HOST to NOT know the local MAC. If implemented its a great security feature
 							}
 
@@ -1664,7 +2075,8 @@ static void cmdManager(void* arg)
 							(*cmds[cualf].code)(argument);	// call the cmd and wait for it to end
 							nexter:
 							free(argument);
-							cmd.tParam->argument=NULL;
+							if(cmd.tParam)
+								cmd.tParam->argument=NULL;
 
 						}
 						else
@@ -1680,12 +2092,14 @@ static void cmdManager(void* arg)
 					{
 						free(cmd.mensaje);
 						cmd.mensaje=NULL;
-						cmd.tParam->mensaje=NULL;
+						if(cmd.tParam)
+							cmd.tParam->mensaje=NULL;
 					}
 					//we are here because elcmd exists so just delete cJson
 					cJSON_Delete(elcmd);
 					elcmd=NULL;
-					cmd.tParam->elcmd=NULL;
+					if(cmd.tParam)
+						cmd.tParam->elcmd=NULL;
 
 					if(rsynck)	//save in flash and RAM the new key BUT Now not when received else cannt decrypt
 					{
@@ -1698,7 +2112,8 @@ static void cmdManager(void* arg)
 				{
 					cJSON_Delete(elcmd);
 					elcmd=NULL;
-					cmd.tParam->elcmd=NULL;
+					if(cmd.tParam)
+						cmd.tParam->elcmd=NULL;
 				}
 			}
 			else
@@ -1708,6 +2123,7 @@ static void cmdManager(void* arg)
 					pprintf("%sCould not parse cmd\n",CMDDT);
 #endif
 			}
+			// cmd.mensaje was passed, must free it if not done before
 			if(cmd.mensaje)
 			{
 				free(cmd.mensaje); 							// Data is transfered via pointer from a malloc. Free it here.
@@ -1761,6 +2177,7 @@ static void init_vars()
 	miscanf							=false;
 	mqttf							=false;
 	firstmqtt						=false;
+	sessionf						=false;
 	MQTTDelay						=-1;
 	vanMacs							=0;
     qwait							=QDELAY;
@@ -1812,13 +2229,28 @@ static void init_vars()
 	}
 
 	//message from Meters
-	strcpy((char*)&cmds[0].comando,"cmd_firmware");			cmds[0].code=firmwareCmd;			cmds[0].source=HOSTT;	//from Host
-	strcpy((char*)&cmds[1].comando,"cmd_tariff");			cmds[1].code=loadit;				cmds[1].source=HOSTT;	//from Host
-	strcpy((char*)&cmds[2].comando,"cmd_status");			cmds[2].code=statusCmd;				cmds[2].source=LOCALT;	//from local
-	strcpy((char*)&cmds[3].comando,"cmd_login");			cmds[3].code=loginCmd;				cmds[3].source=LOCALT;	//from local
-	strcpy((char*)&cmds[4].comando,"cmd_telemetry");		cmds[4].code=sendTelemetryCmd;		cmds[4].source=HOSTT;	//from Host
-	strcpy((char*)&cmds[5].comando,"cmd_reserve");			cmds[5].code=reserveSlot;			cmds[5].source=LOCALT;	//from local
-	strcpy((char*)&cmds[6].comando,"cmd_sendHost");			cmds[6].code=sendHostCmd;				cmds[6].source=LOCALT;	//from local
+	strcpy((char*)&cmds[ 0].comando,"cmd_firmware");		cmds[ 0].code=firmwareCmd;			cmds[ 0].source=HOSTT;
+	strcpy((char*)&cmds[ 1].comando,"cmd_tariff");			cmds[ 1].code=loadit;				cmds[ 1].source=HOSTT;
+	strcpy((char*)&cmds[ 2].comando,"cmd_status");			cmds[ 2].code=statusCmd;			cmds[ 2].source=LOCALT;
+	strcpy((char*)&cmds[ 3].comando,"cmd_login");			cmds[ 3].code=loginCmd;				cmds[ 3].source=LOCALT;
+	strcpy((char*)&cmds[ 4].comando,"cmd_telemetry");		cmds[ 4].code=sendTelemetryCmd;		cmds[ 4].source=HOSTT;
+	strcpy((char*)&cmds[ 5].comando,"cmd_reserve");			cmds[ 5].code=reserveSlot;			cmds[ 5].source=LOCALT;
+	strcpy((char*)&cmds[ 6].comando,"cmd_sendHost");		cmds[ 6].code=sendHostCmd;			cmds[ 6].source=LOCALT;
+	strcpy((char*)&cmds[ 7].comando,"cmd_sess_start");		cmds[ 7].code=sendHostCmd;			cmds[ 7].source=TOCONN;
+	strcpy((char*)&cmds[ 8].comando,"cmd_sess_end");		cmds[ 8].code=sendHostCmd;			cmds[ 8].source=TOCONN;
+
+
+	strcpy((char*)&cmds[ 9].comando,"cmd_bpk");				cmds[ 9].code=cmd_setbpk;			cmds[ 9].source=HOSTT;
+	strcpy((char*)&cmds[10].comando,"cmd_zerok");			cmds[10].code=cmd_zerokeys;			cmds[10].source=HOSTT;
+	strcpy((char*)&cmds[11].comando,"cmd_display");			cmds[11].code=cmd_setdisplay;		cmds[11].source=HOSTT;
+	strcpy((char*)&cmds[12].comando,"cmd_setdelay");		cmds[12].code=cmd_setdelay;			cmds[12].source=HOSTT;
+	strcpy((char*)&cmds[13].comando,"cmd_sendmonth");		cmds[13].code=cmd_sendmonth;		cmds[13].source=HOSTT;
+	strcpy((char*)&cmds[14].comando,"cmd_sendmy");			cmds[14].code=cmd_sendmy;			cmds[14].source=HOSTT;
+	strcpy((char*)&cmds[15].comando,"cmd_sendday");			cmds[15].code=cmd_sendday;			cmds[15].source=HOSTT;
+	strcpy((char*)&cmds[16].comando,"cmd_senddy");			cmds[16].code=cmd_senddy;			cmds[16].source=HOSTT;
+	strcpy((char*)&cmds[17].comando,"cmd_senddm");			cmds[17].code=cmd_senddm;			cmds[17].source=HOSTT;
+	strcpy((char*)&cmds[18].comando,"cmd_sendkwh");			cmds[18].code=cmd_sendkwh;			cmds[18].source=HOSTT;
+	strcpy((char*)&cmds[19].comando,"cmd_sendbeats");		cmds[19].code=cmd_sendbeats;		cmds[19].source=HOSTT;
 
 	//debug trace flags
 #ifdef KBD

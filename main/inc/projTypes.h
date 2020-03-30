@@ -5,7 +5,7 @@ typedef void (*mqttp)();
 
 typedef enum displayType {NODISPLAY,DISPLAYIT} displayType;
 typedef enum overType {NOREP,REPLACE} overType;
-enum sourceFlags{HOSTT,LOCALT};
+enum sourceFlags{HOSTT,LOCALT,TOCONN};
 enum debugflags{BOOTD,WIFID,MQTTD,PUBSUBD,OTAD,CMDD,WEBD,GEND,MQTTT,FRMCMD,INTD,FRAMD,MSGD,TIMED,SIMD,HOSTD};
 typedef enum macState{BOOTSTATE,CONNSTATE,LOGINSTATE,MSGSTATE,TOSTATE} meterState;
 typedef enum reportState{NOREPORT,REPORTED} reportState_t;
@@ -105,6 +105,11 @@ typedef struct mqttMsgInt{
 	functmqtt	cb;
 }mqttMsg_t;
 
+typedef struct{
+	int		theSock;
+	int		theTempMacPos;
+} tempS;
+
 typedef int (*functrsn)(parg *);
 
 typedef struct cmdRecord{
@@ -124,8 +129,14 @@ typedef struct config {
     uint16_t	reservedCnt;
     time_t		lastReboot,slotReserveDate[MAXSTA];
     char		lkey[MAXSTA][32];
-    uint16_t	crypt,pause;
+    uint16_t	crypt,pause,displayMode,closedForRSVP;
 } config_flash;
+
+typedef struct mactemp{
+	char		mac[6];
+	uint32_t		ip;
+	uint16_t	aid;
+} mactemp;
 
 typedef struct framq{
 	int 	whichMeter;
