@@ -7,7 +7,6 @@
 #include <stdint.h>
 #include <stdio.h>
 #include <string.h>
-#include <string>
 
 extern "C"{
 #include "cJSON.h"
@@ -53,6 +52,11 @@ extern "C"{
 #include "mbedtls/ctr_drbg.h"
 #include "mbedtls/entropy.h"
 #include "mbedtls/base64.h"
+#ifdef TEMP
+#include "ds18b20.h"
+#include "owb.h"
+#include "owb_rmt.h"
+#endif
 //#include "tcpip_adapter.h"
 void app_main();
 }

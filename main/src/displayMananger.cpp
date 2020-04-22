@@ -11,112 +11,98 @@
 extern void delay(uint32_t son);
 extern int sendTelemetryCmd(parg *arg);
 extern void pprintf(const char * format, ...);
-
-static uint32_t getRandom(uint32_t startw, uint32_t endw)
-{
-	uint32_t rand;
-	do
-	{
-		rand=esp_random();
-
-	} while(!(rand>=startw && rand<=endw));
-
-	return rand;
-}
+extern float DS_get_temp(DS18B20_Info * cual);
 
 static void check_delivery_date(void *pArg)
 {
-#define MULT	1
+#define MULT 1000
+	time_t 		now;
+	tm 			timeinfo;
+	uint32_t 	nowsecs,randsecs,waitfornextW,startw,endw;
+	int8_t		windNow=-1;
+	int 		res=0,retcount=0;
+	time_t		midnight;
 
-	time_t now;
-	struct tm timeinfo;
-	uint32_t nowsecs,randsecs,waitfornextW;
-	uint32_t windows[NUMTELSLOTS][2];
-	int8_t windNow=-1;
-	int res=0,retcount=0;
+	srand((unsigned) time(&now));
 
-	int slice=86400/NUMTELSLOTS;
-	for (int a=0;a<NUMTELSLOTS;a++)
-	{
-		windows[a][0]=res;
-		res+=slice-1;
-		windows[a][1]=res;
-		res++;
-	}
+	bzero(&timeinfo,sizeof(timeinfo));
+
+	if(theConf.numSlices==0)
+		theConf.numSlices=24*2;		//every hour
+
+	int slice=86400/theConf.numSlices;
 
 	time(&now);
-	localtime_r(&now, &timeinfo);
-	nowsecs=timeinfo.tm_hour*3600+timeinfo.tm_min*60+timeinfo.tm_sec;
-	for(int a=0;a<NUMTELSLOTS;a++)
+	localtime_r(&now,&timeinfo);
+	timeinfo.tm_hour=0;
+	timeinfo.tm_min=0;
+	timeinfo.tm_sec=0;
+	midnight=mktime(&timeinfo);
+
+	nowsecs=now-midnight;
+
+	windNow=nowsecs/slice;
+
+	startw	=nowsecs;
+	endw	=windNow*slice+slice-1;
+	randsecs=esp_random()%(endw-startw);
+	waitfornextW=slice-randsecs;
+
+	//Effectively start loop here
+	delay(randsecs*MULT);
+
+	//first setup marks the SLICE cycle= random delay + slice-delay=SLICE
+
+	while(true)
 	{
-		if(nowsecs>=windows[a][0] && nowsecs<=windows[a][1])
+		delay(waitfornextW*MULT);
+		randsecs=esp_random()%(slice);
+		waitfornextW=slice-randsecs;
+
+#ifdef DEBUGX
+		if(theConf.traceflag & (1<<TIMED))
 		{
-			windNow=a;
-			break;
+			time(&now);
+			pprintf("%sRandomDelay %d wait %u MqttDelay %d %s",TIEMPOT,randsecs,waitfornextW,MQTTDelay,ctime(&now));
 		}
-	}
-	if(windNow<0)
-	{
-		pprintf("Internal Error Window\n");
-		while(1)
-			delay(1000);
-	}
-	while(1)
-	{
-		if(!(theConf.pause & (1<<PTEL)))
+#endif
+		if(MQTTDelay<0)
+			delay(randsecs*MULT);//wait within window
+		else
 		{
-			randsecs=getRandom(windows[windNow][0],windows[windNow][1]);
-			waitfornextW=windows[windNow][1]-randsecs;
-			time_t when;
-			time(&when);
-			when+=randsecs-windows[windNow][0];
+			delay(MQTTDelay*MULT);
+			waitfornextW=10;
+		}
 
-	#ifdef DEBUGX
-			if(theConf.traceflag & (1<<TIMED))
-				pprintf("%sNext window [%d] Min %d Max %d delay %u wait %u heap %u MqttDelay %d Fire at %s",TIEMPOT,windNow,windows[windNow][0],windows[windNow][1],randsecs-windows[windNow][0],
-					waitfornextW,esp_get_free_heap_size(),MQTTDelay,ctime(&when));
-	#endif
-			if(MQTTDelay<0)
-				delay((randsecs-windows[windNow][0])*MULT);//wait within window
-			else
-				delay(MQTTDelay);
-
-			//send telemetry
-			res=sendTelemetryCmd(NULL);
-			if(res!=ESP_OK)
+		//send telemetry
+		res=sendTelemetryCmd(NULL);
+		if(res!=ESP_OK)
+		{
+			//failed. MQTT service probable disconnected
+			// retry until you can with a 30 secs delay
+			retcount=0;
+			while(1)
 			{
-				//failed. MQTT service probable disconnected
-				// retry until you can with a 30 secs delay
-				retcount=0;
-				while(1)
+				pprintf("Retrying %d\n",res);
+				retcount++;
+				delay(3000);
+				res=sendTelemetryCmd(NULL);
+				if(res==ESP_OK)
+					break;
+				int son=uxQueueMessagesWaiting(mqttQ);
+				if(son>5)
 				{
-					pprintf("Retrying %d\n",res);
-					retcount++;
-					delay(3000);
-					res=sendTelemetryCmd(NULL);
-					if(res==ESP_OK)
-						break;
-					int son=uxQueueMessagesWaiting(mqttQ);
-					if(son>5)
-					{
-						pprintf("Freeing MqttQueue %d\n",son);
-						xQueueReset(mqttQ);//try to free queue
-					}
-					if(retcount>30)
-					{
-						pprintf("Lost contact Mqtt. Restarting\n");
-						delay(1000);
-						esp_restart();
-					}
+					pprintf("Freeing MqttQueue %d\n",son);
+					xQueueReset(mqttQ);//try to free queue
+				}
+				if(retcount>30)
+				{
+					pprintf("Definitely Lost contact Mqtt. Restarting\n");
+					delay(1000);
+					esp_restart();
 				}
 			}
-			windNow++;
-			if(windNow>NUMTELSLOTS-1)
-				windNow=0;
-			delay(waitfornextW*MULT);		//wait for Next Window
-	}
-		else
-			delay(1000);
+		}
 	}
 }
 
@@ -127,7 +113,7 @@ void clearScreen()
 	display.setColor(WHITE);
 }
 
-void drawString(int x, int y, string que, int fsize, int align,displayType showit,overType erase)
+void drawString(int x, int y, char* que, int fsize, int align,displayType showit,overType erase)
 {
 	if(fsize!=lastFont)
 	{
@@ -175,7 +161,7 @@ void drawString(int x, int y, string que, int fsize, int align,displayType showi
 
 	if(erase==REPLACE)
 	{
-		int w=display.getStringWidth((char*)que.c_str());
+		int w=display.getStringWidth((char*)que);
 		int xx=0;
 		switch (lastalign) {
 		case TEXT_ALIGN_LEFT:
@@ -195,7 +181,7 @@ void drawString(int x, int y, string que, int fsize, int align,displayType showi
 		display.setColor(WHITE);
 	}
 
-	display.drawString(x,y,(char*)que.c_str());
+	display.drawString(x,y,(char*)que);
 	if (showit==DISPLAYIT)
 		display.display();
 }
@@ -212,7 +198,7 @@ static void displayBeats()
 		{
 			pcnt_get_counter_value((pcnt_unit_t)a,(short int *) &count);
 			sprintf(textt," %5d-%d  ",theMeters[a].currentBeat,count);
-			drawString(posx[a], posy[a],string(textt), 10, TEXT_ALIGN_LEFT,DISPLAYIT, REPLACE);
+			drawString(posx[a], posy[a],textt, 10, TEXT_ALIGN_LEFT,DISPLAYIT, REPLACE);
 			oldCurBeat[a]=theMeters[a].currentBeat;
 		}
 	}
@@ -229,7 +215,7 @@ static void displayKwH()
 	{
 			pcnt_get_counter_value((pcnt_unit_t)a,(short int *) &count);
 			sprintf(textt," %5d-%d  ",theMeters[a].curLife,count);
-			drawString(posx[a], posy[a],string(textt), 14, TEXT_ALIGN_LEFT,DISPLAYIT, REPLACE);
+			drawString(posx[a], posy[a],textt, 14, TEXT_ALIGN_LEFT,DISPLAYIT, REPLACE);
 	}
 }
 
@@ -238,21 +224,29 @@ static void displayActivity()
 
 	char textt[20];
 	int yy=1,count=0;
-	string sts="";
+	char *sts=(char*)malloc(120);
+	char *csts=sts;
+	int len;
+	bzero(sts,300);
+
 	while(count<theConf.reservedCnt)
 	{
 		sprintf(textt," %d ",(int)losMacs[count].msgCount);
-	//	sprintf(textt,"%d ",9999);
-		sts+=string(textt);
+		strcpy(sts,textt);
+		len=strlen(textt);
+		sts+=len;
+//	//	sprintf(textt,"%d ",9999);
+//		sts+=string(textt);
 		count++;
 		if(count %3==0)
 		{
 			drawString(64, yy,sts, 12, TEXT_ALIGN_CENTER,DISPLAYIT, REPLACE);
-			sts="";
+			sts=csts;
 			yy+=13;
+			bzero(sts,120);
 		}
 	}
-	if(sts!="")
+	if(strlen(sts)>0)
 		drawString(64, yy,sts, 12, TEXT_ALIGN_CENTER,DISPLAYIT, REPLACE);
 
 }
@@ -264,38 +258,10 @@ void displayManager(void *arg) {
 //	time_t cuando;
 //	int pasaron;
 
-	uint8_t displayMode=0;// kwh
-
 	time(&t);
 	localtime_r(&t, &timeinfo);
 
 	xTaskCreate(&check_delivery_date,"telem",4096,NULL, 10, NULL);
-
-//	bool ok=check_delivery_date(&pasaron,diag);
-//	if(ok)
-//	{
-//		if(pasaron<0)
-//		{
-//			//in the past, Check if this month has been processed
-//			fram.read_cycle(mesg,(uint8_t*)&cuando);
-//			if(cuando>0 && timeinfo.tm_mon==mesg)
-//			{
-//				printf("Month processed %s...continuing\n",ctime((time_t*)&cuando));
-//			}
-//			else
-//			{
-//				//shit. something is wrong
-//				printf("In the past and not logged\n");
-//			}
-//		}
-//		else
-//		{
-//			pasaron*=1000;
-//			printf("Start connmgr with time %d\n",pasaron);
-//			xTaskCreate(&connMgr,"conmmgr",4096,(void*)pasaron, 10, &connHandle);// Messages from the Meters. Controller Section socket manager
-//			//start connMgr task with delay pasaron
-//		}
-//	}// else not our day
 
 	memset(oldCurBeat,0,sizeof(oldCurBeat));
 	memset(oldCurLife,0,sizeof(oldCurLife));
@@ -304,19 +270,26 @@ void displayManager(void *arg) {
 
 	int howLong=1000;
 
+	if(xSemaphoreTake(I2CSem, portMAX_DELAY))
+	{
+		display.clear();
+		xSemaphoreGive(I2CSem);
+	}
+
 	while(true)
 	{
-		time(&mgrTime[DISPLAYMGR]);
+		time(&mgrTime[DISPLAYMGRT]);
+		theTemperature=DS_get_temp(ds18b20_info);
 		vTaskDelay(howLong/portTICK_PERIOD_MS);
-//		if(!gpio_get_level((gpio_num_t)0))
-//		{
-//			displayMode++;
-//			if(displayMode>2)
-//				displayMode=0;
-//			memset(oldCurBeat,0,sizeof(oldCurBeat));
-//			memset(oldCurLife,0,sizeof(oldCurLife));
-//			clearScreen();
-//		}
+		if(!gpio_get_level((gpio_num_t)0))
+		{
+			theConf.displayMode++;
+			if(theConf.displayMode>2)
+				theConf.displayMode=0;
+			memset(oldCurBeat,0,sizeof(oldCurBeat));
+			memset(oldCurLife,0,sizeof(oldCurLife));
+			clearScreen();
+		}
 
 		time(&t);
 		localtime_r(&t, &timeinfo);
@@ -325,8 +298,12 @@ void displayManager(void *arg) {
 		sprintf(textt,"%02d:%02d:%02d",timeinfo.tm_hour,timeinfo.tm_min,timeinfo.tm_sec);
 		if(xSemaphoreTake(I2CSem, portMAX_DELAY))
 		{
-			drawString(0, 51, string(textd), 10, TEXT_ALIGN_LEFT,NODISPLAY, REPLACE);
-			drawString(86, 51, string(textt), 10, TEXT_ALIGN_LEFT,DISPLAYIT, REPLACE);
+			drawString(0, 51, textd, 10, TEXT_ALIGN_LEFT,NODISPLAY, REPLACE);
+			drawString(86, 51, textt, 10, TEXT_ALIGN_LEFT,NODISPLAY, REPLACE);
+			if(framOk)
+				drawString(60, 51, (char*)"FG", 10, TEXT_ALIGN_LEFT,DISPLAYIT, REPLACE);
+			else
+				drawString(60, 51, (char*)"OK", 10, TEXT_ALIGN_LEFT,DISPLAYIT, REPLACE);
 			switch(theConf.displayMode)
 			{
 			case 0:

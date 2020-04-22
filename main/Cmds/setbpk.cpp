@@ -5,21 +5,16 @@
 #include "projTypes.h"
 #include "globals.h"
 
-extern int sendReplyToHost(int cualm,int response,int son,char* cmdI, ...);
+extern int sendReplyToHost(const int cualm,const cJSON* cj,const int son,const char* cmdI, ...);
 extern void write_to_flash();
-extern int findMID(char *mid);
+extern int findMID(const char *mid);
 extern void pprintf(const char * format, ...);
 
 int cmd_setbpk(parg *argument)
 {
 	char numa[10],numb[10];
-	int cualm,response;
+	int cualm;
 
-	cJSON *req=cJSON_GetObjectItem((cJSON*)argument->pMessage,"REQ");
-	if(req)
-		response=req->valueint;
-	else
-		response=0;
 
 	cJSON *mid=cJSON_GetObjectItem((cJSON*)argument->pMessage,"MID");
 	if(!mid)
@@ -60,7 +55,7 @@ int cmd_setbpk(parg *argument)
 
 			itoa(bpk->valueint,numa,10);
 			itoa(born->valueint,numb,10);
-			sendReplyToHost(cualm,response,2,(char*)"BPK",numa,"BORN",numb);
+			sendReplyToHost(cualm,(cJSON*)argument->pMessage,2,(char*)"BPK",numa,"BORN",numb);
 			return ESP_OK;
 		}
 		else

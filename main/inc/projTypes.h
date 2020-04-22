@@ -6,10 +6,10 @@ typedef void (*mqttp)();
 typedef enum displayType {NODISPLAY,DISPLAYIT} displayType;
 typedef enum overType {NOREP,REPLACE} overType;
 enum sourceFlags{HOSTT,LOCALT,TOCONN};
-enum debugflags{BOOTD,WIFID,MQTTD,PUBSUBD,OTAD,CMDD,WEBD,GEND,MQTTT,FRMCMD,INTD,FRAMD,MSGD,TIMED,SIMD,HOSTD};
+enum debugflags{BOOTD,WIFID,MQTTD,PUBSUBD,OTAD,CMDD,WEBD,GEND,MQTTT,FRMCMD,INTD,FRAMD,MSGD,TIMED,SUBMGRD,HOSTD};
 typedef enum macState{BOOTSTATE,CONNSTATE,LOGINSTATE,MSGSTATE,TOSTATE} meterState;
 typedef enum reportState{NOREPORT,REPORTED} reportState_t;
-enum mgrT{BUILDMGR,CMDMGR,WATCHMGR,DISPLAYMGR,FRAMMGR,PINMGR,SUBMGR};
+enum mgrT{BUILDMGRT,CMDMGRT,WATCHMGRT,DISPLAYMGRT,FRAMMGRT,PINMGRT,SUBMGRT};
 enum mqtters{MQTTOK=5500,NOCLIENT,PUBTM,STARTTM,STARTERR,QUEUEFAIL,BITTM};
 enum pausers{PNONE,PSTAT,PTEL,PCMD};
 
@@ -129,7 +129,7 @@ typedef struct config {
     uint16_t	reservedCnt;
     time_t		lastReboot,slotReserveDate[MAXSTA];
     char		lkey[MAXSTA][32];
-    uint16_t	crypt,pause,displayMode,closedForRSVP;
+    uint16_t	crypt,pause,displayMode,closedForRSVP,macTrace,numSlices;
 } config_flash;
 
 typedef struct mactemp{

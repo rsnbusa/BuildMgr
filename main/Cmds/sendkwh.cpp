@@ -5,21 +5,15 @@
 #include "projTypes.h"
 #include "globals.h"
 
-extern int sendReplyToHost(int cualm,int response,int son,char* cmdI, ...);
-extern int findMID(char *mid);
+extern int sendReplyToHost(const int cualm,const cJSON* cj,const int son,const char* cmdI, ...);
+extern int findMID(const char *mid);
 extern void pprintf(const char * format, ...);
 
 int cmd_sendkwh(parg *argument)
 {
 	uint32_t kwh;
 	char numa[10];
-	int cualm,response;
-
-	cJSON *req=cJSON_GetObjectItem((cJSON*)argument->pMessage,"REQ");
-	if(req)
-		response=req->valueint;
-	else
-		response=0;
+	int cualm;
 
 	cJSON *mid=cJSON_GetObjectItem((cJSON*)argument->pMessage,"MID");
 	if(!mid)
@@ -36,6 +30,6 @@ int cmd_sendkwh(parg *argument)
 	}
 	fram.read_lifekwh(cualm,(uint8_t*)&kwh);
 	itoa(kwh,numa,10);
-	sendReplyToHost(cualm,response,2,(char*)"MID",mid->valuestring,(char*)"KwH",numa);
+	sendReplyToHost(cualm,(cJSON*)argument->pMessage,2,(char*)"MID",mid->valuestring,(char*)"KwH",numa);
 	return ESP_OK;
 }

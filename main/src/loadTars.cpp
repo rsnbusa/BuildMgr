@@ -38,7 +38,6 @@ int loadit(parg *pArg)
 
 	int vanl=0;
 	esp_http_client_config_t lconfig;
-pprintf("Load tariffs HTTP\n");
 	memset(&lconfig,0,sizeof(lconfig));
 
 	if(elcmd!=NULL)
@@ -123,6 +122,8 @@ void loadDefaultTariffs()
 {
     cmdType cmd;
 
+    bzero(&cmd,sizeof(cmd));
+
 	cJSON *root=cJSON_CreateObject();
 	cJSON *ar = cJSON_CreateArray();
 
@@ -133,12 +134,13 @@ void loadDefaultTariffs()
 	}
 
 	cJSON *cmdJ=cJSON_CreateObject();
-	cJSON_AddStringToObject(cmdJ,"cmd","/ga_tariff");
+	cJSON_AddStringToObject(cmdJ,"cmd","cmd_tariff");
 	cJSON_AddNumberToObject(cmdJ,"tariff",1); //default is 1
-	cJSON_AddStringToObject(cmdJ,"connmgr",theConf.meterConnName);
+
 	cJSON_AddItemToArray(ar, cmdJ);
 
 	cJSON_AddItemToObject(root,"Batch", ar);
+	cJSON_AddStringToObject(root,"Controller",theConf.meterConnName);
 	cJSON_AddNumberToObject(root,"macn", theMacNum);	//system checks for a MAC
 
 	char *lmessage=cJSON_Print(root);
@@ -148,7 +150,7 @@ void loadDefaultTariffs()
 		cJSON_Delete(root);
 		return;
 	}
-
+	cJSON_Delete(root);
 	cmd.mensaje=lmessage;
 	cmd.fd=3;//send from internal
 	cmd.pos=0;

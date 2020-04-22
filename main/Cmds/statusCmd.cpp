@@ -15,8 +15,8 @@
 
 extern uint32_t millis();
 extern void pprintf(const char * format, ...);
-extern cJSON *answerMsg(char* toWhom, int err,int tariff,char *cmds);
-extern int aes_encrypt(char* src, size_t son, char *dst,char *cualKey);
+extern cJSON *answerMsg(const char* toWhom, int err,int tariff,const char *cmds);
+extern int aes_encrypt(const char* src, size_t son, char *dst,const char *cualKey);
 #ifdef HEAPSAMPLE
 extern void heapSample(char *subr);
 #endif
@@ -36,10 +36,10 @@ extern void heapSample(char *subr);
 		mqttMsgHandle.msgLen=strlen(mensaje);
 		mqttMsgHandle.message=(uint8_t*)mensaje;
 		mqttMsgHandle.maxTime=1000;
-		mqttMsgHandle.queueName=(char*)"MeterIoT/EEQ/SOS";
-		if(mqttQ)
-			xQueueSend( mqttQ,&mqttMsgHandle,0 );			//submode will free Mensaje
-		losMacs[cualf].toCount=0; 							//sends every MAXTIMEOUTS minutes an alarm. That serious
+		mqttMsgHandle.queueName=sosQueue;
+		if(xQueueSend( mqttQ,&mqttMsgHandle,0 )!=pdPASS)			//submode will free Mensaje
+			FREEANDNULL(mensaje)									//unless it fails we do it
+		losMacs[cualf].toCount=0;
 		 //send report to SOS
 		 if(theConf.traceflag & (1<<MSGD))
 			 pprintf("%sSOS Timeout sent for Meter(%d) %s\n",MSGDT,cualf,losMacs[cualf].mtmName);
@@ -54,6 +54,9 @@ char * hostMsg(uint8_t theMtM)
 	uint8_t van=0;
 	char *lmsg=NULL;
 
+	if(theMtM>MAXSTA)
+		return NULL;
+
 	if(mtm[theMtM])
 	{
 		int son=uxQueueMessagesWaiting(mtm[theMtM]);
@@ -61,10 +64,18 @@ char * hostMsg(uint8_t theMtM)
 		{
 			cJSON *batch=cJSON_CreateObject();
 			if(!batch)
+			{
+				for (int a=0;a<son;a++)
+					if( xQueueReceive( mtm[theMtM], &cmd, 100/  portTICK_RATE_MS )==pdPASS)
+						FREEANDNULL(cmd.msg)
 				return NULL;
+			}
 			cJSON *ar = cJSON_CreateArray();
 			if(!ar)
 			{
+				for (int a=0;a<son;a++)
+					if( xQueueReceive( mtm[theMtM], &cmd, 100/  portTICK_RATE_MS )==pdPASS)
+						FREEANDNULL(cmd.msg)
 				cJSON_Delete(batch);
 				return NULL;
 			}
@@ -73,7 +84,7 @@ char * hostMsg(uint8_t theMtM)
 			{
 				bzero(&cmd,sizeof(cmd));
 
-				if( xQueueReceive( mtm[theMtM], &cmd, 100/  portTICK_RATE_MS ))
+				if( xQueueReceive( mtm[theMtM], &cmd, 100/  portTICK_RATE_MS )==pdPASS)
 				{
 					if(cmd.msg)
 					{
@@ -85,24 +96,31 @@ char * hostMsg(uint8_t theMtM)
 							cJSON_AddStringToObject(cmdJ,"cmd",cmd.msg);
 							cJSON_AddItemToArray(ar, cmdJ);
 						}
+						else
+						{
+							pprintf("Skipping a Host Msg due to cJSPN failure\n");
+						}
 					}
 					else
-						printf("No Msg\n");
+						pprintf("No Msg\n");
+					//NOW we free the Message received in Mqtt Msg Handler for EACH queue entry
+		//			if(cmd.msg)
+		//			{
+		//				if(theConf.traceflag & (1<<MSGD))
+		//					pprintf("%sFreeing MtM Msg %d %d bytes long\n",MSGDT,theMtM,strlen(cmd.msg));
+		//				free(cmd.msg);			//if it was NULL it will crahs tellin something wrong logic
+		//			}
+					FREEANDNULL(cmd.msg)
 				}
 				else
 				{
+					pprintf("Internal Inconsistency Queue HostMsg at pos %d of %d\n",a,son);
 					//weird
 				}
 			}
 			cJSON_AddItemToObject(batch, "hostCmd",ar);
 			lmsg=cJSON_PrintUnformatted(batch);
-			//NOW we free the Message received in Mqtt Msg Handler.
-			if(cmd.msg)
-			{
-				if(theConf.traceflag & (1<<MSGD))
-					pprintf("%sFreeing MtM Msg %d %d bytes long\n",MSGDT,theMtM,strlen(cmd.msg));
-				free(cmd.msg);			//if it was NULL it will crahs tellin something wrong logic
-			}
+
 			cJSON_Delete(batch);
 		}
 		return lmsg;
@@ -115,7 +133,7 @@ char * hostMsg(uint8_t theMtM)
 int statusCmd(parg *argument)
 {
 	bool answer=false;
-	vTaskDelay(100 /  portTICK_RATE_MS);
+	cJSON *theAnswer=NULL;
 
 #ifdef HEAPSAMPLE
 	heapSample("StatusCmdSt");
@@ -140,7 +158,7 @@ int statusCmd(parg *argument)
 		if(devpos>=MAXDEVS)
 		{
 			printf("Status Unit %d OB\n",devpos);
-			return -1;
+			return ESP_FAIL;
 		}
 
 		losMacs[mtmPos].dState=MSGSTATE;
@@ -156,49 +174,56 @@ int statusCmd(parg *argument)
 		if(beats)
 			losMacs[mtmPos].controlLastBeats[devpos]=beats->valueint;
 
-		if(!(theConf.pause & (1<<PSTAT)))
+
+		if(!losMacs[mtmPos].timerH)
 		{
-			if(!losMacs[mtmPos].timerH)
-			{
 #ifdef DEBUGX
-				if(theConf.traceflag & (1<<CMDD))
-					pprintf("%sStarting timer for meterController %d MAC %x\n",CMDDT,mtmPos,losMacs[mtmPos].macAdd);
+			if(theConf.traceflag & (1<<CMDD))
+				pprintf("%sStarting timer for meterController %d MAC %x\n",CMDDT,mtmPos,losMacs[mtmPos].macAdd);
 #endif
-				int cual=mtmPos;
-				losMacs[mtmPos].timerH=xTimerCreate("Monitor",theConf.msgTimeOut /portTICK_PERIOD_MS,pdTRUE,( void * )cual,&monitorCallback);
-				if(losMacs[mtmPos].timerH==NULL)
-					pprintf("Failed to create HourChange timer\n");
-				xTimerStart(losMacs[mtmPos].timerH,0); //Start it
-			}
+			int cual=mtmPos;
+			losMacs[mtmPos].timerH=xTimerCreate("Monitor",theConf.msgTimeOut /portTICK_PERIOD_MS,pdTRUE,( void * )cual,&monitorCallback);
+			if(losMacs[mtmPos].timerH==NULL)
+				pprintf("Failed to create HourChange timer\n");
 			else
-			{
-#ifdef DEBUGX
-				if(theConf.traceflag & (1<<CMDD))
-					pprintf("%s reseting timer for meterController %d MAC %x\n",CMDDT,mtmPos,losMacs[mtmPos].macAdd);
-#endif
-				xTimerReset(losMacs[mtmPos].timerH,0); //Start it with new
-				losMacs[mtmPos].toCount=0;
-			}
+				xTimerStart(losMacs[mtmPos].timerH,0); //Start it
 		}
+		else
+		{
+#ifdef DEBUGX
+			if(theConf.traceflag & (1<<CMDD))
+				pprintf("%s reseting timer for meterController %d MAC %x\n",CMDDT,mtmPos,losMacs[mtmPos].macAdd);
+#endif
+			xTimerReset(losMacs[mtmPos].timerH,0); //Start it with new
+			losMacs[mtmPos].toCount=0;
+		}
+
 #ifdef DEBUGX
 		if(theConf.traceflag & (1<<CMDD))
 			pprintf("%sMeter[%d][%d]=%d\n",CMDDT,mtmPos,devpos,tallies[mtmPos][devpos]);
 #endif
 	}//lmac && lpos
+	else
+		return ESP_FAIL;		//invalid cmd structure
 
 	if(answer)
 	{
 		//find if any msg for that mtm
 		char *lbuf=hostMsg(mtmPos);			//can be NULL as in No Msg from Host
 
-		cJSON *theAnswer=answerMsg(losMacs[mtmPos].mtmName,ESP_OK,100,lbuf);
+		if(framOk==ESP_OK)
+			theAnswer=answerMsg(losMacs[mtmPos].mtmName,ESP_OK,100,lbuf);	//should send currentHour tariff etc. Whatever logic
+		else
+			theAnswer=answerMsg(losMacs[mtmPos].mtmName,ESP_OK,100,lbuf);	//fixed Tariff
+
 		if(theAnswer)
 		{
 			char *res=cJSON_Print(theAnswer);
 			if(res)
 			{
 				if(theConf.traceflag & (1<<MSGD))
-					pprintf("%sSTAnswer %d %s\n",MSGDT,mtmPos,res);
+					if( theConf.macTrace & (1<<argument->pos))
+						pprintf("%sSTAnswer %d %s\n",MSGDT,mtmPos,res);
 				int len=strlen(res);
 				int theSize=len;
 				int rem= theSize % 16;
@@ -217,26 +242,22 @@ int statusCmd(parg *argument)
 					}
 					else
 						pprintf("Failed to encrypt %d\n",sendcount);
-					free(output);
+					FREEANDNULL(output)
 				}
 				else
 					pprintf("No Ram for Status answer\n");
-				free(res);
+				FREEANDNULL(res)
 			}
 			cJSON_Delete(theAnswer);
 		}
 		else
 			pprintf("Could not cJSON Status Answer\n");
-		if(lbuf)
-		{
-			free(lbuf);
-			lbuf=NULL;
-		}
+		FREEANDNULL(lbuf)
 	}
 
 #ifdef HEAPSAMPLE
 	heapSample("StatusCmdEnd");
 #endif
-	return 0;
+	return ESP_OK;
 
 }

@@ -1,0 +1,142 @@
+<!DOCTYPE html>
+<html>
+<head>
+<meta http-equiv="Content-Type" content="text/html; charset=UTF-8">
+<title>MeterIoT</title>
+</head>
+
+<style>
+#form_container
+{
+	background-color:gray;
+	border:1px solid #ccc;
+	margin:0 auto;
+	text-align:left;
+	width:270px;
+}
+
+h2 {
+	background-color: orange;
+}
+form li
+{
+	display:block;
+	margin:0;
+	padding:4px 5px 2px 9px;
+	position:relative;
+}
+th{
+	background-color: lightgray;
+
+}
+
+p {
+	margin:0;
+	color:lightskyblue;
+	font-size: 22px;
+}
+.button {
+  background-color: #4CAF50; /* Green */
+  border: none;
+  color: white;
+  padding: 5px 32px;
+  text-align: center;
+  text-decoration: none;
+  display: inline-block;
+  font-size: 16px;
+  margin: 4px 2px;
+  cursor: pointer;
+}
+
+input::-webkit-outer-spin-button,
+input::-webkit-inner-spin-button {
+  -webkit-appearance: none;
+  margin: 0;
+}
+</style>
+
+<body id="main_body" >
+		<div id="form_container">
+		<img src="meter.png" width="270">
+
+		<form id="formid" action="http://192.168.4.1/cmconfig" method="get">
+		<li align="center">
+			
+		<h2>ConnMgr Setup</h2>
+		<p style="float:left; width:50%">ConnId</p>
+		<p style="float:right; width:50%;color:yellow">Refresh</p>
+		<p style="clear:both"></p>
+		<input id="element_1" name="conn" type="text" maxlength="10" size="10" value="%s" style="text-align:center;font-size:14px; width: 85px;">
+		<input id="element_2" name="refresh" type="text" maxlength="10" size="10" value="%d" style="text-align:center;font-size:14px; width: 85px;">
+		</li>
+
+		<table style="width:50%; padding:10px;">
+	<tr>
+	 <th align="center">MeterId</th>
+	 <th align="center">BPK</th>
+	 <th align="center">KwH</th>
+	 <th align="center">Active</th>
+	</tr>
+	 <tr>
+ 		<td><input type="text" name="m1" maxlength="6"  size="7" value="%s"></td>
+	  	<td><select name="b1" id="bpk">
+  			<option value="800" %s >800</option>
+  			<option value="1000" %s>1000</option>
+ 			<option value="1200" %s>1200</option>
+  			<option value="2000" %s>2000</option>
+			</select></td>
+	 	<td><input style="text-align:center; width: 65px;" type="number" name="k1"  value="%d"></td>
+		<td align="center"><input type="checkbox" name="c1" %s></td>
+ 	</tr>
+	<tr>
+		 <td><input type="text" name="m2" maxlength="6"  size="7"  value="%s"></td>
+	  	<td><select name="b2" id="bpk">
+  			<option value="800" %s >800</option>
+  			<option value="1000" %s>1000</option>
+ 			<option value="1200" %s>1200</option>
+  			<option value="2000" %s>2000</option>
+			</select></td>		 
+	 	<td><input style="text-align:center; width: 65px;" type="number" name="k2" value="%d"></td>
+		 <td align="center"><input type="checkbox" name="c2" %s></td>
+	</tr>
+	<tr>
+	 	 <td><input type="text" name="m3" maxlength="6"  size="7" value="%s"></td>
+	  	<td><select name="b3" id="bpk">
+  			<option value="800" %s >800</option>
+  			<option value="1000" %s>1000</option>
+ 			<option value="1200" %s>1200</option>
+  			<option value="2000" %s>2000</option>
+			</select></td>		 
+	 	<td><input style="text-align:center; width: 65px;" type="number" name="k3" value="%d"></td>
+		 <td align="center"><input type="checkbox" name="c3" %s></td>
+  </tr>
+	<tr>
+		<td><input type="text" name="m4" maxlength="6"  size="7" value="%s"></td>
+	  	<td><select name="b4" id="bpk">
+  			<option value="800" %s >800</option>
+  			<option value="1000" %s>1000</option>
+ 			<option value="1200" %s>1200</option>
+  			<option value="2000" %s>2000</option>
+			</select></td>		
+	 	<td><input style="text-align:center; width: 65px;" type="number" name="k4" value="%d" ></td>
+		<td align="center"><input type="checkbox" name="c4" %s></td>
+	</tr>
+	<tr>
+		<td><input type="text" name="m5" maxlength="6"  size="7" value="%s"></td>
+	  	<td><select name="b5" id="bpk">
+  			<option value="800" %s >800</option>
+  			<option value="1000" %s>1000</option>
+ 			<option value="1200" %s>1200</option>
+  			<option value="2000" %s>2000</option>
+			</select></td>	 	
+	 	<td><input style="text-align:center; width: 65px;" type="number" name="k5" value="%d"></td>
+		<td align="center"><input type="checkbox" name="c5" %s></td>
+	</tr>
+	</table>
+		<li id="li_1" align="center">
+		<input id="saveForm" class="button" type="submit" value="Send" />
+		</li>
+		</form>
+	</div>
+	</body>
+</html>

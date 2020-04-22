@@ -1,0 +1,78 @@
+<!DOCTYPE html>
+	<head>
+		<meta http-equiv="Content-Type" content="text/html; charset=UTF-8">
+		<title>MeterIoT</title>
+	</head>
+	<style>
+	#form_container
+	{
+		background-color:gray;
+		border:1px solid #ccc;
+		margin:0 auto;
+		text-align:left;
+		width:250px;
+	}
+	h1
+	{
+		background-color:#dedede;
+		margin:0;
+		min-height:0;
+		padding:0;
+		text-decoration:none;
+		text-indent:-8000px;
+	}
+	form li
+	{
+		display:block;
+		margin:0;
+		padding:4px 5px 2px 9px;
+		position:relative;
+	}
+	  p{
+		  height: 30px;
+		  font-size: medium;
+		  font-style: italic bold;
+   }
+
+
+	h2 {
+	background-color: orange;
+	text-align: center;
+}
+
+
+	.button {
+  background-color: #4CAF50; /* Green */
+  border: none;
+  color: white;
+  padding: 5px 32px;
+  text-align: center;
+  text-decoration: none;
+  display: inline-block;
+  font-size: 16px;
+  margin: 4px 2px;
+  cursor: pointer;
+}
+
+	</style>
+	<body id="main_body" >
+			<div id="form_container">
+				<img src="meter.png" width="250">
+
+					<form id="formid" action="http://192.168.4.1/cmchallenge" method="get">
+						<div>
+							<li>
+							<h2>ConnMgr Challenge</h2>
+							<div align="center">
+									<p height:"30px" style="background-color:powderblue;color:red">%s</p>
+									<input style="height:20px;font-size:14pt;" align="center" id="element_1" name="challenge" type="text"  maxlength="26" size="20" value=""/>
+							</div>
+							</li>
+					  </div>
+					  <div align="center">
+							<input id="Answer" class="button" type="submit" value="Respond" class="button" />
+					  </div>
+					</form>
+		</div>
+	</body>
+</html>

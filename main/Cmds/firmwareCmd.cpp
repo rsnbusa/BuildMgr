@@ -14,7 +14,7 @@
 
 extern void pprintf(const char * format, ...);
 extern void ConfigSystem(void *pArg);
-extern const uint8_t server_cert_pem_start[] asm("_binary_ca_cert_pem_start");
+//extern const uint8_t server_cert_pem_start[] asm("_binary_ca_cert_pem_start");
 
 
 void firmUpdate(void *pArg)
@@ -26,7 +26,7 @@ void firmUpdate(void *pArg)
 
 //	config.url = OTA_BIN_FILE;
 	config->url = "http://192.168.100.7:8080/buildMgrOled.bin";
-	config->cert_pem = (char *)server_cert_pem_start;
+	//config->cert_pem = (char *)server_cert_pem_start;
 	config->event_handler = NULL;
 
 	config->skip_cert_common_name_check = true;	//for testing only

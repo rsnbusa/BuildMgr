@@ -1,0 +1,74 @@
+<!DOCTYPE html>
+	<head>
+		<meta http-equiv="Content-Type" content="text/html; charset=UTF-8">
+		<title>MeterIoT</title>
+	</head>
+	<style>
+	#form_container
+	{
+		background: gray;
+		border:1px solid #ccc;
+		margin:0 auto;
+		text-align:left;
+		width:250px;
+	}
+	form li
+	{
+		display:block;
+		margin:0;
+		padding:4px 5px 2px 9px;
+		position:relative;
+	}
+	p{
+		margin:0
+	}
+	button{
+		color:antiquewhite
+			}
+	input[type=text]{
+		height: 20px;
+		font-size: 14pt;
+		size: 20;
+	}
+
+	h2 {
+	background-color: orange;
+	text-align: center;
+}
+
+.button {
+  background-color: #4CAF50; /* Green */
+  border: none;
+  color: white;
+  padding: 5px 32px;
+  text-align: center;
+  text-decoration: none;
+  display: inline-block;
+  font-size: 16px;
+  margin: 4px 2px;
+  cursor: pointer;
+}
+
+	</style>
+	<body id="main_body" >
+			<div id="form_container">
+				<img src="meter.png" width="250">
+					<form id="formid" action="http://192.168.4.1/cmlogin" method="get">
+						<div>
+							<li>
+							<h2>ConnMgr Login</h2>
+							<div align="center">
+									<p style="color:red">User Name</p>
+									<input  align="center" id="element_1" name="user" type="text" value=""/>
+									<p style="color:blue">Password</p>
+									<input  align="center" id="element_2" name="password" type="password"  maxlength="26" size="20" value=""/>
+							</div>
+							</li>
+					  </div>
+					  <div align="center">
+							<input id="Answer" class="button" type="submit" value="Login" class="button" />
+					  </div>
+					</form>
+		</div>
+	</body>
+</html>

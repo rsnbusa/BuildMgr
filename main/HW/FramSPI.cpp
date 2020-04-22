@@ -155,6 +155,15 @@ int FramSPI::read_guard(uint8_t*  value)			//guard is used to check if the HW is
 	return ret;
 }
 
+int FramSPI::read_centinel(uint8_t*  value)			//guard is used to check if the HW is working. 0 if not working
+{
+	int ret;
+	uint32_t badd=FRANCENTINEL;
+	ret=readMany(badd,value,LLONG);
+	return ret;
+}
+
+
 uint8_t  FramSPI::readStatus ()
 {
 	spi_transaction_ext_t t;
@@ -422,6 +431,14 @@ int FramSPI::write_guard(uint16_t  value)
 	int ret;
 	uint32_t badd=GUARDM;
 	ret=writeMany(badd,(uint8_t*)&value,MWORD);
+	return ret;
+}
+
+int FramSPI::write_centinel(uint32_t  value)
+{
+	int ret;
+	uint32_t badd=FRANCENTINEL;
+	ret=writeMany(badd,(uint8_t*)&value,LLONG);
 	return ret;
 }
 

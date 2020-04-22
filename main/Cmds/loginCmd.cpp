@@ -13,10 +13,10 @@
 #include "globals.h"
 
 extern uint32_t millis();
-extern bool decryptLogin(char* b64, uint16_t blen, char *decryp, size_t * fueron);
+extern bool decryptLogin(const char* b64, uint16_t blen, char *decryp, size_t * fueron);
 extern void write_to_flash();
-extern cJSON *answerMsg(char* toWhom, int err,int tariff,char *cmds);
-extern int aes_encrypt(char* src, size_t son, char *dst,char *cualKey);
+extern cJSON *answerMsg(const char* toWhom, int err,int tariff,const char *cmds);
+extern int aes_encrypt(const char* src, size_t son, char *dst,const char *cualKey);
 #ifdef HEAPSAMPLE
 extern void heapSample(char *subr);
 #endif
@@ -73,7 +73,8 @@ int loginCmd(parg* argument)
 		if(res)
 		{
 			if(theConf.traceflag & (1<<MSGD))
-				pprintf("LoginAnswer %s\n",res);
+				if( theConf.macTrace & (1<<argument->pos))
+					pprintf("LoginAnswer %s\n",res);
 			int len=strlen(res);
 			int theSize=len;
 			int rem= theSize % 16;

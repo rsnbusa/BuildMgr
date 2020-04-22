@@ -5,21 +5,15 @@
 #include "projTypes.h"
 #include "globals.h"
 
-extern int sendReplyToHost(int cualm,int response,int son,char* cmdI, ...);
-extern int findMID(char *mid);
+extern int sendReplyToHost(const int cualm,const cJSON* cj,const int son,const char* cmdI, ...);
+extern int findMID(const char *mid);
 extern void pprintf(const char * format, ...);
 
 int cmd_sendbeats(parg *argument)
 {
 	uint32_t beats;
 	char numa[10];
-	int cualm,response;
-
-	cJSON *req=cJSON_GetObjectItem((cJSON*)argument->pMessage,"REQ");
-	if(req)
-		response=req->valueint;
-	else
-		response=0;
+	int cualm;
 
 	cJSON *mid=cJSON_GetObjectItem((cJSON*)argument->pMessage,"MID");
 	if(!mid)
@@ -38,6 +32,6 @@ int cmd_sendbeats(parg *argument)
 	fram.read_beat(cualm,(uint8_t*)&beats);
 
 	itoa(beats,numa,10);
-	sendReplyToHost(cualm,response,1,(char*)"Beats",numa);
+	sendReplyToHost(cualm,(cJSON*)argument->pMessage,1,(char*)"Beats",numa);
 	return ESP_OK;
 }

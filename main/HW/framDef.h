@@ -9,7 +9,8 @@
 #define MWORD				(2)
 #define LLONG               (4)
 
-#define FRAMDATE			0
+#define FRANCENTINEL		0						//4bytes hex 0x12345678
+#define FRAMDATE			(LLONG)
 #define GUARDM				(FRAMDATE+LLONG)
 #define USEDMACS			(GUARDM+MWORD)
 #define MCYCLE				(USEDMACS+MWORD)

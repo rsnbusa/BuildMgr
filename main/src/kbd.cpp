@@ -14,15 +14,16 @@ extern void write_to_flash();
 extern void write_to_fram(u8 meter,bool addit);
 extern void connMgr(void *pArg);
 extern void firmUpdate(void *pArg);
+extern float DS_get_temp(DS18B20_Info * cual);
 
 using namespace std;
 
-typedef void (*functkbd)(string ss);
+typedef void (*functkbd)(char * ss);
 
 typedef struct cmd_kbd_t{
     char comando[20];
     functkbd code;
-    string help;
+    char help[150];
 }cmdRecord_t;
 
 cmdRecord_t cmdds[MAXCMDSK];
@@ -38,62 +39,48 @@ uint16_t date2days(uint16_t y, uint8_t m, uint8_t d) {
 
 }
 
-cJSON *makeJson(string ss)
+cJSON *makeJson(char *ss)
 {
-	cJSON *root=cJSON_CreateObject();
+	char theVal[15], theK[20];
 
-	size_t start=0,found,fkey;
-	int van=0;
-	string cmdstr,theK;
-	std::locale loc;
-
-	if(ss=="")
+	if(strlen(ss)==0)
 		return NULL;
 
-	do{
-		found=ss.find(" ",start);
-		if (found!=std::string::npos)
+	cJSON *root=cJSON_CreateObject();
+
+	if(!root)
+		return NULL;
+
+	//key := value setup
+
+	char *pch = strtok (ss,":=");
+	while (pch != NULL)
+	{
+		strcpy(theK,pch);
+		pch = strtok (NULL, " ,=:");
+		if(pch==NULL)
+			break;
+		strcpy(theVal,pch);
+
+		bool isdig=true;
+		for (int i=0; i<strlen(theVal); ++i)
 		{
-			cmdstr=ss.substr(start,found-start);
-			fkey=cmdstr.find_first_of("=:");
-			if(fkey!=std::string::npos)
+			if(!isdigit(theVal[i]))
 			{
-				theK=cmdstr.substr(0,fkey);
-				for (size_t i=0; i<theK.length(); ++i)
-				    theK[i]= std::toupper(theK[i],loc);
-
-				string valor=cmdstr.substr(fkey+1,cmdstr.length());
-
-				bool isdig=true;
-				for (size_t i=0; i<valor.length(); ++i)
-				{
-					if(!isdigit(valor[i]))
-					{
-							 isdig=false;
-							 break;
-					}
-				}
-				if(!isdig)
-					cJSON_AddStringToObject(root,theK.c_str(),valor.c_str());
-				else
-					cJSON_AddNumberToObject(root,theK.c_str(),atoi(valor.c_str()));
-
+				 isdig=false;
+				 break;
 			}
-			else
-				return NULL; //error is drastic
-			start=found+1;
-			van++;
 		}
 
-	} while(found!=std::string::npos);
-
-//	char *lmessage=cJSON_Print(root);
-//	if(lmessage)
-//	{
-//		pprintf("Root %s\n",lmessage);
-//		free(lmessage);
-//	}
-	return root;
+		if(!(strlen(theVal)==0 || strlen(theK)==0))
+		{
+			if(!isdig)
+				cJSON_AddStringToObject(root,theK,theVal);
+			else
+				cJSON_AddNumberToObject(root,theK,atoi(theVal));
+		}
+	}
+	  return root;
 }
 
 int get_string(uart_port_t uart_num,uint8_t cual,char *donde)
@@ -124,46 +111,26 @@ int get_string(uart_port_t uart_num,uint8_t cual,char *donde)
 }
 
 
-int cmdfromstring(string key)
+int cmdfromstring(char* key)
 {
 	for (int i=0; i <NKEYS; i++)
 	{
-		string s1=string(lookuptable[i]);
-		if(strstr(s1.c_str(),key.c_str())!=NULL)
+		if(strstr(lookuptable[i],key)!=NULL)
 			return i;
 	}
 	return -1;
 }
 
-int kbdCmd(string key)
+int kbdCmd(char *key)
 {
-	string s1,s2,skey;
-	s1=s2=skey="";
-
-//	pprintf("Key %s\n",key.c_str());
-	skey=string(key);
-
-	for(int a=0;a<key.length();a++)
-		skey[a]=toupper(skey[a]);
-
-//	pprintf("Kbdin =%s=\n",skey.c_str());
 
 	for (int i=0; i <MAXCMDSK; i++)
 	{
-		s1=string(cmdds[i].comando);
-
-		for(int a=0;a<s1.length();a++)
-			s2[a]=toupper(s1[a]);
-	//	pprintf("Cmd =%s=\n",s2.c_str());
-
-
-		if(strstr(s2.c_str(),skey.c_str())!=NULL)
+		if(strstr(cmdds[i].comando,key)!=NULL)
 			return i;
-		s1=s2="";
 	}
-	return -1;
+	return ESP_FAIL;
 }
-
 
 int askMeter(cJSON *params) // json should be METER
 {
@@ -175,16 +142,19 @@ int askMeter(cJSON *params) // json should be METER
 		cJSON *jentry= cJSON_GetObjectItem(params,"METER");
 		if(jentry)
 			len=jentry->valueint;
+		else
+			goto alla;
 	}
 	else
 	{
+		alla:
 		pprintf("Meter:");
 		fflush(stdout);
 		len=get_string(UART_NUM_0,10,s1);
 		if(len<=0)
 		{
 			pprintf("\n");
-			return -1;
+			return ESP_FAIL;
 		}
 		len= atoi(s1);
 	}
@@ -193,7 +163,7 @@ int askMeter(cJSON *params) // json should be METER
 		else
 		{
 			pprintf("%sMeter out of range 0-%d%s\n",MAGENTA,MAXDEVS-1,RESETC);
-			return -1;
+			return ESP_FAIL;
 		}
 }
 
@@ -207,16 +177,19 @@ int askMonth(cJSON *params)	//JSON should be MONTH
 		cJSON *jentry= cJSON_GetObjectItem(params,"MONTH");
 		if(jentry)
 			len=jentry->valueint;
+		else
+			goto alla;
 	}
 	else
 	{
+		alla:
 		pprintf("Month(0-11):");
 		fflush(stdout);
 		len=get_string(UART_NUM_0,10,s1);
 		if(len<=0)
 		{
 			pprintf("\n");
-			return -1;
+			return ESP_FAIL;
 		}
 		len= atoi(s1);
 	}
@@ -225,7 +198,7 @@ int askMonth(cJSON *params)	//JSON should be MONTH
 	else
 	{
 		pprintf("%sMonth out of range 0-11%s\n",MAGENTA,RESETC);
-		return -1;
+		return ESP_FAIL;
 	}
 }
 
@@ -239,16 +212,20 @@ int askHour(cJSON *params)	//json should be HOUR
 			cJSON *jentry= cJSON_GetObjectItem(params,"HOUR");
 			if(jentry)
 				len=jentry->valueint;
+			else
+				goto alla;
+
 		}
 	else
 	{
+		alla:
 		pprintf("Hour(0-23):");
 		fflush(stdout);
 		len=get_string(UART_NUM_0,10,s1);
 		if(len<=0)
 		{
 			pprintf("\n");
-			return -1;
+			return ESP_FAIL;
 		}
 		len= atoi(s1);
 	}
@@ -257,7 +234,7 @@ int askHour(cJSON *params)	//json should be HOUR
 	else
 	{
 		pprintf("%sHour out of range 0-23%s\n",MAGENTA,RESETC);
-		return -1;
+		return ESP_FAIL;
 	}
 }
 
@@ -271,16 +248,19 @@ int askDay(cJSON *params,int month)	// JSON should be DAY
 			cJSON *jentry= cJSON_GetObjectItem(params,"DAY");
 			if(jentry)
 				len=jentry->valueint;
+			else
+				goto alla;
 		}
 	else
 	{
+		alla:
 		pprintf("Day(0-%d):",daysInMonth[month]-1);
 		fflush(stdout);
 		len=get_string(UART_NUM_0,10,s1);
 		if(len<=0)
 		{
 			pprintf("\n");
-			return -1;
+			return ESP_FAIL;
 		}
 		len= atoi(s1);
 	}
@@ -289,7 +269,7 @@ int askDay(cJSON *params,int month)	// JSON should be DAY
 		else
 		{
 			pprintf("%sDay out of range 0-%d%s\n",MAGENTA,daysInMonth[month]-1,RESETC);
-			return -1;
+			return ESP_FAIL;
 		}
 }
 
@@ -304,25 +284,26 @@ int askValue(const char *title,cJSON *params)	//JSON should be VAL
 			if(jentry)
 				return(jentry->valueint);
 			else
-				return -1;
+				goto alla;
 		}
 	else
 	{
+		alla:
 		pprintf("%s:",title);
 		fflush(stdout);
 		len=get_string(UART_NUM_0,10,s1);
 		if(len<=0)
 		{
 			pprintf("\n");
-			return -1;
+			return ESP_FAIL;
 		}
 
 		return atoi(s1);
 	}
-	return -1;
+	return ESP_FAIL;
 }
 
-void confStatus(string ss)
+void cmd_confStatus(char * ss)
 {
 	struct tm timeinfo;
 	char strftime_buf[64];
@@ -342,7 +323,7 @@ void confStatus(string ss)
 	}
 
 	time(&now);
-	pprintf("%s====================\nConfiguration Status %s",KBDT,ctime(&now));
+	pprintf("%s====================\nConfiguration Status Heap %d %s",KBDT,esp_get_free_heap_size(),ctime(&now));
 
 	pprintf("ConnMgr %s%s%s Whitelisted %s%d%s",CYAN,theConf.meterConnName,RESETC,GREEN,theConf.reservedCnt,RESETC);
 	pprintf("%sConfiguration RunStatus[%s] Trace %x %sBootCount %d LReset %x @%s",YELLOW,theConf.active?"Run":"Setup",theConf.traceflag,GREEN,theConf.bootcount,theConf.lastResetCode,ctime(&theConf.lastReboot));
@@ -354,7 +335,7 @@ void confStatus(string ss)
 			localtime_r(&theConf.bornDate[a], &timeinfo);
 			strftime(strftime_buf, sizeof(strftime_buf), "%c", &timeinfo);
 			pprintf("%sMeter[%d] Serial %s BPW %d Born %s BornkWh %d %s\n",(a % 2)?CYAN:GREEN,a,theConf.medidor_id[a],theConf.beatsPerKw[a],
-					strftime_buf,theConf.bornKwh[a],theConf.configured[a]==3?"Active":"Inactive");
+					strftime_buf,theConf.bornKwh[a],theConf.configured[a]?"Active":"Inactive");
 			delay(100);
 		}
 	}
@@ -362,8 +343,8 @@ void confStatus(string ss)
 	pprintf("===============\n");
 	pprintf("  MQTT Section\n");
 	pprintf("===============%s\n",RESETC);
-	pprintf("Command Queue %s%s%s\n",GREEN,cmdQueue.c_str(),RESETC);
-	pprintf("Host Queue %s%s%s\n",CYAN,controlQueue.c_str(),RESETC);
+	pprintf("Command Queue %s%s%s\n",GREEN,cmdQueue,RESETC);
+	pprintf("Host Queue %s%s%s\n",CYAN,controlQueue,RESETC);
 
 	if(!shortans)
 	{
@@ -371,20 +352,20 @@ void confStatus(string ss)
 		pprintf("Control Tasks\n");
 		pprintf("===============%s\n",RESETC);
 
-		pprintf("CmdMgr %s @%s",cmdHandle?GREEN "Alive" RESETC:RED "Dead" RESETC,ctime(&mgrTime[CMDMGR]));
-		pprintf("FramMgr %s @%s",framHandle?GREEN "Alive" RESETC:RED "Dead" RESETC,ctime(&mgrTime[FRAMMGR]));
+		pprintf("CmdMgr %s @%s",cmdHandle?GREEN "Alive" RESETC:RED "Dead" RESETC,ctime(&mgrTime[CMDMGRT]));
+		pprintf("FramMgr %s @%s",framHandle?GREEN "Alive" RESETC:RED "Dead" RESETC,ctime(&mgrTime[FRAMMGRT]));
 		delay(100);
-		pprintf("PinMgr %s @%s",pinHandle?GREEN "Alive" RESETC:RED "Dead" RESETC,ctime(&mgrTime[PINMGR]));
-		pprintf("WatchMgr %s @%s",watchHandle?GREEN "Alive" RESETC:RED "Dead" RESETC,ctime(&mgrTime[WATCHMGR]));
+		pprintf("PinMgr %s @%s",pinHandle?GREEN "Alive" RESETC:RED "Dead" RESETC,ctime(&mgrTime[PINMGRT]));
+		pprintf("WatchMgr %s @%s",watchHandle?GREEN "Alive" RESETC:RED "Dead" RESETC,ctime(&mgrTime[WATCHMGRT]));
 		delay(100);
-		pprintf("DisplayMgr %s @%s",displayHandle?GREEN "Alive" RESETC:RED "Dead" RESETC,ctime(&mgrTime[DISPLAYMGR]));
-		pprintf("SubMgr %s @%s",submHandle?GREEN "Alive" RESETC:RED "Dead" RESETC,ctime(&mgrTime[SUBMGR]));
+		pprintf("DisplayMgr %s @%s",displayHandle?GREEN "Alive" RESETC:RED "Dead" RESETC,ctime(&mgrTime[DISPLAYMGRT]));
+		pprintf("SubMgr %s @%s",submHandle?GREEN "Alive" RESETC:RED "Dead" RESETC,ctime(&mgrTime[SUBMGRT]));
 	}
 	pprintf("====================%s\n",KBDT);
 
 }
 
-void meterStatus(string ss)
+void cmd_meterStatus(char * ss)
 {
 	uint32_t valr;
 	cJSON *params=NULL;
@@ -394,6 +375,8 @@ void meterStatus(string ss)
 
 	pprintf("%s============\nMeter status\n",KBDT);
 	meter=askMeter(params);
+	if(params)
+		cJSON_Delete(params);
 	if(meter<0||meter>MAXDEVS-1)
 	{
 		pprintf("Meter %d out of range\n",meter);
@@ -439,10 +422,11 @@ void meterStatus(string ss)
 	}
 }
 
-void meterTest(string ss)
+void cmd_meterTest(char * ss)
 {
 	cJSON *params=NULL;
 	int val=0,meter=0;
+	uint32_t valr;
 
 	params=makeJson(ss);
 
@@ -450,17 +434,18 @@ void meterTest(string ss)
 	if(meter<0||meter>MAXDEVS-1)
 	{
 		pprintf("Meter %d out of range\n",meter);
+		if(params)
+			cJSON_Delete(params);
 		return;
 	}
-		val=askValue((char*)"Value",params);
 
+	val=askValue((char*)"Value",params);
+
+	if(params)
+		cJSON_Delete(params);
 
 	pprintf("%s================\nTest Write Meter\n",KBDT);
-
-
 	pprintf("================%s\n\n",RESETC);
-
-	uint32_t valr;
 
 	if(xSemaphoreTake(framSem, portMAX_DELAY/  portTICK_RATE_MS))
 	{
@@ -501,19 +486,19 @@ void meterTest(string ss)
 	}
 }
 
-void webReset(string ss)
+void cmd_webReset(char * ss)
 {
 	theConf.active=!theConf.active;
 	pprintf("%sWeb %s\n",KBDT,theConf.active?"RunConf":"SetupConf");
 	pprintf("===========%s\n",KBDT);
-	if(theConf.active)
-		memset(theConf.configured,3,sizeof(theConf.configured));
-	else
-		memset(theConf.configured,0,sizeof(theConf.configured));
+//	if(theConf.active)
+//		memset(theConf.configured,3,sizeof(theConf.configured));
+//	else
+//		memset(theConf.configured,0,sizeof(theConf.configured));
 	write_to_flash();
 }
 
-void meterCount(string ss)
+void cmd_meterCount(char * ss)
 {
 	time_t timeH;
 
@@ -533,7 +518,7 @@ void meterCount(string ss)
 
 }
 
-void dumpCore(string ss)
+void cmd_dumpCore(char * ss)
 {
 
 	u8 *p;
@@ -543,10 +528,10 @@ void dumpCore(string ss)
 	*p=0;
 }
 
-void formatFram(string ss)
+void cmd_formatFram(char * ss)
 {
 	cJSON *params=NULL;
-	int val=0;
+	int val=0,val1=0;
 
 	params=makeJson(ss);
 
@@ -555,54 +540,76 @@ void formatFram(string ss)
 		cJSON *jval= cJSON_GetObjectItem(params,"VAL");
 		if(jval)
 			val=jval->valueint;
+		else
+			goto alla;
 		cJSON_Delete(params);
+		params=NULL;
+
 	}
 	else
 	{
+		alla:
+		if(params)
+			cJSON_Delete(params);
 
 		pprintf("%s===========\nFormat FRAM\n",KBDT);
 
 		val=askValue((char*)"Init value",params);
 		pprintf("===========%s\n\n",KBDT);
+		val1=askValue((char*)"Erase Conf?",params);
+
 	}
+
 	if(val<0)
 		return;
 
 	fram.format(val,NULL,100,true);
 	pprintf("Format done...rebooting\n");
+	uint32_t cent=0x12345678;
 
-	memset(&theConf.medidor_id,0,sizeof(theConf.medidor_id));
-	memset(&theConf.beatsPerKw,0,sizeof(theConf.beatsPerKw));
-	memset(&theConf.configured,0,sizeof(theConf.configured));
-	memset(&theConf.bornKwh ,0,sizeof(theConf.bornKwh));
-	memset(&theConf.bornDate ,0,sizeof(theConf.bornDate));
+	fram.write_centinel(cent);
 
+	if(val1)
+	{
+		bzero(&theConf.medidor_id,sizeof(theConf.medidor_id));
+		bzero(&theConf.beatsPerKw,sizeof(theConf.beatsPerKw));
+		bzero(&theConf.configured,sizeof(theConf.configured));
+		bzero(&theConf.bornKwh, sizeof(theConf.bornKwh));
+		bzero(&theConf.bornDate ,sizeof(theConf.bornDate));
+	}
 	write_to_flash();
 
 	esp_restart();
-//	for(int a=0;a<MAXDEVS;a++)
-//		load_from_fram(a);
 }
 
 
-void readFram(string ss)
+void cmd_readFram(char * ss)
 {
 	cJSON *params=NULL;
 	int framAddress=0,fueron=0;
-	params=makeJson(ss);
 
+	params=makeJson(ss);
 	if(params)
 	{
 		cJSON *jmeter= cJSON_GetObjectItem(params,"ADDR");
 		if(jmeter)
 			framAddress=jmeter->valueint;
+		else
+			goto alla;
 		cJSON *jval= cJSON_GetObjectItem(params,"COUNT");
 		if(jval)
 			fueron=jval->valueint;
+		else
+			goto alla;
 		cJSON_Delete(params);
+		params=NULL;
 	}
 	else
 	{
+		alla:
+		if(params)
+			cJSON_Delete(params);
+
 		pprintf("%s=========\nRead FRAM\n",KBDT);
 		framAddress=askValue((char*)"Address",params);
 		fueron=askValue((char*)"Count",params);
@@ -618,7 +625,7 @@ void readFram(string ss)
 
 }
 
-void writeFram(string ss)
+void cmd_writeFram(char * ss)
 {
 	cJSON *params=NULL;
 	int fueron=0,framAddress=0;
@@ -629,13 +636,21 @@ void writeFram(string ss)
 		cJSON *jmeter= cJSON_GetObjectItem(params,"ADDR");
 		if(jmeter)
 			framAddress=jmeter->valueint;
+		else
+			goto alla;
 		cJSON *jval= cJSON_GetObjectItem(params,"VAL");
 		if(jval)
 			fueron=jval->valueint;
+		else
+			goto alla;
 		cJSON_Delete(params);
+		params=NULL;
 	}
 	else
 	{
+		alla:
+		if(params)
+			cJSON_Delete(params);
 		pprintf("%s==========\nWrite FRAM\n",KBDT);
 		framAddress=askValue((char*)"Address",params);
 		fueron=askValue((char*)"Value",params);
@@ -648,7 +663,7 @@ void writeFram(string ss)
 
 }
 
-void logLevel(string ss)
+void cmd_logLevel(char * ss)
 {
 	cJSON *params=NULL;
 	char s1[10];
@@ -660,10 +675,16 @@ void logLevel(string ss)
 		cJSON *jmeter= cJSON_GetObjectItem(params,"LEVEL");
 		if(jmeter)
 			s1[0]=jmeter->valuestring[0];
+		else
+			goto alla;
 		cJSON_Delete(params);
+		params=NULL;
 	}
 	else
 	{
+		alla:
+		if(params)
+			cJSON_Delete(params);
 
 		pprintf("%sLOG level:(N)one (I)nfo (E)rror (V)erbose (W)arning:",KBDT);
 		fflush(stdout);
@@ -696,11 +717,14 @@ void logLevel(string ss)
 			case 'W':
 					esp_log_level_set("*", ESP_LOG_WARN);
 					break;
+			default:
+				pprintf("No Level defined\n");
+				break;
 		}
 
 }
 
-void framDays(string ss)
+void cmd_framDays(char * ss)
 {
 	uint16_t valor;
 	uint32_t tots=0;
@@ -714,13 +738,21 @@ void framDays(string ss)
 		cJSON *jmeter= cJSON_GetObjectItem(params,"METER");
 		if(jmeter)
 			meter=jmeter->valueint;
+		else
+			goto alla;
 		cJSON *jval= cJSON_GetObjectItem(params,"MONTH");
 		if(jval)
 			month=jval->valueint;
+		else
+			goto alla;
 		cJSON_Delete(params);
+		params=NULL;
 	}
 	else
 	{
+		alla:
+		if(params)
+			cJSON_Delete(params);
 
 		pprintf("%s==================\nFram Days in Month\n",KBDT);
 		meter=askMeter(params);
@@ -753,7 +785,7 @@ void framDays(string ss)
 
 }
 
-void framHours(string ss)
+void cmd_framHours(char * ss)
 {
 	uint8_t valor;
 	uint32_t tots=0;
@@ -767,16 +799,27 @@ void framHours(string ss)
 		cJSON *jmeter= cJSON_GetObjectItem(params,"METER");
 		if(jmeter)
 			meter=jmeter->valueint;
+		else
+			goto alla;
 		cJSON *jval= cJSON_GetObjectItem(params,"MONTH");
 		if(jval)
 			month=jval->valueint;
+		else
+			goto alla;
 		cJSON *jday= cJSON_GetObjectItem(params,"DAY");
 		if(jday)
 			dia=jval->valueint;
+		else
+			goto alla;
 		cJSON_Delete(params);
+		params=NULL;
 	}
 	else
 	{
+		alla:
+		if(params)
+			cJSON_Delete(params);
+
 		pprintf("%s=================\nFram Hours in Day\n",KBDT);
 
 		meter=askMeter(params);
@@ -812,7 +855,7 @@ void framHours(string ss)
 	}
 }
 
-void framMonthsHours(string ss)
+void cmd_framMonthsHours(char * ss)
 {
 	uint8_t valor;
 	uint32_t tots=0;
@@ -827,14 +870,23 @@ void framMonthsHours(string ss)
 		cJSON *jmeter= cJSON_GetObjectItem(params,"METER");
 		if(jmeter)
 			meter=jmeter->valueint;
+		else
+			goto alla;
 		cJSON *jval= cJSON_GetObjectItem(params,"MONTH");
 		if(jval)
 			month=jval->valueint;
+		else
+			goto alla;
 
 		cJSON_Delete(params);
+		params=NULL;
 	}
 	else
 	{
+		alla:
+		if(params)
+			cJSON_Delete(params);
+
 		pprintf("%s=================\nFram Hours in Month\n",KBDT);
 		meter=askMeter(params);
 		if(meter<0)
@@ -872,7 +924,7 @@ void framMonthsHours(string ss)
 	}
 }
 
-void framHourSearch(string ss)
+void cmd_framHourSearch(char * ss)
 {
 	uint8_t valor;
 	cJSON *params=NULL;
@@ -885,20 +937,33 @@ void framHourSearch(string ss)
 		cJSON *jmeter= cJSON_GetObjectItem(params,"METER");
 		if(jmeter)
 			meter=jmeter->valueint;
+		else
+			goto alla;
 		cJSON *jval= cJSON_GetObjectItem(params,"MONTH");
 		if(jval)
 			month=jval->valueint;
+		else
+			goto alla;
 		jval= cJSON_GetObjectItem(params,"DAY");
 		if(jval)
 			dia=jval->valueint;
+		else
+			goto alla;
 		jval= cJSON_GetObjectItem(params,"HOUR");
 		if(jval)
 			hora=jval->valueint;
+		else
+			goto alla;
 
 		cJSON_Delete(params);
+		params=NULL;
 	}
 	else
 	{
+		alla:
+		if(params)
+			cJSON_Delete(params);
+
 		pprintf("%s================\nFram Hour Search\n",KBDT);
 
 		meter=askMeter(params);
@@ -934,7 +999,7 @@ void framHourSearch(string ss)
 }
 
 
-void framDaySearch(string ss)
+void cmd_framDaySearch(char * ss)
 {
 	uint16_t valor;
 	cJSON *params=NULL;
@@ -947,16 +1012,27 @@ void framDaySearch(string ss)
 		cJSON *jmeter= cJSON_GetObjectItem(params,"METER");
 		if(jmeter)
 			meter=jmeter->valueint;
+		else
+			goto alla;
 		cJSON *jval= cJSON_GetObjectItem(params,"MONTH");
 		if(jval)
 			month=jval->valueint;
+		else
+			goto alla;
 		jval= cJSON_GetObjectItem(params,"DAY");
 		if(jval)
 			dia=jval->valueint;
+		else
+			goto alla;
 		cJSON_Delete(params);
+		params=NULL;
 	}
 	else
 	{
+		alla:
+		if(params)
+			cJSON_Delete(params);
+
 		pprintf("%s===============\nFram Day Search\n",KBDT);
 
 		meter=askMeter(params);
@@ -989,7 +1065,7 @@ void framDaySearch(string ss)
 
 }
 
-void framMonthSearch(string ss)
+void cmd_framMonthSearch(char * ss)
 {
 	uint16_t valor;
 	cJSON *params=NULL;
@@ -1002,13 +1078,22 @@ void framMonthSearch(string ss)
 		cJSON *jmeter= cJSON_GetObjectItem(params,"METER");
 		if(jmeter)
 			meter=jmeter->valueint;
+		else
+			goto alla;
 		cJSON *jval= cJSON_GetObjectItem(params,"MONTH");
 		if(jval)
 			month=jval->valueint;
+		else
+			goto alla;
 		cJSON_Delete(params);
+		params=NULL;
 	}
 	else
 	{
+		alla:
+		if(params)
+			cJSON_Delete(params);
+
 		pprintf("%s=================\nFram Month Search\n",KBDT);
 
 		meter=askMeter(params);
@@ -1033,7 +1118,7 @@ void framMonthSearch(string ss)
 	pprintf("\n=================%s\n",KBDT);
 }
 
-void framMonths(string ss)
+void cmd_framMonths(char * ss)
 {
 	uint16_t valor;
 	uint32_t tots=0;
@@ -1047,10 +1132,17 @@ void framMonths(string ss)
 		cJSON *jmeter= cJSON_GetObjectItem(params,"METER");
 		if(jmeter)
 			meter=jmeter->valueint;
+		else
+			goto alla;
 		cJSON_Delete(params);
+		params=NULL;
 	}
 	else
 	{
+		alla:
+		if(params)
+			cJSON_Delete(params);
+
 		pprintf("%s=================\nFram Month All\n",KBDT);
 		meter=askMeter(params);
 	}
@@ -1081,7 +1173,7 @@ void framMonths(string ss)
 	pprintf("\n");
 }
 
-void flushFram(string ss)
+void cmd_flushFram(char * ss)
 {
 	pprintf("%s=============\nFlushing Fram\n",KBDT);
 	for(int a=0;a<MAXDEVS;a++)
@@ -1090,7 +1182,7 @@ void flushFram(string ss)
 	pprintf("=============%s\n",KBDT);
 }
 
-void msgCount(string ss)
+void cmd_msgCount(char * ss)
 {
 	pprintf("%s=============\nMessage Count\n",KBDT);
 	for (int a=0;a<MAXDEVS;a++)
@@ -1101,11 +1193,9 @@ void msgCount(string ss)
 
 }
 
-void traceFlags(string sss)
+void cmd_traceFlags(char * sss)
 {
 	char s1[60],s2[20];
-	string ss;
-	std::locale loc;
 
 	pprintf("%sTrace Flags:%s",KBDT,CYAN);
 
@@ -1114,7 +1204,7 @@ void traceFlags(string sss)
 		pprintf("%s ",lookuptable[a]);
 	pprintf("\n");
 
-	if(sss=="")
+	if(strlen(sss)==0)
 	{
 		pprintf("%s\nEnter TRACE FLAG:%s",RED,RESETC);
 		fflush(stdout);
@@ -1128,52 +1218,49 @@ void traceFlags(string sss)
 			return;
 	}
 	else
-		strcpy(s2,sss.c_str());
-
+		strcpy(s2,sss);
 
 	  char *ch;
 	  ch = strtok(s2, " ");
 	  while (ch != NULL)
 	  {
-		  ss=string(ch);
-		//  pprintf("[%s]\n", ch);
-		  ch = strtok(NULL, " ");
 
-		if(strcmp(ss.c_str(),"NONE")==0)
+		if(strcmp(ch,"NONE")==0)
 		{
 			theConf.traceflag=0;
-			write_to_flash();
-			return;
+			break;
 		}
 
-		if(strcmp(ss.c_str(),"ALL")==0)
+		if(strcmp(ch,"ALL")==0)
 		{
 			theConf.traceflag=0xFFFF;
-			write_to_flash();
-			return;
+			break;
 		}
 
-		int cualf=cmdfromstring((char*)ss.c_str());
+		int cualf=cmdfromstring(ch);
 		if(cualf<0)
 		{
 			pprintf("Invalid Debug Option\n");
 			return;
 		}
+
 		if(cualf<NKEYS/2 )
 		{
 			pprintf("%s%s+ ",GREEN,lookuptable[cualf]);
 			theConf.traceflag |= 1<<cualf;
-			write_to_flash();
+			break;
 		}
 		else
 		{
 			cualf=cualf-NKEYS/2;
 			pprintf("%s%s- ",RED,lookuptable[cualf]);
 			theConf.traceflag ^= (1<<cualf);
-			write_to_flash();
+			break;
 		}
+		  ch = strtok(NULL, " ");
 
 	  }
+	  write_to_flash();
 	  pprintf("%s\n",KBDT);
 }
 
@@ -1187,7 +1274,7 @@ bool compareCmd(cmdRecord_t r1, cmdRecord_t r2)
 		return false;
 }
 
-void showHelp(string ss)
+void cmd_showHelp(char * ss)
 {
 	cJSON *params=NULL;
 	bool longf=false;
@@ -1199,6 +1286,7 @@ void showHelp(string ss)
 		if(jmeter)
 			longf=true;
 		cJSON_Delete(params);
+		params=NULL;
 	}
     int n = sizeof(cmdds)/sizeof(cmdds[0]);
 
@@ -1211,24 +1299,24 @@ void showHelp(string ss)
 		{
 			pprintf("%s%s ",CYAN,cmdds[a].comando);
 			if (longf)
-				pprintf("(%s)\n",cmdds[a].help.c_str());
+				pprintf("(%s)\n",cmdds[a].help);
 		}
 		else
 		{
 			pprintf("%s%s ",GREEN,cmdds[a].comando);
 			if (longf)
-				pprintf("(%s)\n",cmdds[a].help.c_str());
+				pprintf("(%s)\n",cmdds[a].help);
 		}
 	}
 	pprintf("\n======CMDS======%s\n",RESETC);
 }
 
-static void printControllers(string ss)
+static void cmd_printControllers(char * ss)
 {
 	char str2[INET_ADDRSTRLEN];
 	int antes,son;
 	cJSON *params=NULL;
-	bool shortans=true;
+	bool shortans=true,trk;
 
 	params=makeJson(ss);
 
@@ -1238,6 +1326,7 @@ static void printControllers(string ss)
 		if(jmeter)
 			shortans=false;
 		cJSON_Delete(params);
+		params=NULL;
 	}
 
 	pprintf("%sListing %d Controllers\n",KBDT,theConf.reservedCnt);
@@ -1257,13 +1346,13 @@ static void printControllers(string ss)
 
 	for(int a=0;a<theConf.reservedCnt;a++)
 	{
-
+		trk=(theConf.macTrace & 1<<a);
 		time_t t = time(NULL);
 		struct tm * p = localtime(&t);
 		strftime(tempb, 100, "%D %T ", p);
 
 		inet_ntop( AF_INET,(in_addr*)&losMacs[a].theIp, str2, INET_ADDRSTRLEN );
-		pprintf("%sSlot[%d]%s=%06x %sIP=%s %sState(#%d)%s%s%s(%s) GTask=%s%s %sHW=%s %sBorn=%s%s %sSeen%s@%s",GREEN,a,CYAN,theConf.reservedMacs[a],YELLOW, str2,WHITEC,
+		pprintf("%sSlot[%d]%s=%06x%s %sIP=%s %sState(#%d)%s%s%s(%s) GTask=%s%s %sHW=%s %sBorn=%s%s %sSeen%s@%s",GREEN,a,CYAN,theConf.reservedMacs[a],trk?"(TRK)":"",YELLOW, str2,WHITEC,
 				losMacs[a].msgCount,GREEN,stateName[losMacs[a].dState],CYAN,losMacs[a].report==REPORTED? RED "Reported" RESETC:GREEN "OK" RESETC,
 				losMacs[a].theHandle?LYELLOW "Alive":MAGENTA "Dead",RESETC,GRAY,losMacs[a].hwState?LRED "FAIL":LGREEN "OK",LYELLOW,RESETC,tempb,YELLOW,RESETC,ctime(&losMacs[a].lastUpdate));
 		if(!shortans)
@@ -1296,13 +1385,13 @@ static void printControllers(string ss)
 	pprintf("%s\n",KBDT);
 }
 
-static void sendTelemetry(string ss)
+static void cmd_sendTelemetry(char * ss)
 {
 	pprintf("%sSend Telemetry\n",KBDT);
 	xTaskCreate(&connMgr,"cnmgr",4096,(void*)123, 4, NULL);
 }
 
-static void tariffs(string ss)
+static void cmd_tariffs(char * ss)
 {
 	const char *title="YearDay:";
 	int err=0;
@@ -1313,6 +1402,9 @@ static void tariffs(string ss)
 	int cuando=askValue(title,params);
 	if(cuando<0)
 		return;
+
+	if(params)
+		cJSON_Delete(params);
 
 	err=fram.read_tarif_day(cuando,(u8*)&tarifasDia);
 	if(err!=0)
@@ -1326,19 +1418,19 @@ static void tariffs(string ss)
 			pprintf("LoadTar Error %d reading Tariffs day %d...recovering from Host\n",err,yearDay);
 }
 
-static void firmware(string ss)
+static void cmd_firmware(char * ss)
 {
 	xTaskCreate(&firmUpdate,"U571",10240,NULL, 5, NULL);
 
 }
 
-void eraseTariff(string ss)
+void cmd_eraseTariff(char * ss)
 {
 	fram.erase_tarif();
 	pprintf("%sTariffs erased\n",KBDT);
 }
 
-static void sendDelay(string ss)
+static void cmd_sendDelay(char * ss)
 {
 	char s1[20];
 
@@ -1349,10 +1441,17 @@ static void sendDelay(string ss)
 		cJSON *del= cJSON_GetObjectItem(params,"DELAY");
 		if(del)
 			theConf.msgTimeOut=del->valueint;
+		else
+			goto alla;
 		cJSON_Delete(params);
+		params=NULL;
 	}
 	else
 	{
+		alla:
+		if(params)
+			cJSON_Delete(params);
+
 		pprintf("Delay(%d):",theConf.msgTimeOut);
 		fflush(stdout);
 		int fueron=get_string(UART_NUM_0,10,s1);
@@ -1364,7 +1463,7 @@ static void sendDelay(string ss)
 	write_to_flash();
 }
 
-static void clearWL(string ss)
+static void cmd_clearWL(char * ss)
 {
 	char s1[20];
 	pprintf("%sAre you sure clear Whitelist?:%s",MAGENTA,RESETC);
@@ -1378,7 +1477,7 @@ static void clearWL(string ss)
 	pprintf("White List Cleared\n");
 }
 
-static void WhiteList(string ss)
+void cmd_WhiteList(char * ss)
 {
 	char s1[20];
 	int pos=-1;
@@ -1390,10 +1489,17 @@ static void WhiteList(string ss)
 		cJSON *jmeter= cJSON_GetObjectItem(params,"POS");
 		if(jmeter)
 			pos=jmeter->valueint;
+		else
+			goto alla;
 		cJSON_Delete(params);
+		params=NULL;
 	}
 	else
 	{
+		alla:
+		if(params)
+			cJSON_Delete(params);
+
 		pprintf("%sPosition to Delete:%s",MAGENTA,RESETC);
 		fflush(stdout);
 		pos=get_string(UART_NUM_0,10,s1);
@@ -1415,7 +1521,7 @@ static void WhiteList(string ss)
 	pprintf("WhiteList Entry %d Cleared Count %d\n",pos,theConf.reservedCnt);
 }
 
-static void zeroKeys(string ss)
+static void cmd_zeroKeys(char * ss)
 {
 	char s1[10];
 	int len;
@@ -1435,7 +1541,7 @@ static void zeroKeys(string ss)
 	pprintf("Keys erased\n");
 }
 
-static void mqttDelay(string ss)
+static void cmd_mqttDelay(char * ss)
 {
 	char s1[10];
 	int pos;
@@ -1447,10 +1553,17 @@ static void mqttDelay(string ss)
 		cJSON *dly= cJSON_GetObjectItem(params,"DELAY");
 		if(dly)
 			MQTTDelay=dly->valueint;
+		else
+			goto alla;
 		cJSON_Delete(params);
+		params=NULL;
 	}
 	else
 	{
+		alla:
+		if(params)
+			cJSON_Delete(params);
+
 		pprintf("%sMqtt Delay(%d):%s",MAGENTA,MQTTDelay,RESETC);
 		fflush(stdout);
 		pos=get_string(UART_NUM_0,10,s1);
@@ -1460,7 +1573,7 @@ static void mqttDelay(string ss)
 	}
 }
 
-static void cryptoOption(string ss)
+static void cmd_cryptoOption(char * ss)
 {
 	char s1[10];
 	int pos;
@@ -1472,10 +1585,16 @@ static void cryptoOption(string ss)
 		cJSON *dly= cJSON_GetObjectItem(params,"MODE");
 		if(dly)
 			theConf.crypt=dly->valueint;
+		else
+			goto alla;
 		cJSON_Delete(params);
+		params=NULL;
 	}
 	else
 	{
+		alla:
+		if(params)
+			cJSON_Delete(params);
 		pprintf("%sCrypto(%d):%s",MAGENTA,theConf.crypt,RESETC);
 		fflush(stdout);
 		pos=get_string(UART_NUM_0,10,s1);
@@ -1486,102 +1605,102 @@ static void cryptoOption(string ss)
 	write_to_flash();
 }
 
-static void telPause(string ss)
+static void cmd_macTrack(char * ss)
 {
 	char s1[10];
-	int pos,pauseTel;
-
-	pauseTel=theConf.pause & 1<<PTEL;
+	int pos,len;
 
 	cJSON *params=makeJson(ss);
 
 	if(params)
 	{
-		cJSON *dly= cJSON_GetObjectItem(params,"MODE");
+		cJSON *dly= cJSON_GetObjectItem(params,"MAC");
 		if(dly)
-			pauseTel=dly->valueint;
+			pos=dly->valueint;
+		else
+			goto alla;
 		cJSON_Delete(params);
+		params=NULL;
 	}
 	else
 	{
-		pprintf("%sPause Telemetry(%d):%s",MAGENTA,pauseTel?1:0,RESETC);
+		alla:
+		if(params)
+			cJSON_Delete(params);
+
+		pprintf("%sMacTrace(%1x):%s",MAGENTA,theConf.macTrace,RESETC);
 		fflush(stdout);
-		pos=get_string(UART_NUM_0,10,s1);
-		if(pos<=0)
+		len=get_string(UART_NUM_0,10,s1);
+		if(len<=0)
 			return;
-		pauseTel=atoi(s1);
+		pos=atoi(s1);
+		if(abs(pos)<MAXSTA)
+			pprintf("Tracking MAC %06x\n",losMacs[abs(pos)].macAdd);
 	}
-	if(pauseTel)
-		theConf.pause |= 1<<PTEL;
+
+	if(pos>=0)
+	{
+		if(pos<MAXSTA)
+			theConf.macTrace |= 1<<pos;
+		else
+			theConf.macTrace=0xFFFF;
+	}
 	else
-		theConf.pause  &= ~(1 << PTEL);
+	{
+		if(abs(pos)>MAXSTA)
+			theConf.macTrace=0;
+		else
+			theConf.macTrace  &= ~(1 << (abs(pos)));
+	}
 	write_to_flash();
+
 }
 
-static void statPause(string ss)
+static void cmd_readTemp(char * ss)
+{
+	theTemperature=DS_get_temp(ds18b20_info);
+	pprintf("Temp %f\n",theTemperature);
+}
+
+static void cmd_setSlice(char * ss)
 {
 	char s1[10];
-	int pos,pauseStatus;
-	pauseStatus=theConf.pause & 1<<PSTAT;
+	int pos,val;
 
 	cJSON *params=makeJson(ss);
 
 	if(params)
 	{
-		cJSON *dly= cJSON_GetObjectItem(params,"MODE");
+		cJSON *dly= cJSON_GetObjectItem(params,"NUM");
 		if(dly)
-			pauseStatus=dly->valueint;
+			val=dly->valueint;
+		else
+			goto alla;
 		cJSON_Delete(params);
+		params=NULL;
 	}
 	else
 	{
-		pprintf("%sPause Status(%d):%s",MAGENTA,pauseStatus?1:0,RESETC);
+		alla:
+		if(params)
+			cJSON_Delete(params);
+
+		pprintf("%sNum os Slices(%d):%s",MAGENTA,theConf.numSlices,RESETC);
 		fflush(stdout);
 		pos=get_string(UART_NUM_0,10,s1);
 		if(pos<=0)
 			return;
-		pauseStatus=atoi(s1);
+		val=atoi(s1);
 	}
-	if(pauseStatus)
-		theConf.pause |= 1<<PSTAT;
-	else
-		theConf.pause  &= ~(1 << PSTAT);
-	write_to_flash();
-}
-
-static void cmdPause(string ss)
-{
-	char s1[10];
-	int pos,pauseCmd;
-	pauseCmd=theConf.pause & 1<<PCMD;
-
-	cJSON *params=makeJson(ss);
-
-	if(params)
-	{
-		cJSON *dly= cJSON_GetObjectItem(params,"MODE");
-		if(dly)
-			pauseCmd=dly->valueint;
-		cJSON_Delete(params);
-	}
-	else
-	{
-		pprintf("%sPause Cmd(%d):%s",MAGENTA,pauseCmd?1:0,RESETC);
-		fflush(stdout);
-		pos=get_string(UART_NUM_0,10,s1);
-		if(pos<=0)
-			return;
-		pauseCmd=atoi(s1);
-	}
-	if(pauseCmd)
-		theConf.pause |= 1<<PCMD;
-	else
-		theConf.pause  &= ~(1 << PCMD);
+	theConf.numSlices=val;
 
 	write_to_flash();
+	pprintf("Restarting\n");
+	delay(1000);
+	esp_restart();
 }
 
-static void cmdSession(string ss)
+static void cmd_cmdSession(char * ss)
 {
 	char s1[10];
 	int pos;
@@ -1593,10 +1712,17 @@ static void cmdSession(string ss)
 		cJSON *dly= cJSON_GetObjectItem(params,"MODE");
 		if(dly)
 			sessionf=dly->valueint;
+		else
+			goto alla;
 		cJSON_Delete(params);
+		params=NULL;
 	}
 	else
 	{
+		alla:
+		if(params)
+			cJSON_Delete(params);
+
 		pprintf("%sSession On/OFF(%d):%s",MAGENTA,sessionf,RESETC);
 		fflush(stdout);
 		pos=get_string(UART_NUM_0,10,s1);
@@ -1609,7 +1735,7 @@ static void cmdSession(string ss)
 
 
 #ifdef HEAPSAMPLE
-static void showHeap(string ss)
+static void cmd_showHeap(char * ss)
 {
 	int van=vanHeap;
 
@@ -1626,52 +1752,113 @@ static void showHeap(string ss)
 
 void init_kbd_commands()
 {
-	strcpy((char*)&cmdds[0].comando,"Config");			cmdds[ 0].code=confStatus;			cmdds[0].help="SHORT";
-	strcpy((char*)&cmdds[1].comando,"WebReset");		cmdds[ 1].code=webReset;			cmdds[1].help="WebReset";
-	strcpy((char*)&cmdds[2].comando,"Controllers");		cmdds[ 2].code=printControllers;	cmdds[2].help="LONG";
-	strcpy((char*)&cmdds[3].comando,"MeterStat");		cmdds[ 3].code=meterStatus;			cmdds[3].help="METER";
-	strcpy((char*)&cmdds[4].comando,"EraseTariff");		cmdds[ 4].code=eraseTariff;			cmdds[4].help="EraseTariff";
-	strcpy((char*)&cmdds[5].comando,"MeterCount");		cmdds[ 5].code=meterCount;			cmdds[5].help="MeterCount";
-	strcpy((char*)&cmdds[6].comando,"DumpCore");		cmdds[ 6].code=dumpCore;			cmdds[6].help="DumpCore";
-	strcpy((char*)&cmdds[7].comando,"FormatFram");		cmdds[ 7].code=formatFram;			cmdds[7].help="VAL";
-	strcpy((char*)&cmdds[8].comando,"ReadFram");		cmdds[ 8].code=readFram;			cmdds[8].help="COUNT";
-	strcpy((char*)&cmdds[9].comando,"WriteFram");		cmdds[ 9].code=writeFram;			cmdds[9].help="ADDR VAL";
-	strcpy((char*)&cmdds[10].comando,"LogLevel");		cmdds[10].code=logLevel;			cmdds[10].help="None Info Err Verb Warn";
-	strcpy((char*)&cmdds[11].comando,"FramDaysAll");	cmdds[11].code=framDays;			cmdds[11].help="METER MONTH";
-	strcpy((char*)&cmdds[12].comando,"FramHour");		cmdds[12].code=framHourSearch;		cmdds[12].help="METER MONTH DAY HOUR";
-	strcpy((char*)&cmdds[13].comando,"FramDay");		cmdds[13].code=framDaySearch;		cmdds[13].help="METER MONTH";
-	strcpy((char*)&cmdds[14].comando,"FramMonth");		cmdds[14].code=framMonthSearch;		cmdds[14].help="METER MONTH";
-	strcpy((char*)&cmdds[15].comando,"Flush");			cmdds[15].code=flushFram;			cmdds[15].help="Flush to Fram";
-	strcpy((char*)&cmdds[16].comando,"MessageCount");	cmdds[16].code=msgCount;			cmdds[16].help="Messasge Count";
-	strcpy((char*)&cmdds[17].comando,"Help");			cmdds[17].code=showHelp;			cmdds[17].help="LONG";
-	strcpy((char*)&cmdds[18].comando,"Trace");			cmdds[18].code=traceFlags;
-	cmdds[18].help="NONE ALL BOOTD WIFID MQTTD PUBSUBD OTAD CMDD WEBD GEND MQTTT FRMCMD INTD FRAMD MSGD TIMED SIMD HOSTD";
-	strcpy((char*)&cmdds[19].comando,"FramMonthsAll");	cmdds[19].code=framMonths;			cmdds[19].help="METER";
-	strcpy((char*)&cmdds[20].comando,"Telemetry");		cmdds[20].code=sendTelemetry;		cmdds[20].help="Send Telemetry";
-	strcpy((char*)&cmdds[21].comando,"Tariff");			cmdds[21].code=tariffs;				cmdds[21].help="Get Tariffs";
-	strcpy((char*)&cmdds[22].comando,"Firmware");		cmdds[22].code=firmware;			cmdds[22].help="Load Firmaware";
-	strcpy((char*)&cmdds[23].comando,"SendDelay");		cmdds[23].code=sendDelay;			cmdds[23].help="Status check TimeOut";
-	strcpy((char*)&cmdds[24].comando,"ClearWL");		cmdds[24].code=clearWL;				cmdds[24].help="Clear Macs White list";
-	strcpy((char*)&cmdds[25].comando,"WhiteList");		cmdds[25].code=WhiteList;			cmdds[25].help="POS";
-	strcpy((char*)&cmdds[26].comando,"ZeroK");			cmdds[26].code=zeroKeys;			cmdds[26].help="ZKeys";
-	strcpy((char*)&cmdds[27].comando,"MQTT");			cmdds[27].code=mqttDelay;			cmdds[27].help="Mqtt Delay";
-	strcpy((char*)&cmdds[28].comando,"Crypto");			cmdds[28].code=cryptoOption;		cmdds[28].help="SetCrypt";
-	strcpy((char*)&cmdds[29].comando,"TelPause");		cmdds[29].code=telPause;			cmdds[29].help="Pause Telemetry";
-	strcpy((char*)&cmdds[30].comando,"StatPause");		cmdds[30].code=statPause;			cmdds[30].help="Pause Status";
-	strcpy((char*)&cmdds[31].comando,"CmdPause");		cmdds[31].code=cmdPause;			cmdds[31].help="Pause Cmd";
-	strcpy((char*)&cmdds[32].comando,"Session");		cmdds[32].code=cmdSession;			cmdds[32].help="SetSession";
+	int x=0;
+//just add a new cmd by using same expression and changing  comando, code and help mind the last [xx++] in the line and increasing NKEYS in defines.h
+
+	strcpy((char*)&cmdds[x].comando,"ClearWL");			cmdds[x].code=cmd_clearWL;				strcpy(cmdds[x++].help,"Clear Macs White list");
+	strcpy((char*)&cmdds[x].comando,"Config");			cmdds[x].code=cmd_confStatus;			strcpy(cmdds[x++].help,"SHORT");
+	strcpy((char*)&cmdds[x].comando,"Controllers");		cmdds[x].code=cmd_printControllers;		strcpy(cmdds[x++].help,"LONG");
+	strcpy((char*)&cmdds[x].comando,"Crypto");			cmdds[x].code=cmd_cryptoOption;			strcpy(cmdds[x++].help,"SetCrypt");
+	strcpy((char*)&cmdds[x].comando,"DumpCore");		cmdds[x].code=cmd_dumpCore;				strcpy(cmdds[x++].help,"DumpCore");
+	strcpy((char*)&cmdds[x].comando,"EraseTariff");		cmdds[x].code=cmd_eraseTariff;			strcpy(cmdds[x++].help,"EraseTariff");
+	strcpy((char*)&cmdds[x].comando,"Firmware");		cmdds[x].code=cmd_firmware;				strcpy(cmdds[x++].help,"Load Firmaware");
+	strcpy((char*)&cmdds[x].comando,"Flush");			cmdds[x].code=cmd_flushFram;			strcpy(cmdds[x++].help,"Flush to Fram");
+	strcpy((char*)&cmdds[x].comando,"FormatFram");		cmdds[x].code=cmd_formatFram;			strcpy(cmdds[x++].help,"VAL");
+	strcpy((char*)&cmdds[x].comando,"FramDay");			cmdds[x].code=cmd_framDaySearch;		strcpy(cmdds[x++].help,"METER MONTH");
+	strcpy((char*)&cmdds[x].comando,"FramDaysAll");		cmdds[x].code=cmd_framDays;				strcpy(cmdds[x++].help,"METER MONTH");
+	strcpy((char*)&cmdds[x].comando,"FramHour");		cmdds[x].code=cmd_framHourSearch;		strcpy(cmdds[x++].help,"METER MONTH DAY HOUR");
+	strcpy((char*)&cmdds[x].comando,"FramMonth");		cmdds[x].code=cmd_framMonthSearch;		strcpy(cmdds[x++].help,"METER MONTH");
+	strcpy((char*)&cmdds[x].comando,"FramMonthsAll");	cmdds[x].code=cmd_framMonths;			strcpy(cmdds[x++].help,"METER");
+	strcpy((char*)&cmdds[x].comando,"Help");			cmdds[x].code=cmd_showHelp;				strcpy(cmdds[x++].help,"LONG");
+	strcpy((char*)&cmdds[x].comando,"LogLevel");		cmdds[x].code=cmd_logLevel;				strcpy(cmdds[x++].help,"None Info Err Verb Warn");
+	strcpy((char*)&cmdds[x].comando,"MacTrack");		cmdds[x].code=cmd_macTrack;				strcpy(cmdds[x++].help,"Trace MAC Msgs");
+	strcpy((char*)&cmdds[x].comando,"MessageCount");	cmdds[x].code=cmd_msgCount;				strcpy(cmdds[x++].help,"Messasge Count");
+	strcpy((char*)&cmdds[x].comando,"MeterCount");		cmdds[x].code=cmd_meterCount;			strcpy(cmdds[x++].help,"MeterCount");
+	strcpy((char*)&cmdds[x].comando,"MeterStat");		cmdds[x].code=cmd_meterStatus;			strcpy(cmdds[x++].help,"METER");
+	strcpy((char*)&cmdds[x].comando,"MQTT");			cmdds[x].code=cmd_mqttDelay;			strcpy(cmdds[x++].help,"Mqtt Delay");
+	strcpy((char*)&cmdds[x].comando,"ReadFram");		cmdds[x].code=cmd_readFram;				strcpy(cmdds[x++].help,"COUNT");
+	strcpy((char*)&cmdds[x].comando,"SendDelay");		cmdds[x].code=cmd_sendDelay;			strcpy(cmdds[x++].help,"Status check TimeOut");
+	strcpy((char*)&cmdds[x].comando,"Session");			cmdds[x].code=cmd_cmdSession;			strcpy(cmdds[x++].help,"SetSession");
+	strcpy((char*)&cmdds[x].comando,"Slice");			cmdds[x].code=cmd_setSlice;				strcpy(cmdds[x++].help,"Set Slice Mqtt");
+	strcpy((char*)&cmdds[x].comando,"Tariff");			cmdds[x].code=cmd_tariffs;				strcpy(cmdds[x++].help,"Get Tariffs");
+	strcpy((char*)&cmdds[x].comando,"Telemetry");		cmdds[x].code=cmd_sendTelemetry;		strcpy(cmdds[x++].help,"Send Telemetry");
+	strcpy((char*)&cmdds[x].comando,"Temp");			cmdds[x].code=cmd_readTemp;				strcpy(cmdds[x++].help,"Temp");
+	strcpy((char*)&cmdds[x].comando,"Trace");			cmdds[x].code=cmd_traceFlags;			strcpy(cmdds[x++].help,"NONE ALL BOOTD WIFID MQTTD PUBSUBD OTAD CMDD WEBD GEND MQTTT FRMCMD INTD FRAMD MSGD TIMED SIMD HOSTD");
+	strcpy((char*)&cmdds[x].comando,"WebReset");		cmdds[x].code=cmd_webReset;				strcpy(cmdds[x++].help,"WebReset");
+	strcpy((char*)&cmdds[x].comando,"WhiteList");		cmdds[x].code=cmd_WhiteList;			strcpy(cmdds[x++].help,"POS");
+	strcpy((char*)&cmdds[x].comando,"WriteFram");		cmdds[x].code=cmd_writeFram;			strcpy(cmdds[x++].help,"ADDR VAL");
+	strcpy((char*)&cmdds[x].comando,"ZeroK");			cmdds[x].code=cmd_zeroKeys;				strcpy(cmdds[x++].help,"ZKeys");
 #ifdef HEAPSAMPLE
-	strcpy((char*)&cmdds[33].comando,"Heap");			cmdds[33].code=showHeap;			cmdds[33].help="HeapRec";
+	strcpy((char*)&cmdds[x].comando,"Heap");			cmdds[x].code=cmd_showHeap;				strcpy(cmdds[x++].help,"HeapRec");
 #endif
+	for (int a=0;a<NKEYS;a++)
+		for (int b=0;b<strlen(cmdds[a].comando);b++)
+			cmdds[a].comando[b]=toupper(cmdds[a].comando[b]);
+}
+//void init_kbd_commands()
+//{
+//	strcpy((char*)&cmdds[0].comando,"Config");			cmdds[ 0].code=confStatus;			strcpy(cmdds[0].help,"SHORT");
+//	strcpy((char*)&cmdds[1].comando,"WebReset");		cmdds[ 1].code=webReset;			strcpy(cmdds[1].help,"WebReset");
+//	strcpy((char*)&cmdds[2].comando,"Controllers");		cmdds[ 2].code=printControllers;	strcpy(cmdds[2].help,"LONG");
+//	strcpy((char*)&cmdds[3].comando,"MeterStat");		cmdds[ 3].code=meterStatus;			strcpy(cmdds[3].help,"METER");
+//	strcpy((char*)&cmdds[4].comando,"EraseTariff");		cmdds[ 4].code=eraseTariff;			strcpy(cmdds[4].help,"EraseTariff");
+//	strcpy((char*)&cmdds[5].comando,"MeterCount");		cmdds[ 5].code=meterCount;			strcpy(cmdds[5].help,"MeterCount");
+//	strcpy((char*)&cmdds[6].comando,"DumpCore");		cmdds[ 6].code=dumpCore;			strcpy(cmdds[6].help,"DumpCore");
+//	strcpy((char*)&cmdds[7].comando,"FormatFram");		cmdds[ 7].code=formatFram;			strcpy(cmdds[7].help,"VAL");
+//	strcpy((char*)&cmdds[8].comando,"ReadFram");		cmdds[ 8].code=readFram;			strcpy(cmdds[8].help,"COUNT");
+//	strcpy((char*)&cmdds[9].comando,"WriteFram");		cmdds[ 9].code=writeFram;			strcpy(cmdds[9].help,"ADDR VAL");
+//	strcpy((char*)&cmdds[10].comando,"LogLevel");		cmdds[10].code=logLevel;			strcpy(cmdds[10].help,"None Info Err Verb Warn");
+//	strcpy((char*)&cmdds[11].comando,"FramDaysAll");	cmdds[11].code=framDays;			strcpy(cmdds[11].help,"METER MONTH");
+//	strcpy((char*)&cmdds[12].comando,"FramHour");		cmdds[12].code=framHourSearch;		strcpy(cmdds[12].help,"METER MONTH DAY HOUR");
+//	strcpy((char*)&cmdds[13].comando,"FramDay");		cmdds[13].code=framDaySearch;		strcpy(cmdds[13].help,"METER MONTH");
+//	strcpy((char*)&cmdds[14].comando,"FramMonth");		cmdds[14].code=framMonthSearch;		strcpy(cmdds[14].help,"METER MONTH");
+//	strcpy((char*)&cmdds[15].comando,"Flush");			cmdds[15].code=flushFram;			strcpy(cmdds[15].help,"Flush to Fram");
+//	strcpy((char*)&cmdds[16].comando,"MessageCount");	cmdds[16].code=msgCount;			strcpy(cmdds[16].help,"Messasge Count");
+//	strcpy((char*)&cmdds[17].comando,"Help");			cmdds[17].code=showHelp;			strcpy(cmdds[17].help,"LONG");
+//	strcpy((char*)&cmdds[18].comando,"Trace");			cmdds[18].code=traceFlags;
+//	strcpy(cmdds[18].help,"NONE ALL BOOTD WIFID MQTTD PUBSUBD OTAD CMDD WEBD GEND MQTTT FRMCMD INTD FRAMD MSGD TIMED SIMD HOSTD");
+//	strcpy((char*)&cmdds[19].comando,"FramMonthsAll");	cmdds[19].code=framMonths;			strcpy(cmdds[19].help,"METER");
+//	strcpy((char*)&cmdds[20].comando,"Telemetry");		cmdds[20].code=sendTelemetry;		strcpy(cmdds[20].help,"Send Telemetry");
+//	strcpy((char*)&cmdds[21].comando,"Tariff");			cmdds[21].code=tariffs;				strcpy(cmdds[21].help,"Get Tariffs");
+//	strcpy((char*)&cmdds[22].comando,"Firmware");		cmdds[22].code=firmware;			strcpy(cmdds[22].help,"Load Firmaware");
+//	strcpy((char*)&cmdds[23].comando,"SendDelay");		cmdds[23].code=sendDelay;			strcpy(cmdds[23].help,"Status check TimeOut");
+//	strcpy((char*)&cmdds[24].comando,"ClearWL");		cmdds[24].code=clearWL;				strcpy(cmdds[24].help,"Clear Macs White list");
+//	strcpy((char*)&cmdds[25].comando,"WhiteList");		cmdds[25].code=WhiteList;			strcpy(cmdds[25].help,"POS");
+//	strcpy((char*)&cmdds[26].comando,"ZeroK");			cmdds[26].code=zeroKeys;			strcpy(cmdds[26].help,"ZKeys");
+//	strcpy((char*)&cmdds[27].comando,"MQTT");			cmdds[27].code=mqttDelay;			strcpy(cmdds[27].help,"Mqtt Delay");
+//	strcpy((char*)&cmdds[28].comando,"Crypto");			cmdds[28].code=cryptoOption;		strcpy(cmdds[28].help,"SetCrypt");
+//	strcpy((char*)&cmdds[29].comando,"MacTrace");		cmdds[29].code=macTrace;			strcpy(cmdds[29].help,"Trace MAC Msgs");
+//	strcpy((char*)&cmdds[30].comando,"Temp");			cmdds[30].code=readTemp;			strcpy(cmdds[30].help,"Temp");
+//	strcpy((char*)&cmdds[31].comando,"Slice");			cmdds[31].code=setSlice;			strcpy(cmdds[31].help,"Set Slice Mqtt");
+//	strcpy((char*)&cmdds[32].comando,"Session");		cmdds[32].code=cmdSession;			strcpy(cmdds[32].help,"SetSession");
+//#ifdef HEAPSAMPLE
+//	strcpy((char*)&cmdds[33].comando,"Heap");			cmdds[33].code=showHeap;			strcpy(cmdds[33].help,"HeapRec");
+//#endif
+//	for (int a=0;a<NKEYS;a++)
+//		for (int b=0;b<strlen(cmdds[a].comando);b++)
+//			cmdds[a].comando[b]=toupper(cmdds[a].comando[b]);
+//}
+
+
+void trim(char * s) {	//left and right
+    char * p = s;
+    int l = strlen(p);
+
+    while(isspace(p[l - 1])) p[--l] = 0;
+    while(* p && isspace(* p)) ++p, --l;
+
+    memmove(s, p, l + 1);
 }
 
 void kbd(void *arg)
 {
 	int len,cualf;
 	uart_port_t uart_num = UART_NUM_0 ;
-	char kbdstr[100],oldcmd[100];
-	string ss;
-	std::locale loc;
+	char kbdstr[100],nstr[100],oldcmd[100];
+	bzero(kbdstr,sizeof(kbdstr));
+	bzero(oldcmd,sizeof(oldcmd));
+	bzero(nstr,sizeof(nstr));
+
 
 	uart_config_t uart_config = {
 			.baud_rate = 460800,
@@ -1692,31 +1879,35 @@ void kbd(void *arg)
 
 	while(1)
 	{
-			len=get_string(UART_NUM_0,10,kbdstr);
-			if(len<=0)
-				strcpy(kbdstr,oldcmd);
-			ss=string(kbdstr);
+		bzero(kbdstr,sizeof(kbdstr));
+		bzero(nstr,sizeof(nstr));
 
-			 size_t found = ss.find(" ");
-			  if (found!=std::string::npos)
-			  {
-				  strcpy(kbdstr,ss.substr(0,found).c_str());	//Just cmd
-				  ss.erase(0,found+1);
-				  ss+=" ";
-			  }
-			  else ss="";
+		len=get_string(UART_NUM_0,10,kbdstr);
+		if(len<1)
+			strcpy(kbdstr,oldcmd);
+		else
+		{
+			kbdstr[len]=0;
+			for(int a=0;a<len;a++)
+				kbdstr[a]=toupper(kbdstr[a]);
+		}
 
-			  for (size_t i=0; i<ss.length(); ++i)
-			  			ss[i]= std::toupper(ss[i],loc);
+		if(strlen(kbdstr)>0)
+			trim(kbdstr);
 
+		strcpy(nstr,kbdstr);
+		char *pch = strtok (nstr," ");		//find first space
 
-			cualf=kbdCmd(string(kbdstr));
-			if(cualf>=0)
-			{
-				if(cmdds[cualf].code)
-					(*cmdds[cualf].code)(ss);
-				strcpy(oldcmd,kbdstr);
-			}
+		int llen=strlen(pch);
+		//arguments start at kbdstr+llen+1
+
+		cualf=kbdCmd(pch);
+		if(cualf>=0)
+		{
+			if(cmdds[cualf].code)
+				(*cmdds[cualf].code)((kbdstr+llen+1));
+			strcpy(oldcmd,pch);
+		}
 
 		vTaskDelay(100 / portTICK_PERIOD_MS);
 	}

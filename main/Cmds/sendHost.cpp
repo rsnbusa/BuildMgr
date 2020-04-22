@@ -47,7 +47,7 @@ int sendHostCmd(parg *argument)
 		mqttMsgHandle.maxTime=1000;
 		mqttMsgHandle.message=(uint8_t*)mensaje;						//Submode will free the mensaje variable
 		mqttMsgHandle.msgLen=strlen(mensaje);
-		mqttMsgHandle.queueName=(char*)"MeterIoT/EEQ/RESPONSE";
+		mqttMsgHandle.queueName=respondQueue;
 	    xEventGroupClearBits(wifi_event_group, SENDH_BIT);//message sent bit
 
 		if(mqttQ)

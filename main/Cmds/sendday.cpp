@@ -5,20 +5,15 @@
 #include "projTypes.h"
 #include "globals.h"
 
-extern int sendReplyToHost(int cualm,int response,int son,char* cmdI, ...);
-extern int findMID(char *mid);
+extern int sendReplyToHost(const int cualm,const cJSON* cj,const int son,const char* cmdI, ...);
+extern int findMID(const char *mid);
 
 int cmd_sendday(parg *argument)
 {
 	uint16_t theDay;
-	int cualf=0,response;
+	int cualf=0;
 	char numa[10],numb[10];
 
-	cJSON *req=cJSON_GetObjectItem((cJSON*)argument->pMessage,"REQ");
-	if(req)
-		response=req->valueint;
-	else
-		response=0;
 
 	cJSON *mid=cJSON_GetObjectItem((cJSON*)argument->pMessage,"MID");
 	if(mid)
@@ -39,7 +34,7 @@ int cmd_sendday(parg *argument)
 
 	itoa(param->valueint,numa,10);
 	itoa(theDay,numb,10);
-	sendReplyToHost(cualf,response,2,(char*)"Day",numa,"KwH",numb);
+	sendReplyToHost(cualf,(cJSON*)argument->pMessage,2,(char*)"Day",numa,"KwH",numb);
 
 	return ESP_OK;
 }
