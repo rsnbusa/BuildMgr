@@ -86,7 +86,11 @@
 		<project id="buildMgrOled.null.1169487198" name="buildMgrOled"/>
 	</storageModule>
 	<storageModule moduleId="org.eclipse.cdt.core.LanguageSettingsProviders"/>
-	<storageModule moduleId="refreshScope"/>
+	<storageModule moduleId="refreshScope" versionNumber="2">
+		<configuration configurationName="Default">
+			<resource resourceType="PROJECT" workspacePath="/buildMgrOled"/>
+		</configuration>
+	</storageModule>
 	<storageModule moduleId="scannerConfiguration">
 		<autodiscovery enabled="true" problemReportingEnabled="true" selectedProfileId=""/>
 		<scannerConfigBuildInfo instanceId="cdt.managedbuild.toolchain.gnu.cross.base.1575377314;cdt.managedbuild.toolchain.gnu.cross.base.1575377314.1505420808;cdt.managedbuild.tool.gnu.cross.c.compiler.510510075;cdt.managedbuild.tool.gnu.c.compiler.input.18177351">
