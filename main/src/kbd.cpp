@@ -1381,7 +1381,13 @@ static void cmd_printControllers(char * ss)
 			}
 		}
 	}
-
+// show temps
+	if(llevoTempMac)
+	{
+		pprintf("%d Temp Macs\n");
+		for(int a=0;a<llevoTempMac;a++)
+			pprintf("MAC[%d]=%02x:%02x:%02x:%02x:%02x:%02x\n",a,tempMac[a].mac[0],tempMac[a].mac[1],tempMac[a].mac[2],tempMac[a].mac[3],tempMac[a].mac[4],tempMac[a].mac[5]);
+	}
 	pprintf("%s\n",KBDT);
 }
 

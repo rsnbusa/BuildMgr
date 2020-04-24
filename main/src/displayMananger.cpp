@@ -15,7 +15,7 @@ extern float DS_get_temp(DS18B20_Info * cual);
 
 static void check_delivery_date(void *pArg)
 {
-#define MULT 1000
+#define MULT 1
 	time_t 		now;
 	tm 			timeinfo;
 	uint32_t 	nowsecs,randsecs,waitfornextW,startw,endw;

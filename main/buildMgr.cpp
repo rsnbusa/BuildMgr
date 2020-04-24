@@ -5,6 +5,7 @@
 #include "forward.h"				// for forward and external routines
 
 static const char *TAG = "BDMGR";
+static void rsvpTask(void* pArg);
 
 #ifdef HEAPSAMPLE
 void heapSample(char *subr)
@@ -289,6 +290,52 @@ void mqttCallback(int res)
     xEventGroupSetBits(wifi_event_group, TELEM_BIT);//message sent bit
 }
 
+int sendTelemetryCmdorg(parg *argument)
+{
+	char 		*mensaje=NULL;
+	mqttMsg_t	mqttMsgHandle;
+
+	bzero(&mqttMsgHandle,sizeof(mqttMsgHandle));
+
+#ifdef DEBUGX
+	if(theConf.traceflag & (1<<HOSTD))
+		pprintf("%sHost requested telemetry readings\n",HOSTDT);
+#endif
+	telemResult=ESP_OK;
+
+	mensaje=sendTelemetry();
+	if(mensaje)
+	{
+		mqttMsgHandle.msgLen		=strlen(mensaje);
+		mqttMsgHandle.message		=(uint8_t*)mensaje;	//submode will free it
+		mqttMsgHandle.maxTime		=SUBMODETO;
+		mqttMsgHandle.queueName		=controlQueue;
+		mqttMsgHandle.cb			=mqttCallback;
+
+		xEventGroupClearBits(wifi_event_group, TELEM_BIT);	// clear bit to wait on
+
+		if(xQueueSend( mqttQ,&mqttMsgHandle,0 ) == pdPASS)//Submode will free the mensaje variable
+		{
+			if(!xEventGroupWaitBits(wifi_event_group, TELEM_BIT, false, true,  mqttMsgHandle.maxTime+10/  portTICK_RATE_MS))
+			{
+				pprintf("Telemetric result timeout");
+				telemResult				=BITTM;
+				FREEANDNULL(mensaje)
+				return telemResult;
+			}
+		}
+		else
+		{
+			telemResult=ESP_FAIL;
+			FREEANDNULL(mensaje)		//no submode to do it
+		}
+	}
+	else
+		telemResult=ESP_FAIL;
+
+	return telemResult;
+}
+
 int sendTelemetryCmd(parg *argument)
 {
 	char 		*mensaje=NULL;
@@ -495,13 +542,14 @@ static void getMessage(void *pArg)
 	while(true)
 	{
 		do {
+			again:
 			bzero(elmensaje,MAXBUFFER);
 			len = recv(sock,elmensaje, MAXBUFFER-1, 0);
 			if (len < 0)
 			{
 #ifdef DEBUGX
 				if(theConf.traceflag & (1<<CMDD))
-					pprintf("%sError occurred during receiving Taskdead: errno %d fd: %d Pos %d\n",CMDDT, errno,sock,pos);
+					pprintf("%sError occurred during receiving Taskdead: errno %d %s fd: %d Pos %d\n",CMDDT, errno,strerror(errno),sock,pos);
 #endif
 
 				goto exit;
@@ -546,6 +594,15 @@ static void getMessage(void *pArg)
 
 				if(*comando.mensaje!='{')
 				{	//we consider that aes key is out of sync
+					if(*elmensaje=='{')
+					{
+					    tempS						temporal;
+						temporal.theSock			=sock;
+						temporal.theTempMacPos		=pos;
+						xTaskCreate(rsvpTask,"dispMgr",2048,(void*)&temporal, 4, NULL);
+						pprintf("GetM RSVP\n");
+						goto again;
+					}
 					losMacs[pos].lostSync++;
 					if(losMacs[pos].lostSync>MAXLOSTSYNC-1)
 					{
@@ -617,6 +674,9 @@ static void getMessage(void *pArg)
 	if (globalSocks<0)
 		globalSocks=0;
 
+	esp_wifi_deauth_sta(losMacs[pos].aid);	//kill the connection also if possible. Force MtM to reconnect
+	pprintf("Exiting GetM\n");
+	delay(100);
 	vTaskDelete(NULL);
 }
 
@@ -660,66 +720,92 @@ bool decryptLogin(const char* b64, uint16_t blen, char *decryp, size_t * fueron)
 	return true;
 }
 
+void killRSVP( TimerHandle_t xTimer ){
+
+	  uint32_t aqui = ( uint32_t ) pvTimerGetTimerID( xTimer );
+	  pprintf("Timer expired add %x\n",aqui);
+}
+
+
 static void rsvpTask(void* pArg)		//this is a Task.
 {
 #define RSVPHEAP	600
 	char resp[]="{\"Resp\":\"OK\"}";
+	int 	lcount=0;
 
 	tempS		*temporal=(tempS*)pArg;
 	int			len;
     parg 		argument;
     cJSON 		*elcmd=NULL;
 
+	//TimerHandle_t miTimer=xTimerCreate("RSVPT",60000 /portTICK_PERIOD_MS,pdTRUE,( void * )cual,&killRSVP);
+//	if(miTimer==NULL)
+//		pprintf("Failed to create KILLRSVP timer\n");
+//	else
+//		xTimerStart(miTimer,0); //Start it
 	char *rsvpmsg=(char*)malloc(RSVPHEAP);
 	if(rsvpmsg)
 	{
-		len = recv(temporal->theSock,rsvpmsg, RSVPHEAP-1, 0);
-		if (len <= 0)
-		{
-			FREEANDNULL(rsvpmsg)
-			shutdown(temporal->theSock,0);
-			close(temporal->theSock);
-			esp_wifi_deauth_sta(tempMac[temporal->theTempMacPos].aid);
-			vTaskDelete(NULL);
-		}
-		else
-		{
-			elcmd= cJSON_Parse(rsvpmsg);		//plain text to cJSON... must eventually cDelete elcmd
-			if(elcmd)
-			{
-				cJSON *macnn=cJSON_GetObjectItem(elcmd,"macn"); 		//get MAC
-				cJSON *monton= 	cJSON_GetObjectItem(elcmd,"Batch");		//get Meters
-				cJSON *cmdd=cJSON_GetObjectItem(elcmd,"cmd"); 			//get cmd to confirm
+		tempMac[temporal->theTempMacPos].theMsg=rsvpmsg;
 
-				if(monton && macnn && cmdd)
-				{
-					if(strcmp(cmdd->valuestring,"cmd_rsvp")==0)
-					{
-						argument.macn=macnn->valuedouble;
-						argument.pComm=temporal->theSock;
-						if(theConf.traceflag & (1<<WIFID))
-							printf("%sRSVP Command in %u\n",WIFIDT,(uint32_t)argument.macn);
-						reserveSlot(&argument);
-						///// MUST ANSWER ///////
-						size_t num=send(temporal->theSock, resp,sizeof(resp), 0);
-						if(num!=4)
-							pprintf("Answer sendcount err %d\n",num);
-						delay(1000);
-					}
-				}
-			}
-			else
+		while(lcount<10)
+		{
+			len = recv(temporal->theSock,rsvpmsg, RSVPHEAP-1, 0);
+			if (len < 0)
 			{
-				printf("Not rsvp\n");
-			}
-
-	// On sucess he has to Reboot so close conn
+				printf("Error receiving RSVP %d %s\n",errno, strerror(errno));
 				FREEANDNULL(rsvpmsg)
 				shutdown(temporal->theSock,0);
 				close(temporal->theSock);
-				esp_wifi_deauth_sta(tempMac[temporal->theTempMacPos].aid);	//force him to reboot
+				esp_wifi_deauth_sta(tempMac[temporal->theTempMacPos].aid);
 				vTaskDelete(NULL);
+			}
+			else
+			{
+				rsvpmsg[len]=0;
+			//	pprintf("RSVP In %d  %s\n",len,rsvpmsg);
+				elcmd= cJSON_Parse(rsvpmsg);		//plain text to cJSON... must eventually cDelete elcmd
+				if(elcmd)
+				{
+					cJSON *macnn=cJSON_GetObjectItem(elcmd,"macn"); 		//get MAC
+					cJSON *monton= 	cJSON_GetObjectItem(elcmd,"Batch");		//get Meters
+					cJSON *cmdd=cJSON_GetObjectItem(elcmd,"cmd"); 			//get cmd to confirm
+
+					if(monton && macnn && cmdd)
+					{
+						if(strcmp(cmdd->valuestring,"cmd_rsvp")==0)
+						{
+							argument.macn=macnn->valuedouble;
+							argument.pComm=temporal->theSock;
+							if(theConf.traceflag & (1<<WIFID))
+								printf("%sRSVP Command in %u\n",WIFIDT,(uint32_t)argument.macn);
+							reserveSlot(&argument);
+							///// MUST ANSWER ///////
+							size_t num=send(temporal->theSock, resp,sizeof(resp), 0);
+							//if(num!=4)
+								pprintf("Answer sendcount err %d\n",num);
+							delay(1000);
+							cJSON_Delete(elcmd);
+							goto exit;
+						}
+					}
+					cJSON_Delete(elcmd);
+				}
+				else
+				{
+					lcount++;
+					printf("Not rsvp\n");
+				}
+			}
 		}
+		exit:
+		// On sucess he has to Reboot so close conn
+					FREEANDNULL(rsvpmsg)
+					shutdown(temporal->theSock,0);
+					close(temporal->theSock);
+					esp_wifi_deauth_sta(tempMac[temporal->theTempMacPos].aid);	//force him to reboot
+					vTaskDelete(NULL);
+
 	}
 	else
 	{
@@ -836,7 +922,7 @@ static void tcpConnMgr(void *pvParameters)
 #endif
 					temporal.theSock			=sock;
 					temporal.theTempMacPos		=a;
-					xTaskCreate(rsvpTask,"dispMgr",2048,(void*)&temporal, 4, NULL);
+					xTaskCreate(rsvpTask,"dispMgr",2048,(void*)&temporal, 4, &tempMac[a].theRSVP);
 					goto again;
 				}
 			}
@@ -906,6 +992,8 @@ static void wifi_event_handler(void* arg, esp_event_base_t event_base,
 {
 	u32 newmac;
 	int estem;
+	TimerHandle_t tempTimer;
+
 
 	wifi_event_ap_staconnected_t *ev=(wifi_event_ap_staconnected_t*)event_data;
     switch (event_id) {
@@ -941,6 +1029,14 @@ static void wifi_event_handler(void* arg, esp_event_base_t event_base,
     			bzero(&tempMac[llevoTempMac],sizeof(tempMac[0]));
     			tempMac[llevoTempMac].aid		=ev->aid;			//save aid for possible disconnection
     			memcpy(tempMac[llevoTempMac].mac,ev->mac,6);
+    			tempMac[llevoTempMac].myPos=llevoTempMac;
+    			pprintf("Temp %d addr %p\n",llevoTempMac,&tempMac[llevoTempMac]);
+				tempTimer=xTimerCreate("RSVPT",600000 /portTICK_PERIOD_MS,pdTRUE,( void * )&tempMac[llevoTempMac],&killRSVP);
+				if(tempTimer==NULL)
+					pprintf("Failed to create KILLRSVP timer\n");
+				else
+					xTimerStart(tempTimer,0); //Start it
+
     			llevoTempMac++; //for next
     		}
     	}
@@ -2525,6 +2621,42 @@ cJSON * makeGroupMeters()
 		cJSON_AddItemToObject(root, "Telemetry",ar);
 	}
 	return root;
+}
+
+char *sendTelemetryorg()
+{
+	time_t now=0;
+	char *lmessage=NULL;
+
+	cJSON * telemetry=makeGroupMeters();
+	if(!telemetry)
+		return NULL;
+
+#ifdef HEAPSAMPLE
+	 heapSample((char*)"TelemetSt");
+#endif
+
+		lmessage=cJSON_Print(telemetry);
+		cJSON_Delete(telemetry);
+#ifdef DEBUGX
+		if(theConf.traceflag & (1<<MSGD))
+			if( theConf.macTrace==0xffff)
+				pprintf("%sTo Host %s %d\n",MSGDT,lmessage,esp_get_free_heap_size());
+#endif
+
+	if(framSem)
+	{
+		time(&now);
+		if(xSemaphoreTake(framSem, portMAX_DELAY/  portTICK_RATE_MS))
+		{
+			fram.write_cycle(mesg,now);
+			xSemaphoreGive(framSem);
+		}
+	}
+#ifdef HEAPSAMPLE
+	 heapSample((char*)"TelemetEnd");
+#endif
+	return lmessage;
 }
 
 char *sendTelemetry()

@@ -43,7 +43,7 @@ typedef struct macC{
 	uint8_t			hwState,toCount,lostSync;
 	char			mtmName[20];
 	char			theKey[33];
-//	uint8_t			meterPos;
+	uint16_t		aid;
 } macControl;
 
 typedef struct heaper{
@@ -133,9 +133,12 @@ typedef struct config {
 } config_flash;
 
 typedef struct mactemp{
-	char		mac[6];
+	char			mac[6];
 	uint32_t		ip;
-	uint16_t	aid;
+	uint16_t		aid;
+	int				myPos;
+	TaskHandle_t	theRSVP;
+	char			*theMsg;
 } mactemp;
 
 typedef struct framq{
